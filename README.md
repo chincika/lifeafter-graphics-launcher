@@ -6,6 +6,10 @@
 
 本项目为公益开源项目，免费使用，仅用于个人便利、学习与交流。请勿倒卖、捆绑收费或用于破坏游戏环境的用途。
 
+GitHub 地址：https://github.com/chincika/lifeafter-graphics-launcher
+
+如果这个项目对你有帮助，欢迎在 GitHub 点一个 Star。
+
 ## 主要功能
 
 - 自动检测游戏目录，也支持手动选择安装目录。
@@ -41,4 +45,4 @@ if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framewo
 
 ## 版本
 
-当前版本：v1.2.2
+当前版本：v1.2.3
