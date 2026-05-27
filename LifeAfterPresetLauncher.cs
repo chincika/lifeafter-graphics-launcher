@@ -43,7 +43,7 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.1.5";
+    private const string AppVersion = "v1.1.6";
 
     private const string Pc540p =
 @"{""resolution"": [960, 540], ""ignore_hint"": true, ""half_infected_keymap"": {""HANDBRAKE"": [0, 0], ""DRONE_CAST_SKILL"": [88, 0], ""SPORE_SKILL"": [74, 0], ""TOGGLE_WEAPONS"": [90, 0], ""DRONE_CONTROL_SKILL_1"": [0, 0], ""AIR_UP"": [0, 0], ""WHISTLE"": [0, 0], ""WEAPON_SKILL"": [81, 0], ""OPEN_FASHION"": [81, 1], ""ARTIFACT_STUNT"": [72, 0], ""CHANGE_POS"": [0, 0], ""AIR_DOWN"": [0, 0], ""SPORE_USE"": [16, 0], ""FAST_COLD_WEAPON"": [71, 0], ""TOGGLE_MEDICINE"": [66, 0], ""MOVE_RUN"": [87, 1], ""SWITCH_WEAPON"": [69, 0], ""PLAYER_SKILL7"": [-1, 0], ""AUTO_MOVE"": [0, 0], ""NITROGEN"": [0, 0], ""SWITCH_THROWABLE"": [188, 0]}, ""hide_tag"": false, ""pc_tutorial_showed"": true, ""full_screen"": false, ""hint_occurred"": 4, ""hint_close_PanelBulletBox"": true}";
@@ -291,46 +291,34 @@ internal static class LifeAfterPresetLauncher
         return message;
     }
 
-    private static string ApplyAndLaunchSequence(string[] presets, int settleAfterDetectMilliseconds)
+    private static string ApplyAndLaunchSequence(string[] presets, Func<string, string, bool> confirmNext)
     {
         if (!IsValidGameRoot(gameRoot))
         {
             throw new InvalidOperationException("\u8bf7\u5148\u9009\u62e9\u6b63\u786e\u7684\u6e38\u620f\u76ee\u5f55\u3002");
         }
 
-        if (settleAfterDetectMilliseconds < 0) settleAfterDetectMilliseconds = 0;
         StringBuilder builder = new StringBuilder();
         for (int i = 0; i < presets.Length; i++)
         {
             string preset = presets[i];
-            Size expectedSize = GetPresetResolution(preset);
-            HashSet<IntPtr> existingWindows = GetVisibleGameWindowHandles();
             builder.AppendLine("\u542f\u52a8\u7a97\u53e3 " + (i + 1) + "\uff1a" + preset);
             builder.AppendLine(ApplyPreset(preset, true));
             if (i < presets.Length - 1)
             {
-                Size detectedSize;
-                bool sizeMatched;
-                bool detected = WaitForNewGameWindow(existingWindows, expectedSize, 90000, out detectedSize, out sizeMatched);
-                if (!detected)
+                string nextPreset = presets[i + 1];
+                builder.AppendLine("\u5df2\u6682\u505c\uff1a\u8bf7\u786e\u8ba4\u7a97\u53e3 " + (i + 1) + "\uff08" + preset + "\uff09\u5df2\u7ecf\u6309\u6b63\u786e\u753b\u8d28\u663e\u793a\uff0c\u518d\u7ee7\u7eed\u542f\u52a8\u4e0b\u4e00\u4e2a\u7a97\u53e3\u3002");
+                if (confirmNext != null && !confirmNext(preset, nextPreset))
                 {
-                    builder.AppendLine("\u672a\u68c0\u6d4b\u5230\u65b0\u6e38\u620f\u7a97\u53e3\uff0c\u5df2\u505c\u6b62\u540e\u7eed\u542f\u52a8\uff0c\u907f\u514d\u914d\u7f6e\u4e32\u6863\u3002");
+                    builder.AppendLine("\u7528\u6237\u5df2\u53d6\u6d88\u540e\u7eed\u542f\u52a8\u3002");
                     break;
                 }
 
-                if (sizeMatched)
-                {
-                    builder.AppendLine("\u5df2\u68c0\u6d4b\u5230\u65b0\u6e38\u620f\u7a97\u53e3\uff1a" + detectedSize.Width + "x" + detectedSize.Height + "\uff0c\u7b49\u5f85 " + (settleAfterDetectMilliseconds / 1000.0).ToString("0.#") + " \u79d2\u540e\u5199\u5165\u4e0b\u4e00\u4e2a\u914d\u7f6e\u3002");
-                }
-                else
-                {
-                    builder.AppendLine("\u5df2\u68c0\u6d4b\u5230\u65b0\u6e38\u620f\u7a97\u53e3\uff0c\u8bfb\u5230\u5c3a\u5bf8 " + detectedSize.Width + "x" + detectedSize.Height + "\uff08\u9884\u671f " + expectedSize.Width + "x" + expectedSize.Height + "\uff0c\u53ef\u80fd\u53d7\u7f29\u653e\u6216\u7a97\u53e3\u8fb9\u6846\u5f71\u54cd\uff09\uff0c\u7ee7\u7eed\u7b49\u5f85 " + (settleAfterDetectMilliseconds / 1000.0).ToString("0.#") + " \u79d2\u540e\u5199\u5165\u4e0b\u4e00\u4e2a\u914d\u7f6e\u3002");
-                }
-                Thread.Sleep(settleAfterDetectMilliseconds);
+                builder.AppendLine("\u5df2\u786e\u8ba4\uff0c\u7ee7\u7eed\u5199\u5165\u4e0b\u4e00\u4e2a\u914d\u7f6e\uff1a" + nextPreset);
             }
         }
 
-        WriteLog("MultiLaunch count=" + presets.Length + " relaxedWindowDetect=true settleAfterDetectMs=" + settleAfterDetectMilliseconds);
+        WriteLog("MultiLaunch count=" + presets.Length + " manualConfirm=true");
         return builder.ToString();
     }
 
@@ -1158,26 +1146,18 @@ internal static class LifeAfterPresetLauncher
 
             waitLabel = new Label
             {
-                Text = "\u68c0\u6d4b\u540e\u7b49\u5f85",
+                Text = "\u6a21\u5f0f",
                 AutoSize = true,
                 Left = 445,
                 Top = 274
             };
             Controls.Add(waitLabel);
 
-            settleWaitBox.Minimum = 1;
-            settleWaitBox.Maximum = 90;
-            settleWaitBox.Value = 5;
-            settleWaitBox.Left = 515;
-            settleWaitBox.Top = 270;
-            settleWaitBox.Width = 50;
-            Controls.Add(settleWaitBox);
-
             waitUnitLabel = new Label
             {
-                Text = "\u79d2",
+                Text = "\u5206\u6b65\u786e\u8ba4",
                 AutoSize = true,
-                Left = 570,
+                Left = 515,
                 Top = 274
             };
             Controls.Add(waitUnitLabel);
@@ -1250,7 +1230,6 @@ internal static class LifeAfterPresetLauncher
             idleCountBox.Top = multiTop - 4;
             multiLaunchButton.Top = multiTop - 6;
             waitLabel.Top = waitTop;
-            settleWaitBox.Top = waitTop - 4;
             waitUnitLabel.Top = waitTop;
 
             statusBox.Top = statusTop;
@@ -1354,7 +1333,6 @@ internal static class LifeAfterPresetLauncher
                 }
 
                 int idleCount = (int)idleCountBox.Value;
-                int settleSeconds = (int)settleWaitBox.Value;
                 string[] presets = new string[1 + idleCount];
                 presets[0] = (string)mainPresetBox.SelectedItem;
                 for (int i = 0; i < idleCount; i++)
@@ -1364,19 +1342,30 @@ internal static class LifeAfterPresetLauncher
 
                 DialogResult result = MessageBox.Show(
                     this,
-                    "\u5c06\u542f\u52a8 1 \u4e2a\u4e3b\u529b\u7a97\u53e3\u548c " + idleCount + " \u4e2a\u6302\u673a\u7a97\u53e3\u3002\u7a0b\u5e8f\u4f1a\u5148\u5199\u5165\u5e76\u542f\u52a8\u4e3b\u529b\u6863\uff0c\u68c0\u6d4b\u5230\u5bf9\u5e94\u5206\u8fa8\u7387\u7684\u65b0\u7a97\u53e3\u540e\u518d\u7b49\u5f85 " + settleSeconds + " \u79d2\uff0c\u7136\u540e\u5199\u5165\u6302\u673a\u914d\u7f6e\u5e76\u542f\u52a8\u3002\u662f\u5426\u7ee7\u7eed\uff1f",
+                    "\u5c06\u542f\u52a8 1 \u4e2a\u4e3b\u529b\u7a97\u53e3\u548c " + idleCount + " \u4e2a\u6302\u673a\u7a97\u53e3\u3002\u7a0b\u5e8f\u4f1a\u5148\u5199\u5165\u5e76\u542f\u52a8\u4e3b\u529b\u6863\uff0c\u7136\u540e\u7b49\u4f60\u786e\u8ba4\u4e3b\u529b\u7a97\u53e3\u5df2\u7ecf\u6b63\u786e\u663e\u793a\uff0c\u518d\u5199\u5165\u6302\u673a\u914d\u7f6e\u5e76\u542f\u52a8\u3002\u662f\u5426\u7ee7\u7eed\uff1f",
                     "\u7a33\u5b9a\u591a\u5f00",
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question);
                 if (result != DialogResult.Yes) return;
 
-                statusBox.Text = ApplyAndLaunchSequence(presets, settleSeconds * 1000);
+                statusBox.Text = ApplyAndLaunchSequence(presets, ConfirmNextMultiLaunchStep);
                 statusBox.Text += Environment.NewLine + "\u591a\u5f00\u5b8c\u6210\uff0c\u672a\u81ea\u52a8\u56de\u5199\u4e3b\u529b\u6863\uff0c\u907f\u514d\u5f71\u54cd\u540e\u7eed\u7a97\u53e3\u8bfb\u53d6\u914d\u7f6e\u3002";
             }
             catch (Exception ex)
             {
                 MessageBox.Show(this, ex.Message, "\u9519\u8bef", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private bool ConfirmNextMultiLaunchStep(string currentPreset, string nextPreset)
+        {
+            DialogResult result = MessageBox.Show(
+                this,
+                "\u8bf7\u5148\u770b\u6e38\u620f\u7a97\u53e3\uff1a\u5f53\u524d\u7a97\u53e3\u5e94\u8be5\u5df2\u7ecf\u662f\u201c" + currentPreset + "\u201d\u3002\r\n\r\n\u786e\u8ba4\u5b83\u6b63\u5e38\u663e\u793a\u540e\uff0c\u70b9\u201c\u662f\u201d\uff0c\u7a0b\u5e8f\u5c06\u5199\u5165\u201c" + nextPreset + "\u201d\u5e76\u542f\u52a8\u4e0b\u4e00\u4e2a\u7a97\u53e3\u3002\r\n\r\n\u5982\u679c\u8fd8\u5728\u52a0\u8f7d\u6216\u5206\u8fa8\u7387\u4e0d\u5bf9\uff0c\u5148\u70b9\u201c\u5426\u201d\u53d6\u6d88\u3002",
+                "\u786e\u8ba4\u7ee7\u7eed\u591a\u5f00",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+            return result == DialogResult.Yes;
         }
 
         private void RestoreToMainPresetSilently()
