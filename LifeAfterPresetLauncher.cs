@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -22,6 +23,17 @@ internal static class LifeAfterPresetLauncher
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
+    [DllImport("user32.dll")]
+    private static extern bool GetClientRect(IntPtr hWnd, out NativeRect rect);
+
+    private struct NativeRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
     private static string gameRoot;
     private static string configDir;
     private static string pcConfigPath;
@@ -31,7 +43,7 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.1.3";
+    private const string AppVersion = "v1.1.4";
 
     private const string Pc540p =
 @"{""resolution"": [960, 540], ""ignore_hint"": true, ""half_infected_keymap"": {""HANDBRAKE"": [0, 0], ""DRONE_CAST_SKILL"": [88, 0], ""SPORE_SKILL"": [74, 0], ""TOGGLE_WEAPONS"": [90, 0], ""DRONE_CONTROL_SKILL_1"": [0, 0], ""AIR_UP"": [0, 0], ""WHISTLE"": [0, 0], ""WEAPON_SKILL"": [81, 0], ""OPEN_FASHION"": [81, 1], ""ARTIFACT_STUNT"": [72, 0], ""CHANGE_POS"": [0, 0], ""AIR_DOWN"": [0, 0], ""SPORE_USE"": [16, 0], ""FAST_COLD_WEAPON"": [71, 0], ""TOGGLE_MEDICINE"": [66, 0], ""MOVE_RUN"": [87, 1], ""SWITCH_WEAPON"": [69, 0], ""PLAYER_SKILL7"": [-1, 0], ""AUTO_MOVE"": [0, 0], ""NITROGEN"": [0, 0], ""SWITCH_THROWABLE"": [188, 0]}, ""hide_tag"": false, ""pc_tutorial_showed"": true, ""full_screen"": false, ""hint_occurred"": 4, ""hint_close_PanelBulletBox"": true}";
@@ -279,29 +291,60 @@ internal static class LifeAfterPresetLauncher
         return message;
     }
 
-    private static string ApplyAndLaunchSequence(string[] presets, int switchDelayMilliseconds)
+    private static string ApplyAndLaunchSequence(string[] presets, int settleAfterDetectMilliseconds)
     {
         if (!IsValidGameRoot(gameRoot))
         {
             throw new InvalidOperationException("\u8bf7\u5148\u9009\u62e9\u6b63\u786e\u7684\u6e38\u620f\u76ee\u5f55\u3002");
         }
 
-        if (switchDelayMilliseconds < 0) switchDelayMilliseconds = 0;
+        if (settleAfterDetectMilliseconds < 0) settleAfterDetectMilliseconds = 0;
         StringBuilder builder = new StringBuilder();
         for (int i = 0; i < presets.Length; i++)
         {
             string preset = presets[i];
+            Size expectedSize = GetPresetResolution(preset);
+            HashSet<IntPtr> existingWindows = GetVisibleGameWindowHandles();
             builder.AppendLine("\u542f\u52a8\u7a97\u53e3 " + (i + 1) + "\uff1a" + preset);
             builder.AppendLine(ApplyPreset(preset, true));
             if (i < presets.Length - 1)
             {
-                builder.AppendLine("\u7b49\u5f85 " + (switchDelayMilliseconds / 1000.0).ToString("0.#") + " \u79d2\u540e\u5199\u5165\u4e0b\u4e00\u4e2a\u914d\u7f6e\u5e76\u542f\u52a8\u4e0b\u4e00\u4e2a\u7a97\u53e3\u3002");
-                Thread.Sleep(switchDelayMilliseconds);
+                bool detected = WaitForNewGameWindowResolution(existingWindows, expectedSize, 90000);
+                if (!detected)
+                {
+                    builder.AppendLine("\u672a\u68c0\u6d4b\u5230 " + expectedSize.Width + "x" + expectedSize.Height + " \u7684\u65b0\u6e38\u620f\u7a97\u53e3\uff0c\u5df2\u505c\u6b62\u540e\u7eed\u542f\u52a8\uff0c\u907f\u514d\u914d\u7f6e\u4e32\u6863\u3002");
+                    break;
+                }
+
+                builder.AppendLine("\u5df2\u68c0\u6d4b\u5230 " + expectedSize.Width + "x" + expectedSize.Height + " \u7684\u65b0\u6e38\u620f\u7a97\u53e3\uff0c\u7b49\u5f85 " + (settleAfterDetectMilliseconds / 1000.0).ToString("0.#") + " \u79d2\u540e\u5199\u5165\u4e0b\u4e00\u4e2a\u914d\u7f6e\u3002");
+                Thread.Sleep(settleAfterDetectMilliseconds);
             }
         }
 
-        WriteLog("MultiLaunch count=" + presets.Length + " switchDelayMs=" + switchDelayMilliseconds);
+        WriteLog("MultiLaunch count=" + presets.Length + " settleAfterDetectMs=" + settleAfterDetectMilliseconds);
         return builder.ToString();
+    }
+
+    private static Size GetPresetResolution(string preset)
+    {
+        switch (preset)
+        {
+            case "2K 120":
+                return new Size(2560, 1440);
+            case "1080p 120":
+            case "1080p 60":
+                return new Size(1920, 1080);
+            case "900p 60":
+                return new Size(1600, 900);
+            case "720p 60":
+                return new Size(1280, 720);
+            case "540p 25":
+            case "540p 60":
+            case "540p":
+                return new Size(960, 540);
+            default:
+                throw new InvalidOperationException("\u672a\u77e5\u9884\u8bbe\uff1a" + preset);
+        }
     }
 
     private static void WriteLog(string message)
@@ -431,6 +474,96 @@ internal static class LifeAfterPresetLauncher
         }, IntPtr.Zero);
 
         return count;
+    }
+
+    private static HashSet<IntPtr> GetVisibleGameWindowHandles()
+    {
+        HashSet<IntPtr> handles = new HashSet<IntPtr>();
+        EnumWindows(delegate (IntPtr hWnd, IntPtr lParam)
+        {
+            if (IsVisibleGameWindow(hWnd))
+            {
+                handles.Add(hWnd);
+            }
+
+            return true;
+        }, IntPtr.Zero);
+
+        return handles;
+    }
+
+    private static bool IsVisibleGameWindow(IntPtr hWnd)
+    {
+        if (!IsWindowVisible(hWnd)) return false;
+
+        uint processId;
+        GetWindowThreadProcessId(hWnd, out processId);
+        if (processId == 0) return false;
+
+        try
+        {
+            Process process = Process.GetProcessById((int)processId);
+            return IsGameProcessName(process.ProcessName);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsGameProcessName(string processName)
+    {
+        return processName.IndexOf("lifeafter", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               processName.IndexOf("mingrizhihou", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool TryGetClientSize(IntPtr hWnd, out Size size)
+    {
+        NativeRect rect;
+        if (GetClientRect(hWnd, out rect))
+        {
+            size = new Size(Math.Max(0, rect.Right - rect.Left), Math.Max(0, rect.Bottom - rect.Top));
+            return size.Width > 0 && size.Height > 0;
+        }
+
+        size = Size.Empty;
+        return false;
+    }
+
+    private static bool IsNearSize(Size actual, Size expected)
+    {
+        int toleranceWidth = Math.Max(24, expected.Width / 100);
+        int toleranceHeight = Math.Max(24, expected.Height / 100);
+        return Math.Abs(actual.Width - expected.Width) <= toleranceWidth &&
+               Math.Abs(actual.Height - expected.Height) <= toleranceHeight;
+    }
+
+    private static bool WaitForNewGameWindowResolution(HashSet<IntPtr> existingWindows, Size expectedSize, int timeoutMilliseconds)
+    {
+        Stopwatch watch = Stopwatch.StartNew();
+        while (watch.ElapsedMilliseconds < timeoutMilliseconds)
+        {
+            bool matched = false;
+            EnumWindows(delegate (IntPtr hWnd, IntPtr lParam)
+            {
+                if (existingWindows.Contains(hWnd)) return true;
+                if (!IsVisibleGameWindow(hWnd)) return true;
+
+                Size actualSize;
+                if (TryGetClientSize(hWnd, out actualSize) && IsNearSize(actualSize, expectedSize))
+                {
+                    matched = true;
+                    return false;
+                }
+
+                return true;
+            }, IntPtr.Zero);
+
+            if (matched) return true;
+            Thread.Sleep(500);
+        }
+
+        return false;
     }
 
     private static bool WaitForNewGameWindow(int previousWindowCount, int timeoutMilliseconds)
@@ -1004,7 +1137,7 @@ internal static class LifeAfterPresetLauncher
 
             waitLabel = new Label
             {
-                Text = "\u5207\u6863\u7b49\u5f85",
+                Text = "\u68c0\u6d4b\u540e\u7b49\u5f85",
                 AutoSize = true,
                 Left = 445,
                 Top = 274
@@ -1013,7 +1146,7 @@ internal static class LifeAfterPresetLauncher
 
             settleWaitBox.Minimum = 1;
             settleWaitBox.Maximum = 90;
-            settleWaitBox.Value = 8;
+            settleWaitBox.Value = 5;
             settleWaitBox.Left = 515;
             settleWaitBox.Top = 270;
             settleWaitBox.Width = 50;
@@ -1210,7 +1343,7 @@ internal static class LifeAfterPresetLauncher
 
                 DialogResult result = MessageBox.Show(
                     this,
-                    "\u5c06\u542f\u52a8 1 \u4e2a\u4e3b\u529b\u7a97\u53e3\u548c " + idleCount + " \u4e2a\u6302\u673a\u7a97\u53e3\u3002\u7a0b\u5e8f\u4f1a\u5148\u542f\u52a8\u4e0a\u4e00\u4e2a\u7a97\u53e3\uff0c\u7b49\u5f85 " + settleSeconds + " \u79d2\uff0c\u518d\u5199\u5165\u4e0b\u4e00\u4e2a\u914d\u7f6e\u5e76\u542f\u52a8\u3002\u662f\u5426\u7ee7\u7eed\uff1f",
+                    "\u5c06\u542f\u52a8 1 \u4e2a\u4e3b\u529b\u7a97\u53e3\u548c " + idleCount + " \u4e2a\u6302\u673a\u7a97\u53e3\u3002\u7a0b\u5e8f\u4f1a\u5148\u5199\u5165\u5e76\u542f\u52a8\u4e3b\u529b\u6863\uff0c\u68c0\u6d4b\u5230\u5bf9\u5e94\u5206\u8fa8\u7387\u7684\u65b0\u7a97\u53e3\u540e\u518d\u7b49\u5f85 " + settleSeconds + " \u79d2\uff0c\u7136\u540e\u5199\u5165\u6302\u673a\u914d\u7f6e\u5e76\u542f\u52a8\u3002\u662f\u5426\u7ee7\u7eed\uff1f",
                     "\u7a33\u5b9a\u591a\u5f00",
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question);
