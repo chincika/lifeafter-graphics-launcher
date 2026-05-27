@@ -31,7 +31,7 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.1.1";
+    private const string AppVersion = "v1.1.2";
 
     private const string Pc540p =
 @"{""resolution"": [960, 540], ""ignore_hint"": true, ""half_infected_keymap"": {""HANDBRAKE"": [0, 0], ""DRONE_CAST_SKILL"": [88, 0], ""SPORE_SKILL"": [74, 0], ""TOGGLE_WEAPONS"": [90, 0], ""DRONE_CONTROL_SKILL_1"": [0, 0], ""AIR_UP"": [0, 0], ""WHISTLE"": [0, 0], ""WEAPON_SKILL"": [81, 0], ""OPEN_FASHION"": [81, 1], ""ARTIFACT_STUNT"": [72, 0], ""CHANGE_POS"": [0, 0], ""AIR_DOWN"": [0, 0], ""SPORE_USE"": [16, 0], ""FAST_COLD_WEAPON"": [71, 0], ""TOGGLE_MEDICINE"": [66, 0], ""MOVE_RUN"": [87, 1], ""SWITCH_WEAPON"": [69, 0], ""PLAYER_SKILL7"": [-1, 0], ""AUTO_MOVE"": [0, 0], ""NITROGEN"": [0, 0], ""SWITCH_THROWABLE"": [188, 0]}, ""hide_tag"": false, ""pc_tutorial_showed"": true, ""full_screen"": false, ""hint_occurred"": 4, ""hint_close_PanelBulletBox"": true}";
@@ -279,37 +279,28 @@ internal static class LifeAfterPresetLauncher
         return message;
     }
 
-    private static string ApplyAndLaunchSequence(string[] presets, int windowTimeoutMilliseconds, int settleMilliseconds)
+    private static string ApplyAndLaunchSequence(string[] presets, int switchDelayMilliseconds)
     {
         if (!IsValidGameRoot(gameRoot))
         {
             throw new InvalidOperationException("\u8bf7\u5148\u9009\u62e9\u6b63\u786e\u7684\u6e38\u620f\u76ee\u5f55\u3002");
         }
 
-        if (windowTimeoutMilliseconds < 500) windowTimeoutMilliseconds = 500;
-        if (settleMilliseconds < 0) settleMilliseconds = 0;
+        if (switchDelayMilliseconds < 0) switchDelayMilliseconds = 0;
         StringBuilder builder = new StringBuilder();
         for (int i = 0; i < presets.Length; i++)
         {
             string preset = presets[i];
-            int beforeWindowCount = CountVisibleGameWindows();
             builder.AppendLine("\u542f\u52a8\u7a97\u53e3 " + (i + 1) + "\uff1a" + preset);
             builder.AppendLine(ApplyPreset(preset, true));
             if (i < presets.Length - 1)
             {
-                bool detected = WaitForNewGameWindow(beforeWindowCount, Math.Max(windowTimeoutMilliseconds, 45000));
-                if (!detected)
-                {
-                    builder.AppendLine("\u7b49\u5f85\u65b0\u6e38\u620f\u7a97\u53e3\u8d85\u65f6\uff0c\u5df2\u505c\u6b62\u540e\u7eed\u542f\u52a8\uff0c\u907f\u514d\u914d\u7f6e\u4e32\u6863\u3002");
-                    break;
-                }
-
-                builder.AppendLine("\u5df2\u68c0\u6d4b\u5230\u65b0\u6e38\u620f\u7a97\u53e3\uff0c\u7a33\u5b9a\u7b49\u5f85 " + (settleMilliseconds / 1000) + " \u79d2\u540e\u518d\u5207\u6362\u4e0b\u4e00\u4e2a\u914d\u7f6e\u3002");
-                Thread.Sleep(settleMilliseconds);
+                builder.AppendLine("\u7b49\u5f85 " + (switchDelayMilliseconds / 1000.0).ToString("0.#") + " \u79d2\u540e\u5199\u5165\u4e0b\u4e00\u4e2a\u914d\u7f6e\u5e76\u542f\u52a8\u4e0b\u4e00\u4e2a\u7a97\u53e3\u3002");
+                Thread.Sleep(switchDelayMilliseconds);
             }
         }
 
-        WriteLog("MultiLaunch count=" + presets.Length + " windowTimeoutMs=" + windowTimeoutMilliseconds + " settleMs=" + settleMilliseconds);
+        WriteLog("MultiLaunch count=" + presets.Length + " switchDelayMs=" + switchDelayMilliseconds);
         return builder.ToString();
     }
 
@@ -1013,16 +1004,16 @@ internal static class LifeAfterPresetLauncher
 
             waitLabel = new Label
             {
-                Text = "\u7a33\u5b9a\u7b49\u5f85",
+                Text = "\u5207\u6863\u7b49\u5f85",
                 AutoSize = true,
                 Left = 445,
                 Top = 274
             };
             Controls.Add(waitLabel);
 
-            settleWaitBox.Minimum = 5;
+            settleWaitBox.Minimum = 1;
             settleWaitBox.Maximum = 90;
-            settleWaitBox.Value = 20;
+            settleWaitBox.Value = 8;
             settleWaitBox.Left = 515;
             settleWaitBox.Top = 270;
             settleWaitBox.Width = 50;
@@ -1219,13 +1210,13 @@ internal static class LifeAfterPresetLauncher
 
                 DialogResult result = MessageBox.Show(
                     this,
-                    "\u5c06\u542f\u52a8 1 \u4e2a\u4e3b\u529b\u7a97\u53e3\u548c " + idleCount + " \u4e2a\u6302\u673a\u7a97\u53e3\u3002\u7a0b\u5e8f\u4f1a\u7b49\u5230\u4e0a\u4e00\u4e2a\u6e38\u620f\u7a97\u53e3\u51fa\u73b0\uff0c\u518d\u7a33\u5b9a\u7b49\u5f85 " + settleSeconds + " \u79d2\uff0c\u7136\u540e\u624d\u5207\u6362\u4e0b\u4e00\u4e2a\u914d\u7f6e\u3002\u662f\u5426\u7ee7\u7eed\uff1f",
+                    "\u5c06\u542f\u52a8 1 \u4e2a\u4e3b\u529b\u7a97\u53e3\u548c " + idleCount + " \u4e2a\u6302\u673a\u7a97\u53e3\u3002\u7a0b\u5e8f\u4f1a\u5148\u542f\u52a8\u4e0a\u4e00\u4e2a\u7a97\u53e3\uff0c\u7b49\u5f85 " + settleSeconds + " \u79d2\uff0c\u518d\u5199\u5165\u4e0b\u4e00\u4e2a\u914d\u7f6e\u5e76\u542f\u52a8\u3002\u662f\u5426\u7ee7\u7eed\uff1f",
                     "\u7a33\u5b9a\u591a\u5f00",
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question);
                 if (result != DialogResult.Yes) return;
 
-                statusBox.Text = ApplyAndLaunchSequence(presets, 45000, settleSeconds * 1000);
+                statusBox.Text = ApplyAndLaunchSequence(presets, settleSeconds * 1000);
                 ApplyPreset((string)mainPresetBox.SelectedItem, false);
                 statusBox.Text += Environment.NewLine + "\u591a\u5f00\u5b8c\u6210\uff0c\u914d\u7f6e\u5df2\u7559\u56de\u4e3b\u529b\u6863\uff1a" + mainPresetBox.SelectedItem;
             }
