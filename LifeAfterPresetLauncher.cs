@@ -43,7 +43,7 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.1.6";
+    private const string AppVersion = "v1.2.0";
 
     private const string Pc540p =
 @"{""resolution"": [960, 540], ""ignore_hint"": true, ""half_infected_keymap"": {""HANDBRAKE"": [0, 0], ""DRONE_CAST_SKILL"": [88, 0], ""SPORE_SKILL"": [74, 0], ""TOGGLE_WEAPONS"": [90, 0], ""DRONE_CONTROL_SKILL_1"": [0, 0], ""AIR_UP"": [0, 0], ""WHISTLE"": [0, 0], ""WEAPON_SKILL"": [81, 0], ""OPEN_FASHION"": [81, 1], ""ARTIFACT_STUNT"": [72, 0], ""CHANGE_POS"": [0, 0], ""AIR_DOWN"": [0, 0], ""SPORE_USE"": [16, 0], ""FAST_COLD_WEAPON"": [71, 0], ""TOGGLE_MEDICINE"": [66, 0], ""MOVE_RUN"": [87, 1], ""SWITCH_WEAPON"": [69, 0], ""PLAYER_SKILL7"": [-1, 0], ""AUTO_MOVE"": [0, 0], ""NITROGEN"": [0, 0], ""SWITCH_THROWABLE"": [188, 0]}, ""hide_tag"": false, ""pc_tutorial_showed"": true, ""full_screen"": false, ""hint_occurred"": 4, ""hint_close_PanelBulletBox"": true}";
@@ -878,6 +878,7 @@ internal static class LifeAfterPresetLauncher
         private readonly CheckBox advancedCheckBox = new CheckBox();
         private readonly ComboBox mainPresetBox = new ComboBox();
         private readonly ComboBox idlePresetBox = new ComboBox();
+        private readonly ComboBox multiModeBox = new ComboBox();
         private readonly NumericUpDown idleCountBox = new NumericUpDown();
         private readonly NumericUpDown settleWaitBox = new NumericUpDown();
         private Label multiLabel;
@@ -1153,11 +1154,27 @@ internal static class LifeAfterPresetLauncher
             };
             Controls.Add(waitLabel);
 
+            multiModeBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            multiModeBox.Items.AddRange(new object[] { "\u5206\u6b65\u786e\u8ba4", "\u81ea\u52a8\u5012\u8ba1\u65f6" });
+            multiModeBox.SelectedItem = "\u5206\u6b65\u786e\u8ba4";
+            multiModeBox.Left = 485;
+            multiModeBox.Top = 270;
+            multiModeBox.Width = 100;
+            Controls.Add(multiModeBox);
+
+            settleWaitBox.Minimum = 5;
+            settleWaitBox.Maximum = 180;
+            settleWaitBox.Value = 45;
+            settleWaitBox.Left = 595;
+            settleWaitBox.Top = 270;
+            settleWaitBox.Width = 50;
+            Controls.Add(settleWaitBox);
+
             waitUnitLabel = new Label
             {
-                Text = "\u5206\u6b65\u786e\u8ba4",
+                Text = "\u79d2",
                 AutoSize = true,
-                Left = 515,
+                Left = 650,
                 Top = 274
             };
             Controls.Add(waitUnitLabel);
@@ -1230,6 +1247,8 @@ internal static class LifeAfterPresetLauncher
             idleCountBox.Top = multiTop - 4;
             multiLaunchButton.Top = multiTop - 6;
             waitLabel.Top = waitTop;
+            multiModeBox.Top = waitTop - 4;
+            settleWaitBox.Top = waitTop - 4;
             waitUnitLabel.Top = waitTop;
 
             statusBox.Top = statusTop;
@@ -1333,6 +1352,8 @@ internal static class LifeAfterPresetLauncher
                 }
 
                 int idleCount = (int)idleCountBox.Value;
+                int autoWaitSeconds = (int)settleWaitBox.Value;
+                bool autoMode = ((string)multiModeBox.SelectedItem).IndexOf("\u81ea\u52a8", StringComparison.Ordinal) >= 0;
                 string[] presets = new string[1 + idleCount];
                 presets[0] = (string)mainPresetBox.SelectedItem;
                 for (int i = 0; i < idleCount; i++)
@@ -1342,19 +1363,31 @@ internal static class LifeAfterPresetLauncher
 
                 DialogResult result = MessageBox.Show(
                     this,
-                    "\u5c06\u542f\u52a8 1 \u4e2a\u4e3b\u529b\u7a97\u53e3\u548c " + idleCount + " \u4e2a\u6302\u673a\u7a97\u53e3\u3002\u7a0b\u5e8f\u4f1a\u5148\u5199\u5165\u5e76\u542f\u52a8\u4e3b\u529b\u6863\uff0c\u7136\u540e\u7b49\u4f60\u786e\u8ba4\u4e3b\u529b\u7a97\u53e3\u5df2\u7ecf\u6b63\u786e\u663e\u793a\uff0c\u518d\u5199\u5165\u6302\u673a\u914d\u7f6e\u5e76\u542f\u52a8\u3002\u662f\u5426\u7ee7\u7eed\uff1f",
+                    BuildMultiLaunchConfirmMessage(idleCount, autoMode, autoWaitSeconds),
                     "\u7a33\u5b9a\u591a\u5f00",
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question);
                 if (result != DialogResult.Yes) return;
 
-                statusBox.Text = ApplyAndLaunchSequence(presets, ConfirmNextMultiLaunchStep);
+                statusBox.Text = ApplyAndLaunchSequence(
+                    presets,
+                    autoMode ? (Func<string, string, bool>)ConfirmNextMultiLaunchStepAutomatically : ConfirmNextMultiLaunchStep);
                 statusBox.Text += Environment.NewLine + "\u591a\u5f00\u5b8c\u6210\uff0c\u672a\u81ea\u52a8\u56de\u5199\u4e3b\u529b\u6863\uff0c\u907f\u514d\u5f71\u54cd\u540e\u7eed\u7a97\u53e3\u8bfb\u53d6\u914d\u7f6e\u3002";
             }
             catch (Exception ex)
             {
                 MessageBox.Show(this, ex.Message, "\u9519\u8bef", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private string BuildMultiLaunchConfirmMessage(int idleCount, bool autoMode, int autoWaitSeconds)
+        {
+            if (autoMode)
+            {
+                return "\u5c06\u542f\u52a8 1 \u4e2a\u4e3b\u529b\u7a97\u53e3\u548c " + idleCount + " \u4e2a\u6302\u673a\u7a97\u53e3\u3002\u7a0b\u5e8f\u4f1a\u5148\u5199\u5165\u5e76\u542f\u52a8\u4e3b\u529b\u6863\uff0c\u7136\u540e\u56fa\u5b9a\u7b49\u5f85 " + autoWaitSeconds + " \u79d2\uff0c\u518d\u5199\u5165\u6302\u673a\u914d\u7f6e\u5e76\u542f\u52a8\u3002\r\n\r\n\u8fd9\u662f\u5b9e\u9a8c\u81ea\u52a8\u6a21\u5f0f\uff0c\u5982\u679c\u53c8\u4e32\u6863\uff0c\u8bf7\u628a\u79d2\u6570\u8c03\u5927\u6216\u5207\u56de\u201c\u5206\u6b65\u786e\u8ba4\u201d\u3002\u662f\u5426\u7ee7\u7eed\uff1f";
+            }
+
+            return "\u5c06\u542f\u52a8 1 \u4e2a\u4e3b\u529b\u7a97\u53e3\u548c " + idleCount + " \u4e2a\u6302\u673a\u7a97\u53e3\u3002\u7a0b\u5e8f\u4f1a\u5148\u5199\u5165\u5e76\u542f\u52a8\u4e3b\u529b\u6863\uff0c\u7136\u540e\u7b49\u4f60\u786e\u8ba4\u4e3b\u529b\u7a97\u53e3\u5df2\u7ecf\u6b63\u786e\u663e\u793a\uff0c\u518d\u5199\u5165\u6302\u673a\u914d\u7f6e\u5e76\u542f\u52a8\u3002\u662f\u5426\u7ee7\u7eed\uff1f";
         }
 
         private bool ConfirmNextMultiLaunchStep(string currentPreset, string nextPreset)
@@ -1366,6 +1399,15 @@ internal static class LifeAfterPresetLauncher
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question);
             return result == DialogResult.Yes;
+        }
+
+        private bool ConfirmNextMultiLaunchStepAutomatically(string currentPreset, string nextPreset)
+        {
+            int seconds = (int)settleWaitBox.Value;
+            statusBox.Text += Environment.NewLine + "\u81ea\u52a8\u5012\u8ba1\u65f6\uff1a\u5df2\u542f\u52a8\u201c" + currentPreset + "\u201d\uff0c\u7b49\u5f85 " + seconds + " \u79d2\u540e\u5199\u5165\u201c" + nextPreset + "\u201d\u3002";
+            statusBox.Refresh();
+            Thread.Sleep(seconds * 1000);
+            return true;
         }
 
         private void RestoreToMainPresetSilently()
