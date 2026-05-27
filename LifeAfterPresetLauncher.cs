@@ -43,7 +43,7 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.2.1";
+    private const string AppVersion = "v1.2.2";
 
     private const string Pc540p =
 @"{""resolution"": [960, 540], ""ignore_hint"": true, ""half_infected_keymap"": {""HANDBRAKE"": [0, 0], ""DRONE_CAST_SKILL"": [88, 0], ""SPORE_SKILL"": [74, 0], ""TOGGLE_WEAPONS"": [90, 0], ""DRONE_CONTROL_SKILL_1"": [0, 0], ""AIR_UP"": [0, 0], ""WHISTLE"": [0, 0], ""WEAPON_SKILL"": [81, 0], ""OPEN_FASHION"": [81, 1], ""ARTIFACT_STUNT"": [72, 0], ""CHANGE_POS"": [0, 0], ""AIR_DOWN"": [0, 0], ""SPORE_USE"": [16, 0], ""FAST_COLD_WEAPON"": [71, 0], ""TOGGLE_MEDICINE"": [66, 0], ""MOVE_RUN"": [87, 1], ""SWITCH_WEAPON"": [69, 0], ""PLAYER_SKILL7"": [-1, 0], ""AUTO_MOVE"": [0, 0], ""NITROGEN"": [0, 0], ""SWITCH_THROWABLE"": [188, 0]}, ""hide_tag"": false, ""pc_tutorial_showed"": true, ""full_screen"": false, ""hint_occurred"": 4, ""hint_close_PanelBulletBox"": true}";
@@ -888,6 +888,7 @@ internal static class LifeAfterPresetLauncher
         private Label waitLabel;
         private Label waitUnitLabel;
         private Button multiLaunchButton;
+        private Label projectInfoLabel;
         private Label versionLabel;
         private Button restoreButton;
         private Button shortcutButton;
@@ -1201,12 +1202,21 @@ internal static class LifeAfterPresetLauncher
 
             versionLabel = new Label
             {
-                Text = AppVersion,
+                Text = AppVersion + "  \u516c\u76ca\u7248",
                 AutoSize = true,
-                Left = 625,
+                Left = 585,
                 Top = 525
             };
             Controls.Add(versionLabel);
+
+            projectInfoLabel = new Label
+            {
+                Text = "\u4f5c\u8005\uff1a\u4e0d\u4e0e\u4e16\u4fd7\u7eb7\u4e89  /  \u516c\u76ca\u5f00\u6e90\uff0c\u514d\u8d39\u4f7f\u7528",
+                AutoSize = true,
+                Left = 16,
+                Top = 525
+            };
+            Controls.Add(projectInfoLabel);
 
             RefreshPresetDescription();
             RefreshAdvancedVisibility();
@@ -1254,6 +1264,7 @@ internal static class LifeAfterPresetLauncher
             statusBox.Top = statusTop;
             statusBox.Height = statusHeight;
             versionLabel.Top = versionTop;
+            projectInfoLabel.Top = versionTop;
         }
 
         private void RefreshPathLabel()
