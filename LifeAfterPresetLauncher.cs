@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -43,7 +44,7 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.2.3";
+    private const string AppVersion = "v1.3.0";
     private const string ProjectUrl = "https://github.com/chincika/lifeafter-graphics-launcher";
 
     private const string Pc540p =
@@ -870,8 +871,138 @@ internal static class LifeAfterPresetLauncher
         public string Quality { get; private set; }
     }
 
+    private sealed class CoverPanel : Panel
+    {
+        private readonly Image coverImage;
+        private readonly string projectUrl;
+
+        public CoverPanel(string url)
+        {
+            projectUrl = url;
+            DoubleBuffered = true;
+            try
+            {
+                string imagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "cover.png");
+                if (File.Exists(imagePath))
+                {
+                    coverImage = Image.FromFile(imagePath);
+                }
+            }
+            catch
+            {
+                coverImage = null;
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && coverImage != null)
+            {
+                coverImage.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle bounds = ClientRectangle;
+
+            if (coverImage != null)
+            {
+                g.DrawImage(coverImage, GetCoverImageRect(coverImage.Size, bounds));
+            }
+            else
+            {
+                DrawFallbackCover(g, bounds);
+            }
+
+            using (LinearGradientBrush shade = new LinearGradientBrush(
+                bounds,
+                Color.FromArgb(210, 7, 18, 30),
+                Color.FromArgb(60, 7, 18, 30),
+                LinearGradientMode.Horizontal))
+            {
+                g.FillRectangle(shade, bounds);
+            }
+
+            using (Pen border = new Pen(Color.FromArgb(70, 255, 255, 255)))
+            {
+                g.DrawRectangle(border, 0, 0, bounds.Width - 1, bounds.Height - 1);
+            }
+
+            using (Font titleFont = new Font("Microsoft YaHei UI", 18F, FontStyle.Bold))
+            using (Font subtitleFont = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular))
+            using (Brush titleBrush = new SolidBrush(Color.White))
+            using (Brush subtitleBrush = new SolidBrush(Color.FromArgb(220, 235, 242, 248)))
+            {
+                g.DrawString("\u660e\u65e5\u4e4b\u540e\u753b\u8d28\u542f\u52a8\u5668", titleFont, titleBrush, 24, 20);
+                g.DrawString("\u516c\u76ca\u7248  /  \u591a\u5f00\u9884\u8bbe  /  \u5b89\u5168\u5907\u4efd", subtitleFont, subtitleBrush, 26, 56);
+                g.DrawString(projectUrl, subtitleFont, subtitleBrush, 26, 76);
+            }
+        }
+
+        private static Rectangle GetCoverImageRect(Size imageSize, Rectangle bounds)
+        {
+            if (imageSize.Width <= 0 || imageSize.Height <= 0) return bounds;
+            double scale = Math.Max(bounds.Width / (double)imageSize.Width, bounds.Height / (double)imageSize.Height);
+            int width = (int)Math.Ceiling(imageSize.Width * scale);
+            int height = (int)Math.Ceiling(imageSize.Height * scale);
+            return new Rectangle(
+                bounds.Left + (bounds.Width - width) / 2,
+                bounds.Top + (bounds.Height - height) / 2,
+                width,
+                height);
+        }
+
+        private static void DrawFallbackCover(Graphics g, Rectangle bounds)
+        {
+            using (LinearGradientBrush back = new LinearGradientBrush(
+                bounds,
+                Color.FromArgb(13, 35, 52),
+                Color.FromArgb(224, 177, 101),
+                LinearGradientMode.ForwardDiagonal))
+            {
+                g.FillRectangle(back, bounds);
+            }
+
+            using (Pen line = new Pen(Color.FromArgb(120, 125, 210, 245), 1F))
+            {
+                for (int x = 28; x < bounds.Width; x += 54)
+                {
+                    g.DrawLine(line, x, 12, x + 70, bounds.Height - 12);
+                }
+            }
+
+            using (SolidBrush mountain = new SolidBrush(Color.FromArgb(125, 10, 24, 35)))
+            {
+                Point[] ridge = new Point[]
+                {
+                    new Point(0, bounds.Bottom),
+                    new Point(100, bounds.Bottom - 26),
+                    new Point(210, bounds.Bottom - 50),
+                    new Point(340, bounds.Bottom - 28),
+                    new Point(510, bounds.Bottom - 62),
+                    new Point(bounds.Right, bounds.Bottom - 24),
+                    new Point(bounds.Right, bounds.Bottom)
+                };
+                g.FillPolygon(mountain, ridge);
+            }
+        }
+    }
+
     private sealed class LauncherForm : Form
     {
+        private const int HeaderOffset = 126;
+        private static readonly Color WindowBackColor = Color.FromArgb(245, 247, 250);
+        private static readonly Color PanelBackColor = Color.FromArgb(255, 255, 255);
+        private static readonly Color PrimaryColor = Color.FromArgb(33, 105, 155);
+        private static readonly Color TextColor = Color.FromArgb(35, 42, 52);
+        private static readonly Color MutedTextColor = Color.FromArgb(92, 103, 115);
+
         private readonly ComboBox presetBox = new ComboBox();
         private readonly TextBox statusBox = new TextBox();
         private readonly Label pathLabel = new Label();
@@ -903,10 +1034,20 @@ internal static class LifeAfterPresetLauncher
         {
             Text = "\u660e\u65e5\u4e4b\u540e\u5b89\u5168\u753b\u8d28\u542f\u52a8\u5668";
             StartPosition = FormStartPosition.CenterScreen;
-            Size = new Size(720, 610);
+            Size = new Size(740, 760);
             Font = new Font("Microsoft YaHei UI", 9F);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
+            BackColor = WindowBackColor;
+
+            CoverPanel coverPanel = new CoverPanel(ProjectUrl)
+            {
+                Left = 16,
+                Top = 16,
+                Width = 690,
+                Height = 106
+            };
+            Controls.Add(coverPanel);
 
             Label label = new Label
             {
@@ -1229,9 +1370,58 @@ internal static class LifeAfterPresetLauncher
             };
             Controls.Add(githubLabel);
 
+            MoveControlsBelowCover();
+            ApplyVisualStyle();
             RefreshPresetDescription();
             RefreshAdvancedVisibility();
             RefreshPathLabel();
+        }
+
+        private void MoveControlsBelowCover()
+        {
+            foreach (Control control in Controls)
+            {
+                if (control is CoverPanel) continue;
+                control.Top += HeaderOffset;
+            }
+        }
+
+        private void ApplyVisualStyle()
+        {
+            foreach (Control control in Controls)
+            {
+                StyleControl(control);
+            }
+
+            statusBox.BackColor = PanelBackColor;
+            statusBox.ForeColor = TextColor;
+            statusBox.BorderStyle = BorderStyle.FixedSingle;
+            pathLabel.ForeColor = TextColor;
+            descriptionLabel.ForeColor = MutedTextColor;
+            projectInfoLabel.ForeColor = MutedTextColor;
+            githubLabel.ForeColor = PrimaryColor;
+            versionLabel.ForeColor = MutedTextColor;
+        }
+
+        private void StyleControl(Control control)
+        {
+            control.ForeColor = TextColor;
+            if (control is Button)
+            {
+                Button button = (Button)control;
+                button.FlatStyle = FlatStyle.Flat;
+                button.FlatAppearance.BorderColor = Color.FromArgb(198, 207, 218);
+                button.BackColor = PanelBackColor;
+                button.Cursor = Cursors.Hand;
+            }
+            else if (control is ComboBox || control is NumericUpDown || control is TextBox)
+            {
+                control.BackColor = PanelBackColor;
+            }
+            else if (control is Label || control is CheckBox)
+            {
+                control.BackColor = Color.Transparent;
+            }
         }
 
         private void RefreshPresetDescription()
@@ -1253,11 +1443,11 @@ internal static class LifeAfterPresetLauncher
 
         private void ApplyDynamicLayout(bool advancedVisible)
         {
-            int multiTop = advancedVisible ? 240 : 165;
+            int multiTop = (advancedVisible ? 240 : 165) + HeaderOffset;
             int waitTop = multiTop + 34;
-            int statusTop = advancedVisible ? 315 : 245;
+            int statusTop = (advancedVisible ? 315 : 245) + HeaderOffset;
             int statusHeight = advancedVisible ? 190 : 260;
-            int versionTop = advancedVisible ? 525 : 525;
+            int versionTop = 525 + HeaderOffset;
 
             multiLabel.Top = multiTop;
             mainLabel.Top = multiTop;
