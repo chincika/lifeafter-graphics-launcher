@@ -44,7 +44,7 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.3.0";
+    private const string AppVersion = "v1.4.0";
     private const string ProjectUrl = "https://github.com/chincika/lifeafter-graphics-launcher";
 
     private const string Pc540p =
@@ -882,10 +882,27 @@ internal static class LifeAfterPresetLauncher
             DoubleBuffered = true;
             try
             {
-                string imagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "cover.png");
-                if (File.Exists(imagePath))
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("cover.png"))
                 {
-                    coverImage = Image.FromFile(imagePath);
+                    if (stream != null)
+                    {
+                        using (Image embedded = Image.FromStream(stream))
+                        {
+                            coverImage = new Bitmap(embedded);
+                        }
+                    }
+                }
+
+                if (coverImage == null)
+                {
+                    string imagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "cover.png");
+                    if (File.Exists(imagePath))
+                    {
+                        using (Image fileImage = Image.FromFile(imagePath))
+                        {
+                            coverImage = new Bitmap(fileImage);
+                        }
+                    }
                 }
             }
             catch
@@ -1000,6 +1017,8 @@ internal static class LifeAfterPresetLauncher
         private static readonly Color WindowBackColor = Color.FromArgb(245, 247, 250);
         private static readonly Color PanelBackColor = Color.FromArgb(255, 255, 255);
         private static readonly Color PrimaryColor = Color.FromArgb(33, 105, 155);
+        private static readonly Color PrimaryHoverColor = Color.FromArgb(24, 88, 135);
+        private static readonly Color CardBorderColor = Color.FromArgb(218, 226, 235);
         private static readonly Color TextColor = Color.FromArgb(35, 42, 52);
         private static readonly Color MutedTextColor = Color.FromArgb(92, 103, 115);
 
@@ -1039,6 +1058,7 @@ internal static class LifeAfterPresetLauncher
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             BackColor = WindowBackColor;
+            DoubleBuffered = true;
 
             CoverPanel coverPanel = new CoverPanel(ProjectUrl)
             {
@@ -1377,6 +1397,48 @@ internal static class LifeAfterPresetLauncher
             RefreshPathLabel();
         }
 
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            DrawCard(g, new Rectangle(12, HeaderOffset + 78, 708, 64));
+
+            if (advancedCheckBox.Checked)
+            {
+                DrawCard(g, new Rectangle(12, HeaderOffset + 150, 708, 76));
+            }
+
+            int multiTop = (advancedCheckBox.Checked ? 240 : 165) + HeaderOffset;
+            int statusTop = (advancedCheckBox.Checked ? 315 : 245) + HeaderOffset;
+            DrawCard(g, new Rectangle(12, multiTop - 16, 708, 80));
+            DrawCard(g, new Rectangle(12, statusTop - 12, 708, statusBox.Height + 24));
+        }
+
+        private static void DrawCard(Graphics g, Rectangle rect)
+        {
+            using (GraphicsPath path = RoundedRectangle(rect, 8))
+            using (SolidBrush fill = new SolidBrush(Color.FromArgb(248, 251, 254)))
+            using (Pen border = new Pen(CardBorderColor))
+            {
+                g.FillPath(fill, path);
+                g.DrawPath(border, path);
+            }
+        }
+
+        private static GraphicsPath RoundedRectangle(Rectangle rect, int radius)
+        {
+            int diameter = radius * 2;
+            GraphicsPath path = new GraphicsPath();
+            path.AddArc(rect.Left, rect.Top, diameter, diameter, 180, 90);
+            path.AddArc(rect.Right - diameter, rect.Top, diameter, diameter, 270, 90);
+            path.AddArc(rect.Right - diameter, rect.Bottom - diameter, diameter, diameter, 0, 90);
+            path.AddArc(rect.Left, rect.Bottom - diameter, diameter, diameter, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
         private void MoveControlsBelowCover()
         {
             foreach (Control control in Controls)
@@ -1410,9 +1472,17 @@ internal static class LifeAfterPresetLauncher
             {
                 Button button = (Button)control;
                 button.FlatStyle = FlatStyle.Flat;
-                button.FlatAppearance.BorderColor = Color.FromArgb(198, 207, 218);
-                button.BackColor = PanelBackColor;
+                button.FlatAppearance.BorderSize = 1;
+                button.FlatAppearance.BorderColor = Color.FromArgb(190, 202, 216);
+                button.BackColor = Color.FromArgb(252, 253, 255);
                 button.Cursor = Cursors.Hand;
+                if (button.Text.IndexOf("\u542f\u52a8", StringComparison.Ordinal) >= 0 ||
+                    button.Text.IndexOf("\u591a\u5f00", StringComparison.Ordinal) >= 0)
+                {
+                    button.BackColor = PrimaryColor;
+                    button.ForeColor = Color.White;
+                    button.FlatAppearance.BorderColor = PrimaryHoverColor;
+                }
             }
             else if (control is ComboBox || control is NumericUpDown || control is TextBox)
             {
@@ -1439,6 +1509,7 @@ internal static class LifeAfterPresetLauncher
             openBackupButton.Visible = visible;
             openLogButton.Visible = visible;
             ApplyDynamicLayout(visible);
+            Invalidate();
         }
 
         private void ApplyDynamicLayout(bool advancedVisible)

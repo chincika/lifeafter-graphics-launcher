@@ -17,7 +17,7 @@ GitHub 地址：https://github.com/chincika/lifeafter-graphics-launcher
 - 支持“主力 + 挂机”多开：默认分步确认，也提供实验性的自动倒计时模式，默认间隔 20 秒。
 - 每次写入配置前自动备份，并保留默认 2K120 的恢复点。
 - 日志和工具数据写入游戏配置目录下的 `launcher_data`，避免污染 exe 所在目录。
-- 内置封面展示与轻量 UI 美化；若 `assets/cover.png` 存在，会优先作为启动器封面。
+- 内置封面展示与轻量 UI 美化；封面已打包进 exe，仓库中的 `assets/cover.png` 用作源素材。
 
 ## 使用方式
 
@@ -46,4 +46,4 @@ if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framewo
 
 ## 版本
 
-当前版本：v1.3.0
+当前版本：v1.4.0
