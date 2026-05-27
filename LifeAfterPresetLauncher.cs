@@ -44,7 +44,7 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.4.0";
+    private const string AppVersion = "v1.5.0";
     private const string ProjectUrl = "https://github.com/chincika/lifeafter-graphics-launcher";
 
     private const string Pc540p =
@@ -1014,13 +1014,15 @@ internal static class LifeAfterPresetLauncher
     private sealed class LauncherForm : Form
     {
         private const int HeaderOffset = 126;
-        private static readonly Color WindowBackColor = Color.FromArgb(245, 247, 250);
-        private static readonly Color PanelBackColor = Color.FromArgb(255, 255, 255);
-        private static readonly Color PrimaryColor = Color.FromArgb(33, 105, 155);
-        private static readonly Color PrimaryHoverColor = Color.FromArgb(24, 88, 135);
-        private static readonly Color CardBorderColor = Color.FromArgb(218, 226, 235);
-        private static readonly Color TextColor = Color.FromArgb(35, 42, 52);
-        private static readonly Color MutedTextColor = Color.FromArgb(92, 103, 115);
+        private static readonly Color WindowBackColor = Color.FromArgb(7, 12, 17);
+        private static readonly Color PanelBackColor = Color.FromArgb(13, 24, 31);
+        private static readonly Color FieldBackColor = Color.FromArgb(9, 18, 25);
+        private static readonly Color PrimaryColor = Color.FromArgb(26, 149, 194);
+        private static readonly Color PrimaryHoverColor = Color.FromArgb(36, 183, 226);
+        private static readonly Color WarningColor = Color.FromArgb(214, 161, 78);
+        private static readonly Color CardBorderColor = Color.FromArgb(53, 112, 137);
+        private static readonly Color TextColor = Color.FromArgb(225, 235, 240);
+        private static readonly Color MutedTextColor = Color.FromArgb(137, 159, 170);
 
         private readonly ComboBox presetBox = new ComboBox();
         private readonly TextBox statusBox = new TextBox();
@@ -1054,7 +1056,7 @@ internal static class LifeAfterPresetLauncher
             Text = "\u660e\u65e5\u4e4b\u540e\u5b89\u5168\u753b\u8d28\u542f\u52a8\u5668";
             StartPosition = FormStartPosition.CenterScreen;
             Size = new Size(740, 760);
-            Font = new Font("Microsoft YaHei UI", 9F);
+            Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             BackColor = WindowBackColor;
@@ -1402,6 +1404,7 @@ internal static class LifeAfterPresetLauncher
             base.OnPaint(e);
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
+            DrawTerminalBackground(g, ClientRectangle);
 
             DrawCard(g, new Rectangle(12, HeaderOffset + 78, 708, 64));
 
@@ -1419,11 +1422,58 @@ internal static class LifeAfterPresetLauncher
         private static void DrawCard(Graphics g, Rectangle rect)
         {
             using (GraphicsPath path = RoundedRectangle(rect, 8))
-            using (SolidBrush fill = new SolidBrush(Color.FromArgb(248, 251, 254)))
+            using (SolidBrush fill = new SolidBrush(Color.FromArgb(226, 12, 24, 32)))
             using (Pen border = new Pen(CardBorderColor))
             {
                 g.FillPath(fill, path);
                 g.DrawPath(border, path);
+            }
+
+            using (Pen accent = new Pen(Color.FromArgb(160, 55, 190, 230), 1.4F))
+            {
+                int corner = 18;
+                g.DrawLine(accent, rect.Left + 10, rect.Top, rect.Left + corner + 10, rect.Top);
+                g.DrawLine(accent, rect.Left, rect.Top + 10, rect.Left, rect.Top + corner + 10);
+                g.DrawLine(accent, rect.Right - corner - 10, rect.Top, rect.Right - 10, rect.Top);
+                g.DrawLine(accent, rect.Right, rect.Top + 10, rect.Right, rect.Top + corner + 10);
+            }
+        }
+
+        private static void DrawTerminalBackground(Graphics g, Rectangle bounds)
+        {
+            using (LinearGradientBrush back = new LinearGradientBrush(
+                bounds,
+                Color.FromArgb(5, 11, 16),
+                Color.FromArgb(17, 30, 37),
+                LinearGradientMode.ForwardDiagonal))
+            {
+                g.FillRectangle(back, bounds);
+            }
+
+            using (Pen grid = new Pen(Color.FromArgb(25, 56, 140, 160), 1F))
+            {
+                for (int x = 0; x < bounds.Width; x += 36)
+                {
+                    g.DrawLine(grid, x, 0, x, bounds.Height);
+                }
+                for (int y = 0; y < bounds.Height; y += 36)
+                {
+                    g.DrawLine(grid, 0, y, bounds.Width, y);
+                }
+            }
+
+            using (Pen scan = new Pen(Color.FromArgb(16, 255, 255, 255), 1F))
+            {
+                for (int y = 0; y < bounds.Height; y += 4)
+                {
+                    g.DrawLine(scan, 0, y, bounds.Width, y);
+                }
+            }
+
+            using (SolidBrush glow = new SolidBrush(Color.FromArgb(35, 28, 160, 205)))
+            {
+                g.FillEllipse(glow, bounds.Right - 180, 120, 260, 260);
+                g.FillEllipse(glow, -120, bounds.Bottom - 180, 250, 220);
             }
         }
 
@@ -1459,9 +1509,9 @@ internal static class LifeAfterPresetLauncher
             statusBox.ForeColor = TextColor;
             statusBox.BorderStyle = BorderStyle.FixedSingle;
             pathLabel.ForeColor = TextColor;
-            descriptionLabel.ForeColor = MutedTextColor;
+            descriptionLabel.ForeColor = WarningColor;
             projectInfoLabel.ForeColor = MutedTextColor;
-            githubLabel.ForeColor = PrimaryColor;
+            githubLabel.ForeColor = Color.FromArgb(107, 211, 240);
             versionLabel.ForeColor = MutedTextColor;
         }
 
@@ -1473,20 +1523,25 @@ internal static class LifeAfterPresetLauncher
                 Button button = (Button)control;
                 button.FlatStyle = FlatStyle.Flat;
                 button.FlatAppearance.BorderSize = 1;
-                button.FlatAppearance.BorderColor = Color.FromArgb(190, 202, 216);
-                button.BackColor = Color.FromArgb(252, 253, 255);
+                button.FlatAppearance.BorderColor = Color.FromArgb(64, 111, 132);
+                button.FlatAppearance.MouseOverBackColor = Color.FromArgb(21, 55, 68);
+                button.FlatAppearance.MouseDownBackColor = Color.FromArgb(19, 42, 52);
+                button.BackColor = Color.FromArgb(15, 31, 40);
+                button.ForeColor = TextColor;
                 button.Cursor = Cursors.Hand;
                 if (button.Text.IndexOf("\u542f\u52a8", StringComparison.Ordinal) >= 0 ||
                     button.Text.IndexOf("\u591a\u5f00", StringComparison.Ordinal) >= 0)
                 {
                     button.BackColor = PrimaryColor;
-                    button.ForeColor = Color.White;
+                    button.ForeColor = Color.FromArgb(245, 252, 255);
                     button.FlatAppearance.BorderColor = PrimaryHoverColor;
+                    button.FlatAppearance.MouseOverBackColor = PrimaryHoverColor;
                 }
             }
             else if (control is ComboBox || control is NumericUpDown || control is TextBox)
             {
-                control.BackColor = PanelBackColor;
+                control.BackColor = FieldBackColor;
+                control.ForeColor = TextColor;
             }
             else if (control is Label || control is CheckBox)
             {
