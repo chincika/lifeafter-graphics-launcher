@@ -37,4 +37,4 @@ if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framewo
 
 ## 版本
 
-当前版本：v1.1.2
+当前版本：v1.1.3
