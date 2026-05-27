@@ -1,0 +1,8 @@
+LifeAfterLauncher.path
+backups/
+*.log
+*.tmp
+*.user
+*.bak
+launcher_data/
+profile_backups/
