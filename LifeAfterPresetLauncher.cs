@@ -44,7 +44,7 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.5.0";
+    private const string AppVersion = "v1.5.1";
     private const string ProjectUrl = "https://github.com/chincika/lifeafter-graphics-launcher";
 
     private const string Pc540p =
@@ -1100,7 +1100,7 @@ internal static class LifeAfterPresetLauncher
 
             presetBox.DropDownStyle = ComboBoxStyle.DropDownList;
             presetBox.Items.AddRange(new object[] { "2K 120", "1080p 120", "1080p 60", "900p 60", "720p 60", "540p 60", "540p 25" });
-            presetBox.SelectedItem = "540p 25";
+            presetBox.SelectedItem = "2K 120";
             presetBox.Left = 16;
             presetBox.Top = 92;
             presetBox.Width = 190;
