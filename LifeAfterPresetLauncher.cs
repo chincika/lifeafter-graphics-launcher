@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -40,6 +41,7 @@ internal static class LifeAfterPresetLauncher
     private static string pcConfigPath;
     private static string qualityConfigPath;
     private static string gameExe;
+    private static string performanceGameExe;
 
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
@@ -90,7 +92,7 @@ internal static class LifeAfterPresetLauncher
         gameRoot = root;
         if (String.IsNullOrEmpty(root))
         {
-            configDir = pcConfigPath = qualityConfigPath = gameExe = null;
+            configDir = pcConfigPath = qualityConfigPath = gameExe = performanceGameExe = null;
             return;
         }
 
@@ -98,6 +100,7 @@ internal static class LifeAfterPresetLauncher
         pcConfigPath = Path.Combine(configDir, "pcconfig");
         qualityConfigPath = Path.Combine(configDir, "qualityconfig");
         gameExe = Path.Combine(root, "lifeafter.exe");
+        performanceGameExe = Path.Combine(root, @"Documents\bin\x64-3\lifeafter.exe");
     }
 
     private static bool IsValidGameRoot(string root)
@@ -261,6 +264,11 @@ internal static class LifeAfterPresetLauncher
 
     private static string ApplyPreset(string preset, bool launch)
     {
+        return ApplyPreset(preset, launch, false);
+    }
+
+    private static string ApplyPreset(string preset, bool launch, bool performanceMode)
+    {
         if (!IsValidGameRoot(gameRoot))
         {
             throw new InvalidOperationException("\u8bf7\u5148\u9009\u62e9\u6b63\u786e\u7684\u6e38\u620f\u76ee\u5f55\u3002");
@@ -282,20 +290,45 @@ internal static class LifeAfterPresetLauncher
 
         if (launch)
         {
+            string launchExe = GetLaunchExe(performanceMode);
             Process.Start(new ProcessStartInfo
             {
-                FileName = gameExe,
+                FileName = launchExe,
                 WorkingDirectory = gameRoot,
                 UseShellExecute = true
             });
+            message += Environment.NewLine + "\u542f\u52a8\u6a21\u5f0f\uff1a" + GetLaunchModeName(performanceMode);
+            message += Environment.NewLine + "\u542f\u52a8\u6587\u4ef6\uff1a" + launchExe;
             message += Environment.NewLine + "\u6e38\u620f\u5df2\u542f\u52a8\u3002";
         }
 
-        WriteLog("ApplyPreset preset=" + preset + " launch=" + launch + " root=" + gameRoot + " summary=" + ReadCurrentConfigSummary());
+        WriteLog("ApplyPreset preset=" + preset + " launch=" + launch + " performanceMode=" + performanceMode + " root=" + gameRoot + " summary=" + ReadCurrentConfigSummary());
         return message;
     }
 
+    private static string GetLaunchExe(bool performanceMode)
+    {
+        string launchExe = performanceMode ? performanceGameExe : gameExe;
+        if (String.IsNullOrEmpty(launchExe) || !File.Exists(launchExe))
+        {
+            string modeName = GetLaunchModeName(performanceMode);
+            throw new FileNotFoundException("\u627e\u4e0d\u5230" + modeName + "\u542f\u52a8\u6587\u4ef6", launchExe);
+        }
+
+        return launchExe;
+    }
+
+    private static string GetLaunchModeName(bool performanceMode)
+    {
+        return performanceMode ? "\u6027\u80fd\u4f18\u5148" : "\u6807\u51c6";
+    }
+
     private static string ApplyAndLaunchSequence(string[] presets, Func<string, string, bool> confirmNext)
+    {
+        return ApplyAndLaunchSequence(presets, confirmNext, false);
+    }
+
+    private static string ApplyAndLaunchSequence(string[] presets, Func<string, string, bool> confirmNext, bool performanceMode)
     {
         if (!IsValidGameRoot(gameRoot))
         {
@@ -307,7 +340,7 @@ internal static class LifeAfterPresetLauncher
         {
             string preset = presets[i];
             builder.AppendLine("\u542f\u52a8\u7a97\u53e3 " + (i + 1) + "\uff1a" + preset);
-            builder.AppendLine(ApplyPreset(preset, true));
+            builder.AppendLine(ApplyPreset(preset, true, performanceMode));
             if (i < presets.Length - 1)
             {
                 string nextPreset = presets[i + 1];
@@ -322,7 +355,7 @@ internal static class LifeAfterPresetLauncher
             }
         }
 
-        WriteLog("MultiLaunch count=" + presets.Length + " manualConfirm=true");
+        WriteLog("MultiLaunch count=" + presets.Length + " performanceMode=" + performanceMode + " manualConfirm=true");
         return builder.ToString();
     }
 
@@ -401,6 +434,79 @@ internal static class LifeAfterPresetLauncher
             default:
                 return "";
         }
+    }
+
+    private static string GetOptConfigPath()
+    {
+        if (String.IsNullOrEmpty(configDir)) return null;
+        return Path.Combine(configDir, "optconfig");
+    }
+
+    private static decimal ReadTiaoziScale()
+    {
+        string optConfigPath = GetOptConfigPath();
+        if (String.IsNullOrEmpty(optConfigPath) || !File.Exists(optConfigPath))
+        {
+            throw new FileNotFoundException("\u627e\u4e0d\u5230 optconfig \u914d\u7f6e\u6587\u4ef6", optConfigPath);
+        }
+
+        string json = File.ReadAllText(optConfigPath, Encoding.UTF8);
+        Match match = Regex.Match(json, @"""tiaozi_size""\s*:\s*(-?\d+(?:\.\d+)?)");
+        if (!match.Success)
+        {
+            throw new InvalidOperationException("optconfig \u91cc\u6ca1\u6709 tiaozi_size \u5b57\u6bb5\u3002");
+        }
+
+        return Decimal.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+    }
+
+    private static string SetTiaoziScale(decimal scale)
+    {
+        if (!IsValidGameRoot(gameRoot))
+        {
+            throw new InvalidOperationException("\u8bf7\u5148\u9009\u62e9\u6b63\u786e\u7684\u6e38\u620f\u76ee\u5f55\u3002");
+        }
+
+        if (scale < 0.1m || scale > 8.0m)
+        {
+            throw new ArgumentOutOfRangeException("scale", "\u8df3\u5b57\u7f29\u653e\u6bd4\u4f8b\u5fc5\u987b\u5728 0.1 \u5230 8.0 \u4e4b\u95f4\u3002");
+        }
+
+        string optConfigPath = GetOptConfigPath();
+        if (String.IsNullOrEmpty(optConfigPath) || !File.Exists(optConfigPath))
+        {
+            throw new FileNotFoundException("\u627e\u4e0d\u5230 optconfig \u914d\u7f6e\u6587\u4ef6", optConfigPath);
+        }
+
+        string backup = BackupConfig(optConfigPath);
+        string json = File.ReadAllText(optConfigPath, Encoding.UTF8);
+        string value = scale.ToString("0.0", CultureInfo.InvariantCulture);
+        string updated;
+        Regex fieldRegex = new Regex(@"""tiaozi_size""\s*:\s*-?\d+(?:\.\d+)?");
+        if (fieldRegex.IsMatch(json))
+        {
+            updated = fieldRegex.Replace(json, @"""tiaozi_size"": " + value, 1);
+        }
+        else
+        {
+            int insertAt = json.LastIndexOf('}');
+            if (insertAt < 0)
+            {
+                throw new InvalidOperationException("optconfig \u4e0d\u50cf\u6709\u6548 JSON\uff0c\u672a\u627e\u5230\u7ed3\u675f\u82b1\u62ec\u53f7\u3002");
+            }
+
+            string before = json.Substring(0, insertAt).TrimEnd();
+            string after = json.Substring(insertAt);
+            string separator = before.EndsWith("{", StringComparison.Ordinal) ? "" : ",";
+            updated = before + separator + Environment.NewLine + @"  ""tiaozi_size"": " + value + Environment.NewLine + after;
+        }
+
+        WriteTextNoBom(optConfigPath, updated);
+        WriteLog("SetTiaoziScale scale=" + value + " path=" + optConfigPath);
+        return "\u5df2\u8bbe\u7f6e\u8df3\u5b57\u7f29\u653e\u6bd4\u4f8b\uff1a" + value + Environment.NewLine +
+               "\u914d\u7f6e\u6587\u4ef6\uff1a" + optConfigPath + Environment.NewLine +
+               "\u5907\u4efd\u6587\u4ef6\uff1a" + backup + Environment.NewLine +
+               "\u8bf7\u91cd\u542f\u6e38\u620f\u751f\u6548\u3002";
     }
 
     private static bool IsGameRunning()
@@ -1034,6 +1140,7 @@ internal static class LifeAfterPresetLauncher
         private readonly TextBox statusBox = new TextBox();
         private readonly Label pathLabel = new Label();
         private readonly Label descriptionLabel = new Label();
+        private readonly CheckBox performanceModeCheckBox = new CheckBox();
         private readonly CheckBox advancedCheckBox = new CheckBox();
         private readonly ComboBox mainPresetBox = new ComboBox();
         private readonly ComboBox idlePresetBox = new ComboBox();
@@ -1056,6 +1163,9 @@ internal static class LifeAfterPresetLauncher
         private Button cleanButton;
         private Button openBackupButton;
         private Button openLogButton;
+        private Label tiaoziLabel;
+        private NumericUpDown tiaoziScaleBox;
+        private Button tiaoziApplyButton;
 
         public LauncherForm()
         {
@@ -1067,6 +1177,8 @@ internal static class LifeAfterPresetLauncher
             MaximizeBox = false;
             BackColor = WindowBackColor;
             DoubleBuffered = true;
+            Icon icon = LoadWindowIcon();
+            if (icon != null) Icon = icon;
 
             CoverPanel coverPanel = new CoverPanel(ProjectUrl)
             {
@@ -1152,6 +1264,14 @@ internal static class LifeAfterPresetLauncher
             };
             currentButton.Click += delegate { statusBox.Text = "\u5f53\u524d\u914d\u7f6e\uff1a" + ReadCurrentConfigSummary(); };
             Controls.Add(currentButton);
+
+            performanceModeCheckBox.Text = "\u6027\u80fd\u4f18\u5148";
+            performanceModeCheckBox.Left = 640;
+            performanceModeCheckBox.Top = 95;
+            performanceModeCheckBox.Width = 90;
+            performanceModeCheckBox.Checked = true;
+            performanceModeCheckBox.CheckedChanged += delegate { RefreshPathLabel(); };
+            Controls.Add(performanceModeCheckBox);
 
             restoreButton = new Button
             {
@@ -1249,6 +1369,39 @@ internal static class LifeAfterPresetLauncher
                 }
             };
             Controls.Add(openLogButton);
+
+            tiaoziLabel = new Label
+            {
+                Text = "\u8df3\u5b57",
+                AutoSize = true,
+                Left = 310,
+                Top = 194
+            };
+            Controls.Add(tiaoziLabel);
+
+            tiaoziScaleBox = new NumericUpDown
+            {
+                Minimum = 0.1m,
+                Maximum = 8.0m,
+                DecimalPlaces = 1,
+                Increment = 0.1m,
+                Value = 1.5m,
+                Left = 355,
+                Top = 188,
+                Width = 70
+            };
+            Controls.Add(tiaoziScaleBox);
+
+            tiaoziApplyButton = new Button
+            {
+                Text = "\u4fee\u6539\u8df3\u5b57",
+                Left = 438,
+                Top = 188,
+                Width = 110,
+                Height = 30
+            };
+            tiaoziApplyButton.Click += delegate { ApplyTiaoziScaleFromUi(); };
+            Controls.Add(tiaoziApplyButton);
 
             advancedCheckBox.Text = "\u663e\u793a\u9ad8\u7ea7\u529f\u80fd";
             advancedCheckBox.Left = 486;
@@ -1569,6 +1722,9 @@ internal static class LifeAfterPresetLauncher
             cleanButton.Visible = visible;
             openBackupButton.Visible = visible;
             openLogButton.Visible = visible;
+            tiaoziLabel.Visible = visible;
+            tiaoziScaleBox.Visible = visible;
+            tiaoziApplyButton.Visible = visible;
             ApplyDynamicLayout(visible);
             Invalidate();
         }
@@ -1601,13 +1757,48 @@ internal static class LifeAfterPresetLauncher
             githubLabel.Top = versionTop + 20;
         }
 
+        private static Icon LoadWindowIcon()
+        {
+            string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "app.ico");
+            if (!File.Exists(iconPath)) return null;
+
+            try
+            {
+                return new Icon(iconPath);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private void RefreshTiaoziScaleValue()
+        {
+            try
+            {
+                decimal scale = ReadTiaoziScale();
+                if (scale < tiaoziScaleBox.Minimum) scale = tiaoziScaleBox.Minimum;
+                if (scale > tiaoziScaleBox.Maximum) scale = tiaoziScaleBox.Maximum;
+                tiaoziScaleBox.Value = scale;
+            }
+            catch
+            {
+            }
+        }
+
         private void RefreshPathLabel()
         {
             if (IsValidGameRoot(gameRoot))
             {
+                RefreshTiaoziScaleValue();
                 pathLabel.Text = "\u5df2\u68c0\u6d4b\u5230\u6e38\u620f\u76ee\u5f55\uff1a" + gameRoot;
                 CleanAutoBackupsQuietly();
-                statusBox.Text = "\u5c31\u7eea\u3002\u5f53\u524d\u914d\u7f6e\uff1a" + ReadCurrentConfigSummary();
+                string launchMode = GetLaunchModeName(performanceModeCheckBox.Checked);
+                string launchFile = performanceModeCheckBox.Checked ? performanceGameExe : gameExe;
+                string launchState = File.Exists(launchFile) ? launchFile : "\u672a\u627e\u5230\uff1a" + launchFile;
+                statusBox.Text = "\u5c31\u7eea\u3002\u542f\u52a8\u6a21\u5f0f\uff1a" + launchMode + Environment.NewLine +
+                                 "\u542f\u52a8\u6587\u4ef6\uff1a" + launchState + Environment.NewLine +
+                                 "\u5f53\u524d\u914d\u7f6e\uff1a" + ReadCurrentConfigSummary();
             }
             else
             {
@@ -1654,7 +1845,31 @@ internal static class LifeAfterPresetLauncher
                     if (result != DialogResult.Yes) return;
                 }
 
-                statusBox.Text = ApplyPreset((string)presetBox.SelectedItem, launch);
+                statusBox.Text = ApplyPreset((string)presetBox.SelectedItem, launch, performanceModeCheckBox.Checked);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "\u9519\u8bef", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void ApplyTiaoziScaleFromUi()
+        {
+            try
+            {
+                decimal scale = tiaoziScaleBox.Value;
+                if (scale < 0.5m || scale > 1.8m)
+                {
+                    DialogResult result = MessageBox.Show(
+                        this,
+                        "\u5f53\u524d\u8df3\u5b57\u7f29\u653e\u6bd4\u4f8b\u4e3a " + scale.ToString("0.0", CultureInfo.InvariantCulture) + "\uff0c\u53ef\u80fd\u4f1a\u5f71\u54cd\u6e38\u620f\u4f53\u9a8c\u3002\u5efa\u8bae\u8303\u56f4\u662f 0.5 \u5230 1.8\u3002\u662f\u5426\u7ee7\u7eed\uff1f",
+                        "\u8df3\u5b57\u5927\u5c0f",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning);
+                    if (result != DialogResult.Yes) return;
+                }
+
+                statusBox.Text = SetTiaoziScale(scale);
             }
             catch (Exception ex)
             {
@@ -1716,7 +1931,8 @@ internal static class LifeAfterPresetLauncher
 
                 statusBox.Text = ApplyAndLaunchSequence(
                     presets,
-                    autoMode ? (Func<string, string, bool>)ConfirmNextMultiLaunchStepAutomatically : ConfirmNextMultiLaunchStep);
+                    autoMode ? (Func<string, string, bool>)ConfirmNextMultiLaunchStepAutomatically : ConfirmNextMultiLaunchStep,
+                    performanceModeCheckBox.Checked);
                 statusBox.Text += Environment.NewLine + "\u591a\u5f00\u5b8c\u6210\uff0c\u672a\u81ea\u52a8\u56de\u5199\u4e3b\u529b\u6863\uff0c\u907f\u514d\u5f71\u54cd\u540e\u7eed\u7a97\u53e3\u8bfb\u53d6\u914d\u7f6e\u3002";
             }
             catch (Exception ex)

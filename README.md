@@ -42,7 +42,7 @@ GitHub 地址：https://github.com/chincika/lifeafter-graphics-launcher
 ```powershell
 $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe' }
-& $csc /nologo /target:winexe /platform:anycpu /out:'明日之后画质启动器.exe' /reference:System.Windows.Forms.dll /reference:System.Drawing.dll LifeAfterPresetLauncher.cs
+& $csc /nologo /target:winexe /platform:anycpu /out:'明日之后画质启动器.exe' /win32icon:'assets\app.ico' /resource:'assets\cover.png,cover.png' /reference:System.Windows.Forms.dll /reference:System.Drawing.dll LifeAfterPresetLauncher.cs
 ```
 
 ## 版本
