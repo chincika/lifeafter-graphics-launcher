@@ -44,17 +44,17 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.5.1";
+    private const string AppVersion = "v1.5.3";
     private const string ProjectUrl = "https://github.com/chincika/lifeafter-graphics-launcher";
 
     private const string Pc540p =
-@"{""resolution"": [960, 540], ""ignore_hint"": true, ""half_infected_keymap"": {""HANDBRAKE"": [0, 0], ""DRONE_CAST_SKILL"": [88, 0], ""SPORE_SKILL"": [74, 0], ""TOGGLE_WEAPONS"": [90, 0], ""DRONE_CONTROL_SKILL_1"": [0, 0], ""AIR_UP"": [0, 0], ""WHISTLE"": [0, 0], ""WEAPON_SKILL"": [81, 0], ""OPEN_FASHION"": [81, 1], ""ARTIFACT_STUNT"": [72, 0], ""CHANGE_POS"": [0, 0], ""AIR_DOWN"": [0, 0], ""SPORE_USE"": [16, 0], ""FAST_COLD_WEAPON"": [71, 0], ""TOGGLE_MEDICINE"": [66, 0], ""MOVE_RUN"": [87, 1], ""SWITCH_WEAPON"": [69, 0], ""PLAYER_SKILL7"": [-1, 0], ""AUTO_MOVE"": [0, 0], ""NITROGEN"": [0, 0], ""SWITCH_THROWABLE"": [188, 0]}, ""hide_tag"": false, ""pc_tutorial_showed"": true, ""full_screen"": false, ""hint_occurred"": 4, ""hint_close_PanelBulletBox"": true}";
+@"{""resolution"": [960, 540], ""ignore_hint"": true, ""half_infected_keymap"": {""HANDBRAKE"": [0, 0], ""DRONE_CAST_SKILL"": [88, 0], ""SPORE_SKILL"": [74, 0], ""TOGGLE_WEAPONS"": [90, 0], ""DRONE_CONTROL_SKILL_1"": [0, 0], ""AIR_UP"": [0, 0], ""WHISTLE"": [0, 0], ""WEAPON_SKILL"": [81, 0], ""OPEN_FASHION"": [81, 1], ""ARTIFACT_STUNT"": [72, 0], ""CHANGE_POS"": [0, 0], ""AIR_DOWN"": [0, 0], ""SPORE_USE"": [16, 0], ""FAST_COLD_WEAPON"": [71, 0], ""TOGGLE_MEDICINE"": [66, 0], ""MOVE_RUN"": [87, 1], ""SWITCH_WEAPON"": [69, 0], ""PLAYER_SKILL7"": [-1, 0], ""AUTO_MOVE"": [0, 0], ""NITROGEN"": [0, 0], ""SWITCH_THROWABLE"": [188, 0]}, ""hide_tag"": false, ""pc_tutorial_showed"": true, ""full_screen"": false, ""hint_occurred"": 4, ""hint_close_PanelBulletBox"": true, ""dpi_resize_policy"": 0}";
 
     private const string Quality540p =
-@"{""jijian_engine"": 1, ""render_2020"": 2, ""player_num"": 0.9, ""enemy_limit_num"": 35, ""friend_limit_num"": 20, ""hidden_tatic_sfx"": 0, ""hidden_flamethrower_sfx"": 0, ""hidden_diffuser_sfx"": 0, ""bloom_enhance"": 1, ""render"": 0, ""last_quality_level"": 4, ""light"": 0, ""shadow"": 0, ""plant"": 0, ""frame"": 0, ""frame_prediction"": 0, ""dynamic_shadow"": false, ""preset_mode"": -1, ""shadow_distance_scale"": 0.0, ""transparent_shadow"": false, ""lighting_rendering"": 1, ""quality"": -1, ""contrast_enhancement"": 1, ""color_grading"": 2, ""home_render_budget"": 1, ""scene_sfx_performance"": 2, ""main_player_sfx_performance"": 1, ""other_player_sfx_performance"": 2, ""fsr_postprocess"": 0, ""hidden_specific_shrub"": 0, ""dynamic_hide_bobj"": false, ""same_appear_hint"": 0, ""hide_building"": 0, ""enable_low_fps_mode"": 1, ""plant_distance_scale"": 0.0, ""volumetric_cloud"": 3, ""ambient_occlusion"": 0, ""yingguang_sen"": 1.0, ""illum_auto_switch"": 0, ""blurred_distant_view"": 0, ""surface_reflection"": 0, ""z_far"": 1.0, ""anisotropic_filter"": 2, ""global_illumination"": 1, ""self_home_bobj_show_range"": 100, ""other_home_bobj_show_range"": 30, ""anti_alias_pc"": 1, ""dynamic_pvp_rule"": 1, ""long_shadow"": 0, ""shadow_distance"": 0, ""ocean_depth"": 0, ""monster_quality_upgrade_hit_sfx"": 0}";
+@"{""jijian_engine"": 1, ""render_2020"": 2, ""player_num"": 0.9, ""enemy_limit_num"": 35, ""friend_limit_num"": 20, ""hidden_tatic_sfx"": 0, ""hidden_flamethrower_sfx"": 0, ""hidden_diffuser_sfx"": 0, ""bloom_enhance"": 1, ""render"": 0, ""last_quality_level"": 4, ""light"": 0, ""shadow"": 0, ""plant"": 0, ""frame"": 0, ""frame_prediction"": 0, ""dynamic_shadow"": false, ""preset_mode"": -1, ""shadow_distance_scale"": 0.0, ""transparent_shadow"": false, ""lighting_rendering"": 1, ""quality"": -1, ""contrast_enhancement"": 1, ""color_grading"": 2, ""home_render_budget"": 1, ""scene_sfx_performance"": 2, ""main_player_sfx_performance"": 1, ""other_player_sfx_performance"": 2, ""fsr_postprocess"": 0, ""hidden_specific_shrub"": 0, ""dynamic_hide_bobj"": false, ""same_appear_hint"": 0, ""hide_building"": 0, ""enable_low_fps_mode"": 1, ""plant_distance_scale"": 0.0, ""volumetric_cloud"": 3, ""ambient_occlusion"": 0, ""yingguang_sen"": 1.0, ""illum_auto_switch"": 0, ""blurred_distant_view"": 0, ""surface_reflection"": 0, ""z_far"": 1.0, ""anisotropic_filter"": 2, ""global_illumination"": 1, ""self_home_bobj_show_range"": 100, ""other_home_bobj_show_range"": 30, ""anti_alias_pc"": 1, ""dynamic_pvp_rule"": 1, ""long_shadow"": 0, ""shadow_distance"": 0, ""ocean_depth"": 0, ""monster_quality_upgrade_hit_sfx"": 0, ""player_super_low"": 0}";
 
     private const string Quality2K120 =
-@"{""jijian_engine"": 1, ""render_2020"": 2, ""player_num"": 0.9, ""enemy_limit_num"": 35, ""friend_limit_num"": 20, ""hidden_tatic_sfx"": 0, ""hidden_flamethrower_sfx"": 0, ""hidden_diffuser_sfx"": 0, ""bloom_enhance"": 1, ""render"": 4, ""last_quality_level"": 4, ""light"": 1, ""shadow"": 1, ""plant"": 1, ""frame"": 4, ""frame_prediction"": 1, ""dynamic_shadow"": false, ""preset_mode"": -1, ""shadow_distance_scale"": 0.0, ""transparent_shadow"": true, ""lighting_rendering"": 1, ""quality"": -1, ""contrast_enhancement"": 1, ""color_grading"": 2, ""home_render_budget"": 1, ""scene_sfx_performance"": 2, ""main_player_sfx_performance"": 1, ""other_player_sfx_performance"": 2, ""fsr_postprocess"": 0, ""hidden_specific_shrub"": 0, ""dynamic_hide_bobj"": false, ""same_appear_hint"": 0, ""hide_building"": 0, ""enable_low_fps_mode"": 1, ""plant_distance_scale"": 0.0, ""volumetric_cloud"": 3, ""ambient_occlusion"": 0, ""yingguang_sen"": 1.0, ""illum_auto_switch"": 0, ""blurred_distant_view"": 0, ""surface_reflection"": 0, ""z_far"": 1.0, ""anisotropic_filter"": 2, ""global_illumination"": 1, ""self_home_bobj_show_range"": 100, ""other_home_bobj_show_range"": 30, ""anti_alias_pc"": 1, ""dynamic_pvp_rule"": 1, ""long_shadow"": 0, ""shadow_distance"": 0, ""ocean_depth"": 0, ""monster_quality_upgrade_hit_sfx"": 0}";
+@"{""jijian_engine"": 1, ""render_2020"": 2, ""player_num"": 0.9, ""enemy_limit_num"": 35, ""friend_limit_num"": 35, ""hidden_tatic_sfx"": 0, ""hidden_flamethrower_sfx"": 0, ""hidden_diffuser_sfx"": 0, ""bloom_enhance"": 1, ""render"": 4, ""last_quality_level"": 4, ""light"": 1, ""shadow"": 1, ""plant"": 1, ""frame"": 4, ""frame_prediction"": 1, ""dynamic_shadow"": false, ""preset_mode"": -1, ""shadow_distance_scale"": 0.0, ""transparent_shadow"": true, ""lighting_rendering"": 1, ""quality"": -1, ""contrast_enhancement"": 1, ""color_grading"": 2, ""home_render_budget"": 1, ""scene_sfx_performance"": 0, ""main_player_sfx_performance"": 0, ""other_player_sfx_performance"": 0, ""fsr_postprocess"": 0, ""hidden_specific_shrub"": 0, ""dynamic_hide_bobj"": false, ""same_appear_hint"": 0, ""hide_building"": 0, ""enable_low_fps_mode"": 1, ""plant_distance_scale"": 0.0, ""volumetric_cloud"": 3, ""ambient_occlusion"": 0, ""yingguang_sen"": 1.0, ""illum_auto_switch"": 0, ""blurred_distant_view"": 0, ""surface_reflection"": 0, ""z_far"": 1.0, ""anisotropic_filter"": 2, ""global_illumination"": 1, ""self_home_bobj_show_range"": 100, ""other_home_bobj_show_range"": 30, ""anti_alias_pc"": 1, ""dynamic_pvp_rule"": 1, ""long_shadow"": 0, ""shadow_distance"": 0, ""ocean_depth"": 0, ""monster_quality_upgrade_hit_sfx"": 0, ""player_super_low"": 0}";
 
     [STAThread]
     private static void Main(string[] args)
@@ -243,6 +243,8 @@ internal static class LifeAfterPresetLauncher
                 return new PresetData(ReplaceResolution(Pc540p, 1920, 1080), Quality2K120);
             case "1080p 60":
                 return new PresetData(ReplaceResolution(Pc540p, 1920, 1080), SetRawNumber(Quality2K120, "frame", 2));
+            case "900p 120":
+                return new PresetData(ReplaceResolution(Pc540p, 1600, 900), Quality2K120);
             case "900p 60":
                 return new PresetData(ReplaceResolution(Pc540p, 1600, 900), SetRawNumber(Quality540p, "frame", 2));
             case "720p 60":
@@ -334,6 +336,7 @@ internal static class LifeAfterPresetLauncher
             case "1080p 60":
                 return new Size(1920, 1080);
             case "900p 60":
+            case "900p 120":
                 return new Size(1600, 900);
             case "720p 60":
                 return new Size(1280, 720);
@@ -385,6 +388,8 @@ internal static class LifeAfterPresetLauncher
                 return "1920x1080 / frame=4 / \u9ad8\u753b\u8d28\uff0c\u6bd4 2K \u66f4\u7701\u8d44\u6e90";
             case "1080p 60":
                 return "1920x1080 / frame=2 / \u9ad8\u753b\u8d28 60 \u6863";
+            case "900p 120":
+                return "1600x900 / frame=4 / \u9ad8\u753b\u8d28 120 \u6863\uff0c\u4e2d\u5206\u8fa8\u7387\u9ad8\u5e27";
             case "900p 60":
                 return "1600x900 / frame=2 / \u4e2d\u95f4\u6863\uff0c\u9002\u5408\u591a\u5f00";
             case "720p 60":
@@ -628,6 +633,7 @@ internal static class LifeAfterPresetLauncher
         if (resolution == "2560x1440" && frame == "4" && render == "4") return "\u5f53\u524d\u6863\u4f4d\uff1a2K 120";
         if (resolution == "1920x1080" && frame == "4" && render == "4") return "\u5f53\u524d\u6863\u4f4d\uff1a1080p 120";
         if (resolution == "1920x1080" && frame == "2" && render == "4") return "\u5f53\u524d\u6863\u4f4d\uff1a1080p 60";
+        if (resolution == "1600x900" && frame == "4" && render == "4") return "\u5f53\u524d\u6863\u4f4d\uff1a900p 120";
         if (resolution == "1600x900" && frame == "2" && render == "0") return "\u5f53\u524d\u6863\u4f4d\uff1a900p 60";
         if (resolution == "1280x720" && frame == "2" && render == "0") return "\u5f53\u524d\u6863\u4f4d\uff1a720p 60";
         if (resolution == "960x540" && frame == "2" && render == "0") return "\u5f53\u524d\u6863\u4f4d\uff1a540p 60";
@@ -1099,7 +1105,7 @@ internal static class LifeAfterPresetLauncher
             Controls.Add(browseButton);
 
             presetBox.DropDownStyle = ComboBoxStyle.DropDownList;
-            presetBox.Items.AddRange(new object[] { "2K 120", "1080p 120", "1080p 60", "900p 60", "720p 60", "540p 60", "540p 25" });
+            presetBox.Items.AddRange(new object[] { "2K 120", "1080p 120", "1080p 60", "900p 120", "900p 60", "720p 60", "540p 60", "540p 25" });
             presetBox.SelectedItem = "2K 120";
             presetBox.Left = 16;
             presetBox.Top = 92;
@@ -1270,7 +1276,7 @@ internal static class LifeAfterPresetLauncher
             Controls.Add(mainLabel);
 
             mainPresetBox.DropDownStyle = ComboBoxStyle.DropDownList;
-            mainPresetBox.Items.AddRange(new object[] { "2K 120", "1080p 120", "1080p 60" });
+            mainPresetBox.Items.AddRange(new object[] { "2K 120", "1080p 120", "1080p 60", "900p 120" });
             mainPresetBox.SelectedItem = "2K 120";
             mainPresetBox.Left = 135;
             mainPresetBox.Top = 236;
