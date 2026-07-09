@@ -46,7 +46,7 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.5.3";
+    private const string AppVersion = "v1.5.4";
     private const string ProjectUrl = "https://github.com/chincika/lifeafter-graphics-launcher";
 
     private const string Pc540p =
