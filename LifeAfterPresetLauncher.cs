@@ -28,6 +28,22 @@ internal static class LifeAfterPresetLauncher
     [DllImport("user32.dll")]
     private static extern bool GetClientRect(IntPtr hWnd, out NativeRect rect);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowTextLength(IntPtr hWnd);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(
+        IntPtr hwnd,
+        int attribute,
+        ref int attributeValue,
+        int attributeSize);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref DwmMargins margins);
+
     private struct NativeRect
     {
         public int Left;
@@ -35,6 +51,16 @@ internal static class LifeAfterPresetLauncher
         public int Right;
         public int Bottom;
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DwmMargins
+    {
+        public int Left;
+        public int Right;
+        public int Top;
+        public int Bottom;
+    }
+
 
     private static string gameRoot;
     private static string configDir;
@@ -46,7 +72,7 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.5.4";
+    private const string AppVersion = "v1.7.0";
     private const string ProjectUrl = "https://github.com/chincika/lifeafter-graphics-launcher";
 
     private const string Pc540p =
@@ -61,6 +87,7 @@ internal static class LifeAfterPresetLauncher
     [STAThread]
     private static void Main(string[] args)
     {
+        try { Console.OutputEncoding = new UTF8Encoding(false); } catch { }
         SetGameRoot(FindGameRoot());
 
         if (args.Length >= 2 && args[0].Equals("--apply", StringComparison.OrdinalIgnoreCase))
@@ -79,6 +106,53 @@ internal static class LifeAfterPresetLauncher
         if (args.Length >= 1 && args[0].Equals("--restore-factory", StringComparison.OrdinalIgnoreCase))
         {
             Console.WriteLine(RestoreFactoryDefault());
+            return;
+        }
+
+        if (args.Length >= 1 && args[0].Equals("--instances-json", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine(CaptureInstancesJson());
+            return;
+        }
+
+        if (args.Length >= 1 && args[0].Equals("--read-summary", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine(ReadCurrentConfigSummary());
+            return;
+        }
+
+        if (args.Length >= 1 && args[0].Equals("--get-root", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine(IsValidGameRoot(gameRoot) ? gameRoot : "");
+            return;
+        }
+
+        if (args.Length >= 2 && args[0].Equals("--set-root", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!IsValidGameRoot(args[1]))
+            {
+                throw new InvalidOperationException("\u6240\u9009\u76ee\u5f55\u4e0d\u662f\u6709\u6548\u7684 LifeAfter \u5b89\u88c5\u76ee\u5f55\u3002");
+            }
+            SetGameRoot(args[1]);
+            SaveGameRoot(args[1]);
+            Console.WriteLine(args[1]);
+            return;
+        }
+
+        if (args.Length >= 1 && args[0].Equals("--restore-latest", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine(RestoreLatestBackup());
+            return;
+        }
+
+        if (args.Length >= 2 && args[0].Equals("--set-tiaozi", StringComparison.OrdinalIgnoreCase))
+        {
+            decimal scale;
+            if (!Decimal.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out scale))
+            {
+                throw new InvalidOperationException("\u8df3\u5b57\u7f29\u653e\u6bd4\u4f8b\u683c\u5f0f\u4e0d\u6b63\u786e\u3002");
+            }
+            Console.WriteLine(SetTiaoziScale(scale));
             return;
         }
 
@@ -983,6 +1057,243 @@ internal static class LifeAfterPresetLauncher
         public string Quality { get; private set; }
     }
 
+    // UI-independent data contract. A future LAN monitor can serialize these snapshots
+    // without coupling the network layer to WinForms controls.
+    private sealed class InstanceSnapshot
+    {
+        public int ProcessId;
+        public string DisplayName;
+        public string WindowTitle;
+        public Size ClientSize;
+        public double CpuPercent;
+        public double TotalProcessorMilliseconds;
+        public long WorkingSetBytes;
+        public TimeSpan RunningTime;
+    }
+
+    private sealed class ProcessCpuSample
+    {
+        public TimeSpan TotalProcessorTime;
+        public DateTime TimestampUtc;
+    }
+
+    private sealed class GameInstanceMonitor
+    {
+        private readonly Dictionary<int, ProcessCpuSample> cpuSamples =
+            new Dictionary<int, ProcessCpuSample>();
+
+        public List<InstanceSnapshot> Capture()
+        {
+            DateTime nowUtc = DateTime.UtcNow;
+            Dictionary<int, IntPtr> windows = FindVisibleGameWindowsByProcess();
+            List<InstanceSnapshot> result = new List<InstanceSnapshot>();
+            HashSet<int> activeProcessIds = new HashSet<int>();
+
+            foreach (Process process in Process.GetProcesses())
+            {
+                try
+                {
+                    if (!IsGameProcessName(process.ProcessName)) continue;
+
+                    string executable = null;
+                    try { executable = process.MainModule.FileName; } catch { }
+                    if (!String.IsNullOrEmpty(executable) &&
+                        executable.IndexOf(@"\Documents\bin\", StringComparison.OrdinalIgnoreCase) < 0 &&
+                        !String.IsNullOrEmpty(gameExe) &&
+                        !executable.Equals(gameExe, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    IntPtr window;
+                    windows.TryGetValue(process.Id, out window);
+                    if (window == IntPtr.Zero && process.MainWindowHandle != IntPtr.Zero)
+                    {
+                        window = process.MainWindowHandle;
+                    }
+
+                    Size clientSize = Size.Empty;
+                    if (window != IntPtr.Zero) TryGetClientSize(window, out clientSize);
+                    string title = ReadWindowTitle(window);
+                    if (String.IsNullOrWhiteSpace(title)) title = process.MainWindowTitle;
+
+                    double cpu = CalculateCpuPercent(process, nowUtc);
+                    DateTime startTime = DateTime.Now;
+                    try { startTime = process.StartTime; } catch { }
+
+                    result.Add(new InstanceSnapshot
+                    {
+                        ProcessId = process.Id,
+                        DisplayName = ExtractGameId(title),
+                        WindowTitle = title,
+                        ClientSize = clientSize,
+                        CpuPercent = cpu,
+                        TotalProcessorMilliseconds = process.TotalProcessorTime.TotalMilliseconds,
+                        WorkingSetBytes = process.WorkingSet64,
+                        RunningTime = DateTime.Now - startTime
+                    });
+                    activeProcessIds.Add(process.Id);
+                }
+                catch
+                {
+                }
+                finally
+                {
+                    process.Dispose();
+                }
+            }
+
+            List<int> staleIds = new List<int>();
+            foreach (int processId in cpuSamples.Keys)
+            {
+                if (!activeProcessIds.Contains(processId)) staleIds.Add(processId);
+            }
+            foreach (int processId in staleIds) cpuSamples.Remove(processId);
+
+            result.Sort(delegate (InstanceSnapshot left, InstanceSnapshot right)
+            {
+                int leftArea = left.ClientSize.Width * left.ClientSize.Height;
+                int rightArea = right.ClientSize.Width * right.ClientSize.Height;
+                int byArea = rightArea.CompareTo(leftArea);
+                return byArea != 0 ? byArea : left.ProcessId.CompareTo(right.ProcessId);
+            });
+
+            for (int index = 0; index < result.Count; index++)
+            {
+                if (String.IsNullOrWhiteSpace(result[index].DisplayName))
+                {
+                    result[index].DisplayName = index == 0 ? "\u4e3b\u53f7" : "\u5c0f\u53f7 " + index;
+                }
+            }
+
+            if (result.Count > 4) result.RemoveRange(4, result.Count - 4);
+            return result;
+        }
+
+        private double CalculateCpuPercent(Process process, DateTime nowUtc)
+        {
+            TimeSpan total = process.TotalProcessorTime;
+            ProcessCpuSample previous;
+            double percent = 0;
+            if (cpuSamples.TryGetValue(process.Id, out previous))
+            {
+                double elapsedMs = (nowUtc - previous.TimestampUtc).TotalMilliseconds;
+                double cpuMs = (total - previous.TotalProcessorTime).TotalMilliseconds;
+                if (elapsedMs > 0)
+                {
+                    percent = cpuMs / elapsedMs / Environment.ProcessorCount * 100.0;
+                    percent = Math.Max(0, Math.Min(100, percent));
+                }
+            }
+
+            cpuSamples[process.Id] = new ProcessCpuSample
+            {
+                TotalProcessorTime = total,
+                TimestampUtc = nowUtc
+            };
+            return percent;
+        }
+
+        private static Dictionary<int, IntPtr> FindVisibleGameWindowsByProcess()
+        {
+            Dictionary<int, IntPtr> windows = new Dictionary<int, IntPtr>();
+            EnumWindows(delegate (IntPtr hWnd, IntPtr lParam)
+            {
+                if (!IsVisibleGameWindow(hWnd)) return true;
+                uint processId;
+                GetWindowThreadProcessId(hWnd, out processId);
+                if (processId > 0 && !windows.ContainsKey((int)processId))
+                {
+                    windows[(int)processId] = hWnd;
+                }
+                return true;
+            }, IntPtr.Zero);
+            return windows;
+        }
+
+        private static string ReadWindowTitle(IntPtr window)
+        {
+            if (window == IntPtr.Zero) return "";
+            int length = GetWindowTextLength(window);
+            if (length <= 0) return "";
+            StringBuilder builder = new StringBuilder(length + 1);
+            GetWindowText(window, builder, builder.Capacity);
+            return builder.ToString().Trim();
+        }
+
+        private static string ExtractGameId(string windowTitle)
+        {
+            if (String.IsNullOrWhiteSpace(windowTitle)) return null;
+
+            Match id = Regex.Match(
+                windowTitle,
+                @"(?:\u6e38\u620f\s*ID|\u89d2\u8272\s*ID|UID|ID)\s*[:\uff1a#-]?\s*([A-Za-z0-9_\-\u4e00-\u9fff]{2,32})",
+                RegexOptions.IgnoreCase);
+            if (id.Success) return id.Groups[1].Value;
+
+            string cleaned = Regex.Replace(
+                windowTitle,
+                @"(?i)LifeAfter|\u660e\u65e5\u4e4b\u540e|[\[\]\(\)\-_|:：]+",
+                " ").Trim();
+            cleaned = Regex.Replace(cleaned, @"\s{2,}", " ");
+            if (cleaned.Length >= 2 && cleaned.Length <= 32) return cleaned;
+            return null;
+        }
+    }
+
+    private static string CaptureInstancesJson()
+    {
+        List<InstanceSnapshot> snapshots = new GameInstanceMonitor().Capture();
+        StringBuilder json = new StringBuilder();
+        json.Append("{\"capturedAt\":")
+            .Append((long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalMilliseconds)
+            .Append(",\"instances\":[");
+        for (int index = 0; index < snapshots.Count; index++)
+        {
+            if (index > 0) json.Append(',');
+            InstanceSnapshot item = snapshots[index];
+            json.Append("{\"pid\":").Append(item.ProcessId)
+                .Append(",\"name\":\"").Append(JsonEscape(item.DisplayName)).Append('"')
+                .Append(",\"title\":\"").Append(JsonEscape(item.WindowTitle)).Append('"')
+                .Append(",\"width\":").Append(item.ClientSize.Width)
+                .Append(",\"height\":").Append(item.ClientSize.Height)
+                .Append(",\"totalCpuMs\":").Append(item.TotalProcessorMilliseconds.ToString("0.###", CultureInfo.InvariantCulture))
+                .Append(",\"workingSetBytes\":").Append(item.WorkingSetBytes)
+                .Append(",\"runningSeconds\":").Append(Math.Max(0, (long)item.RunningTime.TotalSeconds))
+                .Append('}');
+        }
+        json.Append("]}");
+        return json.ToString();
+    }
+
+    private static string JsonEscape(string value)
+    {
+        if (String.IsNullOrEmpty(value)) return "";
+        StringBuilder escaped = new StringBuilder(value.Length + 8);
+        foreach (char character in value)
+        {
+            switch (character)
+            {
+                case '\\': escaped.Append(@"\\"); break;
+                case '"': escaped.Append("\\\""); break;
+                case '\r': escaped.Append(@"\r"); break;
+                case '\n': escaped.Append(@"\n"); break;
+                case '\t': escaped.Append(@"\t"); break;
+                default:
+                    if (character < 32)
+                    {
+                        escaped.Append("\\u").Append(((int)character).ToString("x4"));
+                    }
+                    else
+                    {
+                        escaped.Append(character);
+                    }
+                    break;
+            }
+        }
+        return escaped.ToString();
+    }
+
     private sealed class CoverPanel : Panel
     {
         private readonly Image coverImage;
@@ -1051,26 +1362,28 @@ internal static class LifeAfterPresetLauncher
 
             using (LinearGradientBrush shade = new LinearGradientBrush(
                 bounds,
-                Color.FromArgb(210, 7, 18, 30),
-                Color.FromArgb(60, 7, 18, 30),
+                Color.FromArgb(238, 5, 13, 19),
+                Color.FromArgb(86, 5, 13, 19),
                 LinearGradientMode.Horizontal))
             {
                 g.FillRectangle(shade, bounds);
             }
 
-            using (Pen border = new Pen(Color.FromArgb(70, 255, 255, 255)))
+            using (Pen border = new Pen(Color.FromArgb(70, 95, 224, 203)))
             {
                 g.DrawRectangle(border, 0, 0, bounds.Width - 1, bounds.Height - 1);
             }
 
-            using (Font titleFont = new Font("Microsoft YaHei UI", 18F, FontStyle.Bold))
+            using (Font titleFont = new Font("Microsoft YaHei UI", 20F, FontStyle.Bold))
             using (Font subtitleFont = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular))
+            using (Font tagFont = new Font("Microsoft YaHei UI", 8F, FontStyle.Bold))
             using (Brush titleBrush = new SolidBrush(Color.White))
-            using (Brush subtitleBrush = new SolidBrush(Color.FromArgb(220, 235, 242, 248)))
+            using (Brush subtitleBrush = new SolidBrush(Color.FromArgb(205, 220, 232, 234)))
+            using (Brush tagBrush = new SolidBrush(Color.FromArgb(255, 103, 232, 207)))
             {
-                g.DrawString("\u660e\u65e5\u4e4b\u540e\u753b\u8d28\u542f\u52a8\u5668", titleFont, titleBrush, 24, 20);
-                g.DrawString("\u516c\u76ca\u7248  /  \u591a\u5f00\u9884\u8bbe  /  \u5b89\u5168\u5907\u4efd", subtitleFont, subtitleBrush, 26, 56);
-                g.DrawString(projectUrl, subtitleFont, subtitleBrush, 26, 76);
+                g.DrawString("LIFEAFTER  //  \u753b\u8d28\u63a7\u5236\u53f0", tagFont, tagBrush, 26, 17);
+                g.DrawString("\u660e\u65e5\u4e4b\u540e\u753b\u8d28\u542f\u52a8\u5668", titleFont, titleBrush, 24, 37);
+                g.DrawString("\u4e00\u952e\u9884\u8bbe  \u00b7  \u7a33\u5b9a\u591a\u5f00  \u00b7  \u81ea\u52a8\u5907\u4efd", subtitleFont, subtitleBrush, 27, 76);
             }
         }
 
@@ -1123,18 +1436,293 @@ internal static class LifeAfterPresetLauncher
         }
     }
 
+    private sealed class ModernButton : Button
+    {
+        private bool hovering;
+        private bool pressing;
+
+        public ModernButton()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            FlatStyle = FlatStyle.Flat;
+            FlatAppearance.BorderSize = 0;
+            Cursor = Cursors.Hand;
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { hovering = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hovering = false; pressing = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseDown(MouseEventArgs e) { pressing = true; Invalidate(); base.OnMouseDown(e); }
+        protected override void OnMouseUp(MouseEventArgs e) { pressing = false; Invalidate(); base.OnMouseUp(e); }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            Color fill = pressing ? FlatAppearance.MouseDownBackColor :
+                         hovering ? FlatAppearance.MouseOverBackColor : BackColor;
+            Rectangle rect = new Rectangle(0, 0, Width - 1, Height - 1);
+            using (GraphicsPath path = RoundedRectangle(rect, 7))
+            using (SolidBrush brush = new SolidBrush(fill))
+            using (Pen border = new Pen(FlatAppearance.BorderColor))
+            {
+                e.Graphics.FillPath(brush, path);
+                e.Graphics.DrawPath(border, path);
+            }
+
+            TextRenderer.DrawText(
+                e.Graphics,
+                Text,
+                Font,
+                rect,
+                Enabled ? ForeColor : Color.FromArgb(110, ForeColor),
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        }
+
+        private static GraphicsPath RoundedRectangle(Rectangle rect, int radius)
+        {
+            int diameter = radius * 2;
+            GraphicsPath path = new GraphicsPath();
+            path.AddArc(rect.Left, rect.Top, diameter, diameter, 180, 90);
+            path.AddArc(rect.Right - diameter, rect.Top, diameter, diameter, 270, 90);
+            path.AddArc(rect.Right - diameter, rect.Bottom - diameter, diameter, diameter, 0, 90);
+            path.AddArc(rect.Left, rect.Bottom - diameter, diameter, diameter, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+    }
+
+    private sealed class InstanceMonitorPanel : Panel
+    {
+        private readonly List<InstanceSnapshot> snapshots = new List<InstanceSnapshot>();
+        private static readonly Color Card = Color.FromArgb(150, 28, 39, 48);
+        private static readonly Color Border = Color.FromArgb(65, 255, 255, 255);
+        private static readonly Color PrimaryText = Color.FromArgb(244, 248, 250);
+        private static readonly Color SecondaryText = Color.FromArgb(168, 181, 190);
+        private static readonly Color Accent = Color.FromArgb(69, 202, 219);
+        private static readonly Color Success = Color.FromArgb(74, 207, 139);
+
+        public InstanceMonitorPanel()
+        {
+            DoubleBuffered = true;
+            BackColor = Color.Transparent;
+            AccessibleName = "\u5b9e\u4f8b\u8fd0\u884c\u8be6\u60c5";
+            AccessibleRole = AccessibleRole.Grouping;
+            AccessibleDescription = "\u6682\u65e0\u8fd0\u884c\u5b9e\u4f8b";
+        }
+
+        public void UpdateSnapshots(List<InstanceSnapshot> current)
+        {
+            snapshots.Clear();
+            if (current != null) snapshots.AddRange(current);
+            StringBuilder accessibility = new StringBuilder();
+            accessibility.Append("\u8fd0\u884c\u4e2d ").Append(snapshots.Count).Append(" \u4e2a\u5b9e\u4f8b\u3002");
+            foreach (InstanceSnapshot snapshot in snapshots)
+            {
+                accessibility
+                    .Append(snapshot.DisplayName)
+                    .Append("\uff0cCPU ")
+                    .Append(snapshot.CpuPercent.ToString("0", CultureInfo.InvariantCulture))
+                    .Append("%\uff0c\u5185\u5b58 ")
+                    .Append((snapshot.WorkingSetBytes / 1073741824.0).ToString("0.0", CultureInfo.InvariantCulture))
+                    .Append(" GB\u3002");
+            }
+            AccessibleDescription = accessibility.ToString();
+            AccessibilityNotifyClients(AccessibleEvents.DescriptionChange, -1);
+            Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+            using (Font heading = UiFont(13F, FontStyle.Bold))
+            using (Font summary = UiFont(10F, FontStyle.Regular))
+            using (SolidBrush titleBrush = new SolidBrush(PrimaryText))
+            using (SolidBrush mutedBrush = new SolidBrush(SecondaryText))
+            {
+                g.DrawString("\u5b9e\u4f8b\u8fd0\u884c\u8be6\u60c5", heading, titleBrush, 20, 16);
+                Rectangle summaryRect = new Rectangle(16, 52, Width - 32, 48);
+                DrawGlassCard(g, summaryRect, 10);
+                using (SolidBrush dot = new SolidBrush(snapshots.Count > 0 ? Success : SecondaryText))
+                {
+                    g.FillEllipse(dot, summaryRect.Left + 18, summaryRect.Top + 19, 10, 10);
+                }
+                g.DrawString(
+                    snapshots.Count > 0 ? "\u8fd0\u884c\u4e2d  " + snapshots.Count : "\u6682\u65e0\u8fd0\u884c\u5b9e\u4f8b",
+                    summary,
+                    snapshots.Count > 0 ? titleBrush : mutedBrush,
+                    summaryRect.Left + 38,
+                    summaryRect.Top + 14);
+            }
+
+            if (snapshots.Count == 0)
+            {
+                DrawEmptyState(g);
+                return;
+            }
+
+            int cardTop = 112;
+            int available = Height - cardTop - 18;
+            int cardHeight = Math.Min(102, Math.Max(80, (available - 10 * (snapshots.Count - 1)) / snapshots.Count));
+            for (int i = 0; i < snapshots.Count; i++)
+            {
+                DrawInstanceCard(g, snapshots[i], new Rectangle(16, cardTop + i * (cardHeight + 10), Width - 32, cardHeight));
+            }
+        }
+
+        private void DrawEmptyState(Graphics g)
+        {
+            Rectangle rect = new Rectangle(16, 114, Width - 32, 150);
+            DrawGlassCard(g, rect, 12);
+            using (Font iconFont = UiFont(25F, FontStyle.Regular))
+            using (Font body = UiFont(10F, FontStyle.Regular))
+            using (Font caption = UiFont(8.5F, FontStyle.Regular))
+            using (SolidBrush icon = new SolidBrush(Color.FromArgb(110, Accent)))
+            using (SolidBrush text = new SolidBrush(PrimaryText))
+            using (SolidBrush muted = new SolidBrush(SecondaryText))
+            {
+                string glyph = "\u25a3";
+                SizeF glyphSize = g.MeasureString(glyph, iconFont);
+                g.DrawString(glyph, iconFont, icon, (Width - glyphSize.Width) / 2, rect.Top + 24);
+                string line1 = "\u542f\u52a8\u6e38\u620f\u540e\u5c06\u81ea\u52a8\u663e\u793a";
+                SizeF line1Size = g.MeasureString(line1, body);
+                g.DrawString(line1, body, text, (Width - line1Size.Width) / 2, rect.Top + 76);
+                string line2 = "\u652f\u6301\u6700\u591a 4 \u4e2a\u7a97\u53e3\u5b9e\u65f6\u76d1\u63a7";
+                SizeF line2Size = g.MeasureString(line2, caption);
+                g.DrawString(line2, caption, muted, (Width - line2Size.Width) / 2, rect.Top + 104);
+            }
+        }
+
+        private static void DrawInstanceCard(Graphics g, InstanceSnapshot snapshot, Rectangle rect)
+        {
+            DrawGlassCard(g, rect, 11);
+            int left = rect.Left + 18;
+            int top = rect.Top + 13;
+            string resolution = snapshot.ClientSize.IsEmpty
+                ? "\u7b49\u5f85\u7a97\u53e3"
+                : snapshot.ClientSize.Width + " \u00d7 " + snapshot.ClientSize.Height;
+            string memory = (snapshot.WorkingSetBytes / 1073741824.0).ToString("0.0", CultureInfo.InvariantCulture) + " GB";
+            string running = FormatRunningTime(snapshot.RunningTime);
+
+            using (Font nameFont = UiFont(11F, FontStyle.Bold))
+            using (Font bodyFont = UiFont(8.5F, FontStyle.Regular))
+            using (Font valueFont = UiFont(9F, FontStyle.Bold))
+            using (SolidBrush primary = new SolidBrush(PrimaryText))
+            using (SolidBrush secondary = new SolidBrush(SecondaryText))
+            using (SolidBrush success = new SolidBrush(Success))
+            {
+                g.FillEllipse(success, left, top + 7, 8, 8);
+                string name = Ellipsize(snapshot.DisplayName, 18);
+                g.DrawString(name, nameFont, primary, left + 16, top);
+                g.DrawString("PID " + snapshot.ProcessId, bodyFont, secondary, rect.Right - 72, top + 2);
+
+                int detailTop = top + 32;
+                int columnWidth = (rect.Width - 36) / 4;
+                DrawMetric(g, resolution, "\u7a97\u53e3", left, detailTop, columnWidth, valueFont, bodyFont, primary, secondary);
+                DrawMetric(g, snapshot.CpuPercent.ToString("0", CultureInfo.InvariantCulture) + "%", "CPU", left + columnWidth, detailTop, columnWidth, valueFont, bodyFont, primary, secondary);
+                DrawMetric(g, memory, "\u5185\u5b58", left + columnWidth * 2, detailTop, columnWidth, valueFont, bodyFont, primary, secondary);
+                DrawMetric(g, running, "\u8fd0\u884c\u65f6\u957f", left + columnWidth * 3, detailTop, columnWidth, valueFont, bodyFont, primary, secondary);
+
+                int barY = rect.Bottom - 12;
+                DrawUsageBar(g, new Rectangle(left + columnWidth, barY, columnWidth - 18, 4), snapshot.CpuPercent / 100.0);
+                double memoryRatio = Math.Min(1, snapshot.WorkingSetBytes / (8.0 * 1073741824.0));
+                DrawUsageBar(g, new Rectangle(left + columnWidth * 2, barY, columnWidth - 18, 4), memoryRatio);
+            }
+        }
+
+        private static void DrawMetric(
+            Graphics g,
+            string value,
+            string label,
+            int x,
+            int y,
+            int width,
+            Font valueFont,
+            Font labelFont,
+            Brush primary,
+            Brush secondary)
+        {
+            g.DrawString(label, labelFont, secondary, x, y);
+            g.DrawString(Ellipsize(value, 16), valueFont, primary, new RectangleF(x, y + 18, width - 8, 22));
+        }
+
+        private static void DrawUsageBar(Graphics g, Rectangle rect, double ratio)
+        {
+            using (GraphicsPath backPath = RoundRect(rect, 2))
+            using (SolidBrush back = new SolidBrush(Color.FromArgb(65, 120, 137, 146)))
+            {
+                g.FillPath(back, backPath);
+            }
+            int filled = Math.Max(2, (int)(rect.Width * Math.Max(0, Math.Min(1, ratio))));
+            using (GraphicsPath fillPath = RoundRect(new Rectangle(rect.X, rect.Y, filled, rect.Height), 2))
+            using (SolidBrush fill = new SolidBrush(Accent))
+            {
+                g.FillPath(fill, fillPath);
+            }
+        }
+
+        private static string FormatRunningTime(TimeSpan time)
+        {
+            if (time < TimeSpan.Zero) time = TimeSpan.Zero;
+            int hours = (int)Math.Min(999, time.TotalHours);
+            return hours.ToString("00") + ":" + time.Minutes.ToString("00") + ":" + time.Seconds.ToString("00");
+        }
+
+        private static string Ellipsize(string text, int maxLength)
+        {
+            if (String.IsNullOrEmpty(text)) return "";
+            return text.Length <= maxLength ? text : text.Substring(0, maxLength - 1) + "\u2026";
+        }
+
+        private static void DrawGlassCard(Graphics g, Rectangle rect, int radius)
+        {
+            using (GraphicsPath path = RoundRect(rect, radius))
+            using (LinearGradientBrush fill = new LinearGradientBrush(
+                rect,
+                Color.FromArgb(165, 35, 48, 58),
+                Card,
+                LinearGradientMode.Vertical))
+            using (Pen border = new Pen(Border))
+            {
+                g.FillPath(fill, path);
+                g.DrawPath(border, path);
+            }
+        }
+
+        private static GraphicsPath RoundRect(Rectangle rect, int radius)
+        {
+            int diameter = radius * 2;
+            GraphicsPath path = new GraphicsPath();
+            path.AddArc(rect.Left, rect.Top, diameter, diameter, 180, 90);
+            path.AddArc(rect.Right - diameter, rect.Top, diameter, diameter, 270, 90);
+            path.AddArc(rect.Right - diameter, rect.Bottom - diameter, diameter, diameter, 0, 90);
+            path.AddArc(rect.Left, rect.Bottom - diameter, diameter, diameter, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        private static Font UiFont(float size, FontStyle style)
+        {
+            try { return new Font("Segoe UI Variable Text", size, style); }
+            catch { return new Font("Segoe UI", size, style); }
+        }
+    }
+
     private sealed class LauncherForm : Form
     {
         private const int HeaderOffset = 126;
-        private static readonly Color WindowBackColor = Color.FromArgb(7, 12, 17);
-        private static readonly Color PanelBackColor = Color.FromArgb(13, 24, 31);
-        private static readonly Color FieldBackColor = Color.FromArgb(9, 18, 25);
-        private static readonly Color PrimaryColor = Color.FromArgb(26, 149, 194);
-        private static readonly Color PrimaryHoverColor = Color.FromArgb(36, 183, 226);
-        private static readonly Color WarningColor = Color.FromArgb(214, 161, 78);
-        private static readonly Color CardBorderColor = Color.FromArgb(53, 112, 137);
-        private static readonly Color TextColor = Color.FromArgb(225, 235, 240);
-        private static readonly Color MutedTextColor = Color.FromArgb(137, 159, 170);
+        private static readonly Color WindowBackColor = Color.FromArgb(6, 11, 15);
+        private static readonly Color PanelBackColor = Color.FromArgb(13, 23, 28);
+        private static readonly Color FieldBackColor = Color.FromArgb(8, 17, 21);
+        private static readonly Color PrimaryColor = Color.FromArgb(35, 190, 164);
+        private static readonly Color PrimaryHoverColor = Color.FromArgb(53, 218, 190);
+        private static readonly Color WarningColor = Color.FromArgb(237, 183, 91);
+        private static readonly Color CardBorderColor = Color.FromArgb(37, 73, 78);
+        private static readonly Color TextColor = Color.FromArgb(232, 242, 241);
+        private static readonly Color MutedTextColor = Color.FromArgb(132, 154, 155);
 
         private readonly ComboBox presetBox = new ComboBox();
         private readonly TextBox statusBox = new TextBox();
@@ -1166,14 +1754,23 @@ internal static class LifeAfterPresetLauncher
         private Label tiaoziLabel;
         private NumericUpDown tiaoziScaleBox;
         private Button tiaoziApplyButton;
+        private readonly GameInstanceMonitor instanceMonitor = new GameInstanceMonitor();
+        private readonly InstanceMonitorPanel instanceMonitorPanel = new InstanceMonitorPanel();
+        private readonly System.Windows.Forms.Timer instanceMonitorTimer = new System.Windows.Forms.Timer();
+        private Button startNavButton;
+        private Button multiNavButton;
+        private Button toolsNavButton;
+        private bool toolsPageVisible;
 
         public LauncherForm()
         {
             Text = "\u660e\u65e5\u4e4b\u540e\u5b89\u5168\u753b\u8d28\u542f\u52a8\u5668";
             StartPosition = FormStartPosition.CenterScreen;
-            Size = new Size(740, 760);
-            Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
+            Size = new Size(1240, 820);
+            MinimumSize = new Size(1100, 760);
+            Font = CreateUiFont(9F, FontStyle.Regular);
+            AutoScaleMode = AutoScaleMode.Dpi;
+            FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             BackColor = WindowBackColor;
             DoubleBuffered = true;
@@ -1205,7 +1802,7 @@ internal static class LifeAfterPresetLauncher
             pathLabel.Height = 38;
             Controls.Add(pathLabel);
 
-            Button browseButton = new Button
+            Button browseButton = new ModernButton
             {
                 Text = "\u9009\u62e9\u6e38\u620f\u76ee\u5f55",
                 Left = 535,
@@ -1232,7 +1829,7 @@ internal static class LifeAfterPresetLauncher
             descriptionLabel.Height = 22;
             Controls.Add(descriptionLabel);
 
-            Button applyButton = new Button
+            Button applyButton = new ModernButton
             {
                 Text = "\u5e94\u7528",
                 Left = 222,
@@ -1243,7 +1840,7 @@ internal static class LifeAfterPresetLauncher
             applyButton.Click += delegate { Apply(false); };
             Controls.Add(applyButton);
 
-            Button launchButton = new Button
+            Button launchButton = new ModernButton
             {
                 Text = "\u5e94\u7528\u5e76\u542f\u52a8",
                 Left = 334,
@@ -1254,7 +1851,7 @@ internal static class LifeAfterPresetLauncher
             launchButton.Click += delegate { Apply(true); };
             Controls.Add(launchButton);
 
-            Button currentButton = new Button
+            Button currentButton = new ModernButton
             {
                 Text = "\u8bfb\u53d6\u5f53\u524d\u914d\u7f6e",
                 Left = 486,
@@ -1273,7 +1870,7 @@ internal static class LifeAfterPresetLauncher
             performanceModeCheckBox.CheckedChanged += delegate { RefreshPathLabel(); };
             Controls.Add(performanceModeCheckBox);
 
-            restoreButton = new Button
+            restoreButton = new ModernButton
             {
                 Text = "\u6062\u590d\u6700\u8fd1\u5907\u4efd",
                 Left = 16,
@@ -1284,7 +1881,7 @@ internal static class LifeAfterPresetLauncher
             restoreButton.Click += delegate { RestoreBackupFromUi(); };
             Controls.Add(restoreButton);
 
-            shortcutButton = new Button
+            shortcutButton = new ModernButton
             {
                 Text = "\u521b\u5efa\u684c\u9762\u5feb\u6377\u65b9\u5f0f",
                 Left = 178,
@@ -1306,7 +1903,7 @@ internal static class LifeAfterPresetLauncher
             };
             Controls.Add(shortcutButton);
 
-            factoryButton = new Button
+            factoryButton = new ModernButton
             {
                 Text = "\u6062\u590d\u9ed8\u8ba4 2K120",
                 Left = 365,
@@ -1317,7 +1914,7 @@ internal static class LifeAfterPresetLauncher
             factoryButton.Click += delegate { RestoreFactoryFromUi(); };
             Controls.Add(factoryButton);
 
-            cleanButton = new Button
+            cleanButton = new ModernButton
             {
                 Text = "\u6e05\u7406\u666e\u901a\u5907\u4efd",
                 Left = 527,
@@ -1328,7 +1925,7 @@ internal static class LifeAfterPresetLauncher
             cleanButton.Click += delegate { CleanBackupsFromUi(); };
             Controls.Add(cleanButton);
 
-            openBackupButton = new Button
+            openBackupButton = new ModernButton
             {
                 Text = "\u6253\u5f00\u5907\u4efd\u76ee\u5f55",
                 Left = 16,
@@ -1349,7 +1946,7 @@ internal static class LifeAfterPresetLauncher
             };
             Controls.Add(openBackupButton);
 
-            openLogButton = new Button
+            openLogButton = new ModernButton
             {
                 Text = "\u6253\u5f00\u65e5\u5fd7",
                 Left = 178,
@@ -1392,7 +1989,7 @@ internal static class LifeAfterPresetLauncher
             };
             Controls.Add(tiaoziScaleBox);
 
-            tiaoziApplyButton = new Button
+            tiaoziApplyButton = new ModernButton
             {
                 Text = "\u4fee\u6539\u8df3\u5b57",
                 Left = 438,
@@ -1463,8 +2060,8 @@ internal static class LifeAfterPresetLauncher
             Controls.Add(countLabel);
 
             idleCountBox.Minimum = 0;
-            idleCountBox.Maximum = 8;
-            idleCountBox.Value = 1;
+            idleCountBox.Maximum = 3;
+            idleCountBox.Value = 3;
             idleCountBox.Left = 485;
             idleCountBox.Top = 236;
             idleCountBox.Width = 55;
@@ -1504,7 +2101,7 @@ internal static class LifeAfterPresetLauncher
             };
             Controls.Add(waitUnitLabel);
 
-            multiLaunchButton = new Button
+            multiLaunchButton = new ModernButton
             {
                 Text = "\u7a33\u5b9a\u591a\u5f00",
                 Left = 552,
@@ -1551,11 +2148,18 @@ internal static class LifeAfterPresetLauncher
             };
             Controls.Add(githubLabel);
 
-            MoveControlsBelowCover();
+            ApplyDashboardLayout(
+                coverPanel,
+                label,
+                browseButton,
+                applyButton,
+                launchButton,
+                currentButton);
             ApplyVisualStyle();
             RefreshPresetDescription();
             RefreshAdvancedVisibility();
             RefreshPathLabel();
+            StartInstanceMonitoring();
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -1563,76 +2167,84 @@ internal static class LifeAfterPresetLauncher
             base.OnPaint(e);
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            DrawTerminalBackground(g, ClientRectangle);
+            DrawMicaBackground(g, ClientRectangle);
+            DrawNavigationRail(g, new Rectangle(0, 0, 108, ClientSize.Height));
 
-            DrawCard(g, new Rectangle(12, HeaderOffset + 78, 708, 64));
+            Rectangle currentCard = new Rectangle(124, 184, 632, 230);
+            Rectangle workflowCard = new Rectangle(124, 430, 632, 210);
+            Rectangle logCard = new Rectangle(124, 656, 632, 82);
+            Rectangle monitorCard = new Rectangle(772, 184, 432, 554);
+            DrawCard(g, currentCard);
+            DrawCard(g, workflowCard);
+            DrawCard(g, logCard);
+            DrawCard(g, monitorCard);
 
-            if (advancedCheckBox.Checked)
+            DrawSectionLabel(g, "\u5f53\u524d\u9884\u8bbe", currentCard.Left + 20, currentCard.Top + 16);
+            DrawSectionLabel(g, toolsPageVisible ? "\u5b89\u5168\u4e0e\u5de5\u5177" : "\u591a\u5f00\u65b9\u6848", workflowCard.Left + 20, workflowCard.Top + 16);
+            DrawSectionLabel(g, "\u8fd0\u884c\u65e5\u5fd7", logCard.Left + 20, logCard.Top + 12);
+        }
+
+        private static void DrawSectionLabel(Graphics g, string text, int x, int y)
+        {
+            using (Font font = CreateUiFont(12F, FontStyle.Bold))
+            using (SolidBrush fore = new SolidBrush(TextColor))
             {
-                DrawCard(g, new Rectangle(12, HeaderOffset + 150, 708, 76));
+                g.DrawString(text, font, fore, x, y);
             }
-
-            int multiTop = (advancedCheckBox.Checked ? 240 : 165) + HeaderOffset;
-            int statusTop = (advancedCheckBox.Checked ? 315 : 245) + HeaderOffset;
-            DrawCard(g, new Rectangle(12, multiTop - 16, 708, 80));
-            DrawCard(g, new Rectangle(12, statusTop - 12, 708, statusBox.Height + 24));
         }
 
         private static void DrawCard(Graphics g, Rectangle rect)
         {
-            using (GraphicsPath path = RoundedRectangle(rect, 8))
-            using (SolidBrush fill = new SolidBrush(Color.FromArgb(226, 12, 24, 32)))
-            using (Pen border = new Pen(CardBorderColor))
+            using (GraphicsPath path = RoundedRectangle(rect, 14))
+            using (LinearGradientBrush fill = new LinearGradientBrush(
+                rect,
+                Color.FromArgb(205, 28, 39, 48),
+                Color.FromArgb(185, 17, 27, 34),
+                LinearGradientMode.Vertical))
+            using (Pen border = new Pen(Color.FromArgb(60, 255, 255, 255)))
             {
                 g.FillPath(fill, path);
                 g.DrawPath(border, path);
             }
 
-            using (Pen accent = new Pen(Color.FromArgb(160, 55, 190, 230), 1.4F))
+            using (Pen highlight = new Pen(Color.FromArgb(38, 255, 255, 255), 1F))
             {
-                int corner = 18;
-                g.DrawLine(accent, rect.Left + 10, rect.Top, rect.Left + corner + 10, rect.Top);
-                g.DrawLine(accent, rect.Left, rect.Top + 10, rect.Left, rect.Top + corner + 10);
-                g.DrawLine(accent, rect.Right - corner - 10, rect.Top, rect.Right - 10, rect.Top);
-                g.DrawLine(accent, rect.Right, rect.Top + 10, rect.Right, rect.Top + corner + 10);
+                g.DrawLine(highlight, rect.Left + 16, rect.Top + 1, rect.Right - 16, rect.Top + 1);
             }
         }
 
-        private static void DrawTerminalBackground(Graphics g, Rectangle bounds)
+        private static void DrawMicaBackground(Graphics g, Rectangle bounds)
         {
             using (LinearGradientBrush back = new LinearGradientBrush(
                 bounds,
-                Color.FromArgb(5, 11, 16),
-                Color.FromArgb(17, 30, 37),
+                Color.FromArgb(12, 21, 29),
+                Color.FromArgb(20, 31, 40),
                 LinearGradientMode.ForwardDiagonal))
             {
                 g.FillRectangle(back, bounds);
             }
 
-            using (Pen grid = new Pen(Color.FromArgb(25, 56, 140, 160), 1F))
+            using (SolidBrush blueGlow = new SolidBrush(Color.FromArgb(22, 45, 127, 165)))
             {
-                for (int x = 0; x < bounds.Width; x += 36)
-                {
-                    g.DrawLine(grid, x, 0, x, bounds.Height);
-                }
-                for (int y = 0; y < bounds.Height; y += 36)
-                {
-                    g.DrawLine(grid, 0, y, bounds.Width, y);
-                }
+                g.FillEllipse(blueGlow, bounds.Right - 400, -190, 520, 430);
             }
-
-            using (Pen scan = new Pen(Color.FromArgb(16, 255, 255, 255), 1F))
+            using (SolidBrush tealGlow = new SolidBrush(Color.FromArgb(18, 45, 190, 180)))
             {
-                for (int y = 0; y < bounds.Height; y += 4)
-                {
-                    g.DrawLine(scan, 0, y, bounds.Width, y);
-                }
+                g.FillEllipse(tealGlow, -230, bounds.Bottom - 260, 440, 390);
             }
+        }
 
-            using (SolidBrush glow = new SolidBrush(Color.FromArgb(35, 28, 160, 205)))
+        private static void DrawNavigationRail(Graphics g, Rectangle rect)
+        {
+            using (LinearGradientBrush fill = new LinearGradientBrush(
+                rect,
+                Color.FromArgb(225, 11, 24, 36),
+                Color.FromArgb(210, 9, 19, 29),
+                LinearGradientMode.Vertical))
+            using (Pen border = new Pen(Color.FromArgb(45, 255, 255, 255)))
             {
-                g.FillEllipse(glow, bounds.Right - 180, 120, 260, 260);
-                g.FillEllipse(glow, -120, bounds.Bottom - 180, 250, 220);
+                g.FillRectangle(fill, rect);
+                g.DrawLine(border, rect.Right - 1, rect.Top, rect.Right - 1, rect.Bottom);
             }
         }
 
@@ -1648,13 +2260,166 @@ internal static class LifeAfterPresetLauncher
             return path;
         }
 
-        private void MoveControlsBelowCover()
+        protected override void OnHandleCreated(EventArgs e)
         {
-            foreach (Control control in Controls)
+            base.OnHandleCreated(e);
+            TryEnableWindows11Backdrop();
+        }
+
+        private void TryEnableWindows11Backdrop()
+        {
+            try
             {
-                if (control is CoverPanel) continue;
-                control.Top += HeaderOffset;
+                int enabled = 1;
+                DwmSetWindowAttribute(Handle, 20, ref enabled, sizeof(int));
+                int rounded = 2;
+                DwmSetWindowAttribute(Handle, 33, ref rounded, sizeof(int));
+                int mica = 2;
+                int result = DwmSetWindowAttribute(Handle, 38, ref mica, sizeof(int));
+                if (result != 0)
+                {
+                    DwmSetWindowAttribute(Handle, 1029, ref enabled, sizeof(int));
+                }
+                DwmMargins margins = new DwmMargins { Left = 0, Right = 0, Top = 1, Bottom = 0 };
+                DwmExtendFrameIntoClientArea(Handle, ref margins);
             }
+            catch
+            {
+            }
+        }
+
+        private void ApplyDashboardLayout(
+            CoverPanel coverPanel,
+            Label instructionLabel,
+            Button browseButton,
+            Button applyButton,
+            Button launchButton,
+            Button currentButton)
+        {
+            coverPanel.SetBounds(124, 16, 1080, 152);
+            using (GraphicsPath coverPath = RoundedRectangle(new Rectangle(0, 0, coverPanel.Width, coverPanel.Height), 14))
+            {
+                coverPanel.Region = new Region(coverPath);
+            }
+
+            instructionLabel.Visible = false;
+            pathLabel.SetBounds(148, 129, 730, 24);
+            pathLabel.AutoEllipsis = true;
+            browseButton.SetBounds(1030, 124, 150, 34);
+            pathLabel.BringToFront();
+            browseButton.BringToFront();
+
+            presetBox.SetBounds(150, 250, 205, 34);
+            presetBox.Font = CreateUiFont(12F, FontStyle.Bold);
+            descriptionLabel.SetBounds(150, 298, 570, 40);
+            applyButton.SetBounds(150, 350, 128, 38);
+            launchButton.SetBounds(292, 350, 196, 38);
+            currentButton.SetBounds(502, 350, 160, 38);
+            performanceModeCheckBox.SetBounds(652, 258, 88, 28);
+            advancedCheckBox.Visible = false;
+
+            multiLabel.Visible = false;
+            mainLabel.SetBounds(150, 480, 46, 28);
+            mainPresetBox.SetBounds(202, 474, 140, 32);
+            idleLabel.Text = "\u5c0f\u53f7";
+            idleLabel.SetBounds(364, 480, 46, 28);
+            idlePresetBox.SetBounds(416, 474, 140, 32);
+            countLabel.SetBounds(574, 480, 42, 28);
+            idleCountBox.SetBounds(620, 474, 58, 32);
+            multiLaunchButton.SetBounds(570, 548, 160, 38);
+
+            waitLabel.SetBounds(150, 548, 42, 28);
+            multiModeBox.SetBounds(202, 542, 150, 32);
+            settleWaitBox.SetBounds(372, 542, 64, 32);
+            waitUnitLabel.SetBounds(442, 548, 24, 28);
+
+            restoreButton.SetBounds(150, 476, 150, 34);
+            shortcutButton.SetBounds(314, 476, 174, 34);
+            factoryButton.SetBounds(502, 476, 150, 34);
+            cleanButton.SetBounds(150, 526, 150, 34);
+            openBackupButton.SetBounds(314, 526, 150, 34);
+            openLogButton.SetBounds(478, 526, 120, 34);
+            tiaoziLabel.SetBounds(150, 584, 42, 28);
+            tiaoziScaleBox.SetBounds(202, 578, 78, 32);
+            tiaoziApplyButton.SetBounds(294, 578, 120, 34);
+
+            statusBox.SetBounds(148, 689, 584, 40);
+            statusBox.ScrollBars = ScrollBars.None;
+            statusBox.Font = CreateUiFont(8.5F, FontStyle.Regular);
+            projectInfoLabel.SetBounds(124, 748, 420, 22);
+            githubLabel.Visible = false;
+            versionLabel.SetBounds(1110, 748, 90, 22);
+
+            instanceMonitorPanel.SetBounds(772, 184, 432, 554);
+            Controls.Add(instanceMonitorPanel);
+            instanceMonitorPanel.BringToFront();
+
+            startNavButton = CreateNavigationButton("01\r\n\u542f\u52a8", 18, 40);
+            multiNavButton = CreateNavigationButton("02\r\n\u591a\u5f00", 18, 160);
+            toolsNavButton = CreateNavigationButton("03\r\n\u5de5\u5177", 18, 280);
+            startNavButton.Click += delegate
+            {
+                advancedCheckBox.Checked = false;
+                presetBox.Focus();
+            };
+            multiNavButton.Click += delegate
+            {
+                advancedCheckBox.Checked = false;
+                mainPresetBox.Focus();
+            };
+            toolsNavButton.Click += delegate { advancedCheckBox.Checked = true; };
+            Controls.Add(startNavButton);
+            Controls.Add(multiNavButton);
+            Controls.Add(toolsNavButton);
+            startNavButton.BringToFront();
+            multiNavButton.BringToFront();
+            toolsNavButton.BringToFront();
+        }
+
+        private Button CreateNavigationButton(string text, int left, int top)
+        {
+            ModernButton button = new ModernButton
+            {
+                Text = text,
+                Left = left,
+                Top = top,
+                Width = 72,
+                Height = 94,
+                Font = CreateUiFont(10.5F, FontStyle.Regular),
+                BackColor = Color.FromArgb(24, 39, 49),
+                ForeColor = TextColor
+            };
+            button.FlatAppearance.BorderColor = Color.FromArgb(50, 255, 255, 255);
+            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(43, 72, 86);
+            button.FlatAppearance.MouseDownBackColor = Color.FromArgb(31, 57, 70);
+            return button;
+        }
+
+        private void StartInstanceMonitoring()
+        {
+            instanceMonitorTimer.Interval = 1200;
+            instanceMonitorTimer.Tick += delegate { RefreshInstanceMonitor(); };
+            instanceMonitorTimer.Start();
+            RefreshInstanceMonitor();
+            FormClosed += delegate { instanceMonitorTimer.Stop(); };
+        }
+
+        private void RefreshInstanceMonitor()
+        {
+            try
+            {
+                instanceMonitorPanel.UpdateSnapshots(instanceMonitor.Capture());
+            }
+            catch
+            {
+                instanceMonitorPanel.UpdateSnapshots(new List<InstanceSnapshot>());
+            }
+        }
+
+        private static Font CreateUiFont(float size, FontStyle style)
+        {
+            try { return new Font("Segoe UI Variable Text", size, style); }
+            catch { return new Font("Segoe UI", size, style); }
         }
 
         private void ApplyVisualStyle()
@@ -1668,6 +2433,7 @@ internal static class LifeAfterPresetLauncher
             statusBox.ForeColor = TextColor;
             statusBox.BorderStyle = BorderStyle.FixedSingle;
             pathLabel.ForeColor = TextColor;
+            pathLabel.BackColor = Color.FromArgb(10, 19, 25);
             descriptionLabel.ForeColor = WarningColor;
             projectInfoLabel.ForeColor = MutedTextColor;
             githubLabel.ForeColor = Color.FromArgb(107, 211, 240);
@@ -1688,7 +2454,21 @@ internal static class LifeAfterPresetLauncher
                 button.BackColor = Color.FromArgb(15, 31, 40);
                 button.ForeColor = TextColor;
                 button.Cursor = Cursors.Hand;
-                if (button.Text.IndexOf("\u542f\u52a8", StringComparison.Ordinal) >= 0 ||
+                bool navigationButton =
+                    Object.ReferenceEquals(button, startNavButton) ||
+                    Object.ReferenceEquals(button, multiNavButton) ||
+                    Object.ReferenceEquals(button, toolsNavButton);
+                if (navigationButton)
+                {
+                    button.BackColor = Object.ReferenceEquals(button, startNavButton)
+                        ? Color.FromArgb(23, 91, 111)
+                        : Color.FromArgb(19, 31, 40);
+                    button.FlatAppearance.BorderColor = Object.ReferenceEquals(button, startNavButton)
+                        ? Color.FromArgb(130, 75, 210, 225)
+                        : Color.FromArgb(48, 255, 255, 255);
+                    button.FlatAppearance.MouseOverBackColor = Color.FromArgb(39, 71, 86);
+                }
+                else if (button.Text.IndexOf("\u542f\u52a8", StringComparison.Ordinal) >= 0 ||
                     button.Text.IndexOf("\u591a\u5f00", StringComparison.Ordinal) >= 0)
                 {
                     button.BackColor = PrimaryColor;
@@ -1697,15 +2477,57 @@ internal static class LifeAfterPresetLauncher
                     button.FlatAppearance.MouseOverBackColor = PrimaryHoverColor;
                 }
             }
-            else if (control is ComboBox || control is NumericUpDown || control is TextBox)
+            else if (control is ComboBox)
+            {
+                ComboBox combo = (ComboBox)control;
+                combo.BackColor = FieldBackColor;
+                combo.ForeColor = TextColor;
+                combo.FlatStyle = FlatStyle.Flat;
+                combo.DrawMode = DrawMode.OwnerDrawFixed;
+                combo.ItemHeight = 22;
+                combo.DrawItem += DrawComboBoxItem;
+            }
+            else if (control is NumericUpDown)
+            {
+                control.BackColor = FieldBackColor;
+                control.ForeColor = TextColor;
+                foreach (Control child in control.Controls)
+                {
+                    child.BackColor = FieldBackColor;
+                    child.ForeColor = TextColor;
+                }
+            }
+            else if (control is TextBox)
             {
                 control.BackColor = FieldBackColor;
                 control.ForeColor = TextColor;
             }
-            else if (control is Label || control is CheckBox)
+            else if (control is CheckBox)
+            {
+                CheckBox checkBox = (CheckBox)control;
+                checkBox.BackColor = Color.Transparent;
+                checkBox.UseVisualStyleBackColor = true;
+            }
+            else if (control is Label)
             {
                 control.BackColor = Color.Transparent;
             }
+        }
+
+        private void DrawComboBoxItem(object sender, DrawItemEventArgs e)
+        {
+            if (e.Index < 0) return;
+            ComboBox combo = (ComboBox)sender;
+            bool selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+            Color back = selected ? Color.FromArgb(27, 77, 72) : FieldBackColor;
+            using (SolidBrush background = new SolidBrush(back))
+            using (SolidBrush foreground = new SolidBrush(TextColor))
+            {
+                e.Graphics.FillRectangle(background, e.Bounds);
+                string text = combo.GetItemText(combo.Items[e.Index]);
+                e.Graphics.DrawString(text, combo.Font, foreground, e.Bounds.Left + 7, e.Bounds.Top + 3);
+            }
+            e.DrawFocusRectangle();
         }
 
         private void RefreshPresetDescription()
@@ -1716,6 +2538,7 @@ internal static class LifeAfterPresetLauncher
         private void RefreshAdvancedVisibility()
         {
             bool visible = advancedCheckBox.Checked;
+            toolsPageVisible = visible;
             restoreButton.Visible = visible;
             shortcutButton.Visible = visible;
             factoryButton.Visible = visible;
@@ -1725,36 +2548,38 @@ internal static class LifeAfterPresetLauncher
             tiaoziLabel.Visible = visible;
             tiaoziScaleBox.Visible = visible;
             tiaoziApplyButton.Visible = visible;
+
+            mainLabel.Visible = !visible;
+            mainPresetBox.Visible = !visible;
+            idleLabel.Visible = !visible;
+            idlePresetBox.Visible = !visible;
+            countLabel.Visible = !visible;
+            idleCountBox.Visible = !visible;
+            waitLabel.Visible = !visible;
+            multiModeBox.Visible = !visible;
+            settleWaitBox.Visible = !visible;
+            waitUnitLabel.Visible = !visible;
+            multiLaunchButton.Visible = !visible;
+
+            if (startNavButton != null)
+            {
+                startNavButton.BackColor = !visible
+                    ? Color.FromArgb(23, 91, 111)
+                    : Color.FromArgb(19, 31, 40);
+                toolsNavButton.BackColor = visible
+                    ? Color.FromArgb(23, 91, 111)
+                    : Color.FromArgb(19, 31, 40);
+                startNavButton.Invalidate();
+                toolsNavButton.Invalidate();
+            }
             ApplyDynamicLayout(visible);
             Invalidate();
         }
 
         private void ApplyDynamicLayout(bool advancedVisible)
         {
-            int multiTop = (advancedVisible ? 240 : 165) + HeaderOffset;
-            int waitTop = multiTop + 34;
-            int statusTop = (advancedVisible ? 315 : 245) + HeaderOffset;
-            int statusHeight = advancedVisible ? 190 : 260;
-            int versionTop = 525 + HeaderOffset;
-
-            multiLabel.Top = multiTop;
-            mainLabel.Top = multiTop;
-            idleLabel.Top = multiTop;
-            countLabel.Top = multiTop;
-            mainPresetBox.Top = multiTop - 4;
-            idlePresetBox.Top = multiTop - 4;
-            idleCountBox.Top = multiTop - 4;
-            multiLaunchButton.Top = multiTop - 6;
-            waitLabel.Top = waitTop;
-            multiModeBox.Top = waitTop - 4;
-            settleWaitBox.Top = waitTop - 4;
-            waitUnitLabel.Top = waitTop;
-
-            statusBox.Top = statusTop;
-            statusBox.Height = statusHeight;
-            versionLabel.Top = versionTop + 20;
-            projectInfoLabel.Top = versionTop;
-            githubLabel.Top = versionTop + 20;
+            // The dashboard uses a fixed Windows 11 grid. Page switching changes
+            // visibility only, so monitoring and log regions never jump.
         }
 
         private static Icon LoadWindowIcon()
