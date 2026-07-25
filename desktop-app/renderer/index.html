@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>明日之后画质启动器</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <svg class="icon-sprite" aria-hidden="true">
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m7 4 12 8-12 8V4Z"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/></symbol>
+    <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5-5L12 3.6 9.6 6 7.3 3.7a4 4 0 0 0 5 5L4 17l3 3 7.7-8.3Z"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9M13 4v6M7 14v6"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2 3.1 6.3 6.9 1-5 4.8 1.2 6.9-6.2-3.3L5.8 21 7 14.1 2 9.3l6.9-1L12 2Z"/></symbol>
+    <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M20 4c-8 0-14 4-14 10 0 3 2 5 5 5 6 0 9-7 9-15Z"/><path d="M4 21c2-5 6-9 12-12"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.7-4M4 4v5h5M4 13a8 8 0 0 0 14.7 4M20 20v-5h-5"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></symbol>
+    <symbol id="i-memory" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="2"/><path d="M7 10v4M11 10v4M15 10v4M19 10v4"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v5c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-3Z"/><path d="m9 12 2 2 4-5"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  </svg>
+
+  <header class="topbar">
+    <div class="brand-mark">LA</div>
+    <div class="topbar-title">
+      <strong>明日之后画质启动器</strong>
+      <span>CONTROL CENTER</span>
+    </div>
+    <div class="topbar-status"><span class="status-dot"></span><span id="topStatus">本地模式</span></div>
+  </header>
+
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="主导航">
+      <nav class="nav-list">
+        <button class="nav-item active" data-view="launch" aria-label="启动">
+          <svg><use href="#i-play"/></svg><span>启动</span>
+        </button>
+        <button class="nav-item" data-view="multi" aria-label="多开">
+          <svg><use href="#i-layers"/></svg><span>多开</span>
+        </button>
+        <button class="nav-item" data-view="history" aria-label="记录">
+          <svg><use href="#i-clock"/></svg><span>记录</span>
+        </button>
+        <button class="nav-item" data-view="tools" aria-label="工具">
+          <svg><use href="#i-wrench"/></svg><span>工具</span>
+        </button>
+      </nav>
+      <div class="sidebar-foot">
+        <button class="icon-button" id="aboutButton" aria-label="关于"><svg><use href="#i-info"/></svg></button>
+        <span>v2.0</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="hero">
+        <div class="hero-overlay"></div>
+        <div class="hero-copy">
+          <span class="eyebrow">LIFEAFTER · GRAPHICS</span>
+          <h1>画质与实例，一处掌控</h1>
+          <p>安全切换预设、稳定多开、实时观察每个窗口。</p>
+        </div>
+        <button class="path-pill" id="chooseRootButton">
+          <svg><use href="#i-folder"/></svg>
+          <span class="path-copy"><small>游戏目录</small><strong id="gameRoot">正在检测…</strong></span>
+          <svg class="chevron"><use href="#i-chevron"/></svg>
+        </button>
+      </section>
+
+      <section id="launchView" class="view active">
+        <div class="workspace-grid">
+          <div class="left-stack">
+            <section class="glass-card preset-card">
+              <div class="section-header">
+                <div>
+                  <span class="section-kicker">CURRENT PRESET</span>
+                  <h2>当前预设</h2>
+                </div>
+                <label class="toggle">
+                  <input id="performanceMode" type="checkbox" checked>
+                  <span></span>性能优先
+                </label>
+              </div>
+
+              <div class="preset-body">
+                <div class="preset-orbit">
+                  <div class="orbit-ring"></div>
+                  <svg><use href="#i-monitor"/></svg>
+                </div>
+                <div class="preset-details">
+                  <div class="preset-select-wrap">
+                    <select id="presetSelect" aria-label="画质预设">
+                      <option>2K 120</option><option>1080p 120</option><option>1080p 60</option>
+                      <option>900p 120</option><option>900p 60</option><option>720p 60</option>
+                      <option>540p 60</option><option>540p 25</option>
+                    </select>
+                  </div>
+                  <div class="preset-title"><span id="resolutionLabel">2K</span><b>·</b><span id="fpsLabel">120 FPS</span></div>
+                  <div class="metric-pair">
+                    <div><small>分辨率</small><strong id="resolutionValue">2560 × 1440</strong></div>
+                    <div><small>帧率上限</small><strong id="fpsValue">120 FPS</strong></div>
+                  </div>
+                  <div class="quality-tabs">
+                    <button data-preset="2K 120"><svg><use href="#i-star"/></svg><span>极致画质</span></button>
+                    <button data-preset="1080p 120"><svg><use href="#i-image"/></svg><span>高清画质</span></button>
+                    <button data-preset="900p 120"><svg><use href="#i-leaf"/></svg><span>均衡画质</span></button>
+                    <button data-preset="540p 25"><svg><use href="#i-sliders"/></svg><span>流畅画质</span></button>
+                  </div>
+                </div>
+              </div>
+              <div class="primary-actions">
+                <button class="button secondary" id="applyButton">仅应用</button>
+                <button class="button primary" id="applyLaunchButton"><svg><use href="#i-play"/></svg>应用并启动</button>
+                <button class="button ghost" id="readConfigButton"><svg><use href="#i-refresh"/></svg>读取当前</button>
+              </div>
+            </section>
+
+            <section class="glass-card plans-card" id="plansCard">
+              <div class="section-header compact">
+                <div><span class="section-kicker">MULTI LAUNCH</span><h2>多开方案</h2></div>
+                <div class="plan-controls">
+                  <label>模式
+                    <select id="multiMode"><option value="manual">分步确认</option><option value="auto">自动倒计时</option></select>
+                  </label>
+                  <label>小号数量
+                    <select id="idleCount"><option>0</option><option>1</option><option>2</option><option selected>3</option></select>
+                  </label>
+                </div>
+              </div>
+              <div id="planRows" class="plan-rows"></div>
+              <div class="multi-footer">
+                <label>主号<select id="mainPreset"><option>2K 120</option><option>1080p 120</option><option>1080p 60</option><option>900p 120</option></select></label>
+                <label>小号<select id="idlePreset"><option>540p 25</option><option>540p 60</option><option>720p 60</option><option>900p 60</option></select></label>
+                <label>间隔<input id="waitSeconds" type="number" min="5" max="180" value="20"><span>秒</span></label>
+                <button class="button primary small" id="multiLaunchButton"><svg><use href="#i-layers"/></svg>稳定多开</button>
+              </div>
+            </section>
+          </div>
+
+          <aside class="glass-card monitor-card">
+            <div class="section-header compact">
+              <div><span class="section-kicker">LIVE INSTANCES</span><h2>实例运行详情</h2></div>
+              <span class="live-badge"><i></i><b id="runningCount">0</b> 运行中</span>
+            </div>
+            <div id="instanceList" class="instance-list"></div>
+            <button class="refresh-button" id="refreshInstances"><svg><use href="#i-refresh"/></svg>刷新状态</button>
+          </aside>
+        </div>
+      </section>
+
+      <section id="historyView" class="view">
+        <div class="history-head">
+          <div>
+            <span class="section-kicker">LAUNCH ANALYTICS</span>
+            <h1>启动记录</h1>
+            <p>按游戏 ID 统计每个账号的运行时长</p>
+          </div>
+          <div class="history-head-actions">
+            <span class="privacy-badge"><svg><use href="#i-shield"/></svg>数据仅保存在本机</span>
+            <div class="range-tabs" role="tablist" aria-label="统计周期">
+              <button data-range="day">日</button>
+              <button class="active" data-range="week">周</button>
+              <button data-range="month">月</button>
+              <button data-range="total">总</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="summary-grid">
+          <article class="glass-card summary-card">
+            <span class="summary-icon cyan"><svg><use href="#i-clock"/></svg></span>
+            <small>总运行时长</small>
+            <strong id="historyTotal">0小时0分</strong>
+            <span id="historyDurationDelta">本周期暂无记录</span>
+          </article>
+          <article class="glass-card summary-card">
+            <span class="summary-icon green"><svg><use href="#i-play"/></svg></span>
+            <small>启动次数</small>
+            <strong id="historyLaunches">0次</strong>
+            <span id="historyLaunchDelta">本周期暂无启动</span>
+          </article>
+          <article class="glass-card summary-card">
+            <span class="summary-icon amber"><svg><use href="#i-star"/></svg></span>
+            <small>最常用账号</small>
+            <strong id="historyMostUsed">暂无</strong>
+            <span id="historyMostUsedShare">等待首次检测</span>
+          </article>
+          <article class="glass-card summary-card">
+            <span class="summary-icon violet"><svg><use href="#i-sliders"/></svg></span>
+            <small>平均单次</small>
+            <strong id="historyAverage">0分钟</strong>
+            <span>按已记录会话计算</span>
+          </article>
+        </div>
+
+        <div class="history-content-grid">
+          <section class="glass-card ranking-card">
+            <div class="section-header compact">
+              <div><span class="section-kicker">ACCOUNT RANKING</span><h2>账号时长排行</h2></div>
+              <span class="history-count" id="historyAccountCount">0 个账号</span>
+            </div>
+            <div id="accountRanking" class="account-ranking"></div>
+          </section>
+
+          <section class="glass-card sessions-card">
+            <div class="section-header compact">
+              <div><span class="section-kicker">RECENT SESSIONS</span><h2>最近启动会话</h2></div>
+              <span class="live-badge subtle"><i></i>自动记录</span>
+            </div>
+            <div class="session-table">
+              <div class="session-row session-header-row">
+                <span>账号 ID</span><span>开始时间</span><span>结束时间</span><span>时长</span>
+              </div>
+              <div id="sessionRows"></div>
+            </div>
+          </section>
+        </div>
+
+        <div class="history-footer">
+          <div>
+            <button class="button secondary" id="exportHistory"><svg><use href="#i-list"/></svg>导出 CSV</button>
+            <button class="button ghost" id="openHistoryFolder"><svg><use href="#i-folder"/></svg>打开记录目录</button>
+          </div>
+          <p><svg><use href="#i-info"/></svg>从检测到游戏进程开始统计；游戏退出或关闭启动器时封存，游戏 ID 直接作为实例名称。</p>
+        </div>
+      </section>
+
+      <section id="toolsView" class="view">
+        <div class="tools-grid">
+          <section class="glass-card tools-main">
+            <div class="section-header"><div><span class="section-kicker">MAINTENANCE</span><h2>安全与工具</h2></div></div>
+            <div class="tool-grid">
+              <button class="tool-tile" data-action="restoreLatest"><svg><use href="#i-refresh"/></svg><b>恢复最近备份</b><span>回到上一次配置状态</span></button>
+              <button class="tool-tile" data-action="restoreFactory"><svg><use href="#i-shield"/></svg><b>恢复默认 2K120</b><span>使用内置安全恢复点</span></button>
+              <button class="tool-tile" data-action="cleanBackups"><svg><use href="#i-list"/></svg><b>清理普通备份</b><span>保留默认恢复点</span></button>
+              <button class="tool-tile" data-action="openBackups"><svg><use href="#i-folder"/></svg><b>打开备份目录</b><span>查看所有配置备份</span></button>
+              <button class="tool-tile" data-action="openLog"><svg><use href="#i-info"/></svg><b>打开运行日志</b><span>诊断启动与写入记录</span></button>
+              <div class="tool-tile input-tile">
+                <svg><use href="#i-sliders"/></svg><b>跳字缩放</b><span>建议范围 0.5–1.8</span>
+                <div><input id="tiaoziScale" type="number" min="0.1" max="8" step="0.1" value="1.5"><button id="applyTiaozi">应用</button></div>
+              </div>
+            </div>
+          </section>
+          <aside class="glass-card about-card">
+            <div class="about-icon">LA</div>
+            <span class="section-kicker">PORTABLE EDITION</span>
+            <h2>本地、离线、可扩展</h2>
+            <p>所有配置与实例数据都只在本机处理。已为后续局域网副屏监控预留数据接口。</p>
+            <div class="about-line"><span>界面引擎</span><b>Electron · Fluent UI</b></div>
+            <div class="about-line"><span>本地后台</span><b>C# · .NET Framework</b></div>
+            <div class="about-line"><span>版本</span><b>v2.0.0</b></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="activity-bar" aria-live="polite">
+        <div class="activity-icon"><svg><use href="#i-check"/></svg></div>
+        <div><small id="activityTime">READY</small><strong id="activityMessage">正在连接本地后台…</strong></div>
+        <button id="activityDetails">查看详情</button>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="confirmModal" hidden>
+    <div class="modal">
+      <div class="modal-icon"><svg><use href="#i-layers"/></svg></div>
+      <h3 id="modalTitle">继续启动下一个窗口？</h3>
+      <p id="modalMessage"></p>
+      <div class="modal-actions"><button class="button secondary" data-result="cancel">取消</button><button class="button primary" data-result="confirm">继续</button></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

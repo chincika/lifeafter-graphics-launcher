@@ -1,6 +1,6 @@
-# 明日之后多开画质启动器
+# 明日之后画质启动器
 
-一个用于切换《明日之后》PC 端画质配置并启动游戏的小工具。
+一个用于切换《明日之后》PC 端画质配置、多开游戏并监控实例状态的 Windows 启动器。
 
 
 
@@ -12,17 +12,26 @@ GitHub 地址：https://github.com/chincika/lifeafter-graphics-launcher
 
 ## 主要功能
 
+- 全新的 Windows 11 Fluent 风格界面，支持 Mica/毛玻璃质感与现代化交互。
 - 自动检测游戏目录，也支持手动选择安装目录。
 - 一键切换常用画质预设：2K 120、1080p 120、1080p 60、900p 120、900p 60、720p 60、540p 60、540p 25。
 - 支持“主力 + 挂机”多开：默认分步确认，也提供实验性的自动倒计时模式，默认间隔 20 秒。
+- 最多监控 4 个游戏实例，实时显示游戏 ID、分辨率、帧率、CPU、内存与运行时长。
+- 按游戏 ID 自动记录账号运行时长，提供日、周、月、总览统计、账号排行、最近会话与 CSV 导出。
 - 每次写入配置前自动备份，并保留默认 2K120 的恢复点。
 - 日志和工具数据写入游戏配置目录下的 `launcher_data`，避免污染 exe 所在目录。
-
+- 运行数据仅保存在本机，并为后续局域网副屏监控预留了独立实例数据接口。
 - 兼容 2026-07 游戏更新后的新增配置项：`dpi_resize_policy`、`player_super_low`。
 
 ## 使用方式
 
-直接运行：
+推荐直接运行现代便携版：
+
+```powershell
+明日之后画质启动器-现代版.exe
+```
+
+仓库同时保留经典单文件版：
 
 ```powershell
 明日之后画质启动器.exe
@@ -35,7 +44,19 @@ GitHub 地址：https://github.com/chincika/lifeafter-graphics-launcher
 明日之后画质启动器.exe --apply "540p 25" --launch
 ```
 
-## 编译
+## 编译现代版
+
+现代版使用 Electron 桌面外壳与本地 C# 后台：
+
+```powershell
+cd desktop-app
+npm install
+npm run portable
+```
+
+便携版输出到 `desktop-app/release/LifeAfter-Graphics-Launcher-2.0.0.exe`。
+
+## 编译经典版
 
 使用系统自带的 .NET Framework C# 编译器：
 
@@ -47,4 +68,9 @@ if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framewo
 
 ## 版本
 
-当前版本：v1.5.4
+当前重大版本：v2.0.0
+
+- 现代便携版：v2.0.0
+- 经典单文件版：v1.7.0
+
+完整更新内容见 [CHANGELOG.md](CHANGELOG.md)。

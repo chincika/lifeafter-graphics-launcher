@@ -1,0 +1,44 @@
+{
+  "name": "lifeafter-graphics-launcher",
+  "version": "2.0.0",
+  "description": "Windows 11 Fluent desktop launcher for LifeAfter graphics profiles",
+  "main": "main.js",
+  "author": "不与世俗纷争",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "portable": "electron-builder --win portable"
+  },
+  "build": {
+    "appId": "org.lifeafter.graphicslauncher",
+    "productName": "明日之后画质启动器",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "history-store.js",
+      "renderer/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend"
+      }
+    ],
+    "win": {
+      "icon": "renderer/assets/app-icon.png",
+      "artifactName": "LifeAfter-Graphics-Launcher-${version}.${ext}",
+      "target": [
+        "portable"
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3"
+  }
+}
