@@ -7,6 +7,7 @@ using System.IO;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -61,6 +62,89 @@ internal static class LifeAfterPresetLauncher
         public int Bottom;
     }
 
+    private sealed class FpsPatchDefinition
+    {
+        public int Target;
+        public string FileName;
+        public string SlotSha256;
+        public string Label;
+    }
+
+    private sealed class FpsNxpkRecord
+    {
+        public long IndexOffset;
+        public int RecordCount;
+        public long DataOffset;
+        public int CompressedSize;
+        public int OriginalSize;
+        public uint Checksum1;
+        public uint Checksum2;
+        public uint CompressionType;
+    }
+
+    private sealed class FpsSlotState
+    {
+        public string Id;
+        public string Label;
+        public int Target;
+        public bool Writable;
+    }
+
+    private const int FpsSlotSize = 110791;
+    private const int FpsOriginalSize = 328632;
+    private const uint FpsTargetNameHash = 4238962030;
+    private const uint FpsTargetNameId = 3758457633;
+    private const uint FpsChecksum1 = 3881385757;
+    private const uint FpsChecksum2 = 3180330809;
+    private const uint FpsCompressionType = 2;
+    private const string FpsOriginalArchiveSha256 =
+        "D28A80EE2F0A209BD24ADE0838848B49FE2D9816946C304D15E9A83FEA6D2738";
+    private const string FpsOriginalSlotSha256 =
+        "6F9165B65B8E32391E32FBC5174B8CC680E90C33C5887B46999D087ACE8FE050";
+    private const string FpsOfficialBaselineFileName =
+        "script.py314.lc.npk.official-original-D28A80EE2F0A209B.bak";
+    private static readonly Regex FpsTransactionBackupNamePattern = new Regex(
+        @"^script\.py314\.lc\.npk\.\d{8}-\d{6}-\d{3}\.[A-Za-z0-9_-]+\.[0-9A-F]{16}\.bak$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly byte[] FpsNxpkKey = new byte[]
+    {
+        96, 99, 8, 216, 163, 44, 120, 32, 19, 210, 108, 47, 34, 111, 104, 109
+    };
+    private static readonly Dictionary<int, FpsPatchDefinition> FpsPatches =
+        new Dictionary<int, FpsPatchDefinition>
+    {
+        {
+            180,
+            new FpsPatchDefinition
+            {
+                Target = 180,
+                FileName = "patch_180.bin",
+                SlotSha256 = "04E2632BAC975036240B829A89B36D1FC5614D48F880E157C60B77985B5340A1",
+                Label = "120 → 180 FPS"
+            }
+        },
+        {
+            240,
+            new FpsPatchDefinition
+            {
+                Target = 240,
+                FileName = "patch_240.bin",
+                SlotSha256 = "A5B7382EE1C8CDBCA3D34ACD3BE8D93D8E0D588AD2EE7B3278D4E9D97342EEE1",
+                Label = "120 → 240 FPS"
+            }
+        },
+        {
+            300,
+            new FpsPatchDefinition
+            {
+                Target = 300,
+                FileName = "patch_300.bin",
+                SlotSha256 = "DB33FAF0F83F30D7675720F6BA77F4AE09B6E4E8FA460D8177CAB0ACE6F43DA6",
+                Label = "120 → 300 FPS"
+            }
+        }
+    };
+
 
     private static string gameRoot;
     private static string configDir;
@@ -72,7 +156,7 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.7.0";
+    private const string AppVersion = "v1.8.0";
     private const string ProjectUrl = "https://github.com/chincika/lifeafter-graphics-launcher";
 
     private const string Pc540p =
@@ -153,6 +237,57 @@ internal static class LifeAfterPresetLauncher
                 throw new InvalidOperationException("\u8df3\u5b57\u7f29\u653e\u6bd4\u4f8b\u683c\u5f0f\u4e0d\u6b63\u786e\u3002");
             }
             Console.WriteLine(SetTiaoziScale(scale));
+            return;
+        }
+
+        if (args.Length >= 1 && args[0].Equals("--fps-status", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine(GetFpsUnlockStatusJson());
+            return;
+        }
+
+        if (args.Length >= 2 && args[0].Equals("--fps-apply", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                int target;
+                if (!Int32.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out target))
+                    throw new InvalidOperationException("帧率目标格式不正确。");
+                Console.WriteLine(ApplyFpsUnlock(target));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.GetType().Name + "：" + ex.Message);
+                Environment.ExitCode = 1;
+            }
+            return;
+        }
+
+        if (args.Length >= 1 && args[0].Equals("--fps-restore", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                Console.WriteLine(RestoreFpsUnlock());
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.GetType().Name + "：" + ex.Message);
+                Environment.ExitCode = 1;
+            }
+            return;
+        }
+
+        if (args.Length >= 1 && args[0].Equals("--fps-clean-backups", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                Console.WriteLine(CleanFpsTransactionBackups());
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.GetType().Name + "：" + ex.Message);
+                Environment.ExitCode = 1;
+            }
             return;
         }
 
@@ -1231,6 +1366,20 @@ internal static class LifeAfterPresetLauncher
                 RegexOptions.IgnoreCase);
             if (id.Success) return id.Groups[1].Value;
 
+            // Current LifeAfter window titles follow:
+            // "<game id> -  - <server> - 明日之后".
+            // Only the first segment identifies the account. Including the
+            // server made the history name unstable and obscured account swaps.
+            Match leadingSegment = Regex.Match(windowTitle, @"^\s*(.+?)\s+-\s+");
+            if (leadingSegment.Success)
+            {
+                string candidate = leadingSegment.Groups[1].Value.Trim();
+                if (candidate.Length >= 2 && candidate.Length <= 32)
+                {
+                    return candidate;
+                }
+            }
+
             string cleaned = Regex.Replace(
                 windowTitle,
                 @"(?i)LifeAfter|\u660e\u65e5\u4e4b\u540e|[\[\]\(\)\-_|:：]+",
@@ -1239,6 +1388,679 @@ internal static class LifeAfterPresetLauncher
             if (cleaned.Length >= 2 && cleaned.Length <= 32) return cleaned;
             return null;
         }
+    }
+
+    private static string FpsPackagePath()
+    {
+        return String.IsNullOrEmpty(gameRoot)
+            ? null
+            : Path.Combine(gameRoot, @"Documents\script.py314.lc.npk");
+    }
+
+    private static string FpsBackupDirectory()
+    {
+        return String.IsNullOrEmpty(gameRoot)
+            ? null
+            : Path.Combine(gameRoot, @"Documents\fps_unlock_backups");
+    }
+
+    private static string FpsPatchDirectory()
+    {
+        return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "fps-patches");
+    }
+
+    private static FpsSlotState IdentifyFpsSlotState(string slotHash)
+    {
+        if (slotHash.Equals(FpsOriginalSlotSha256, StringComparison.OrdinalIgnoreCase))
+            return new FpsSlotState { Id = "original", Label = "官方原始 120 FPS", Target = 120, Writable = true };
+
+        foreach (KeyValuePair<int, FpsPatchDefinition> item in FpsPatches)
+        {
+            if (slotHash.Equals(item.Value.SlotSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                return new FpsSlotState
+                {
+                    Id = "conditional-" + item.Key.ToString(CultureInfo.InvariantCulture),
+                    Label = item.Value.Label,
+                    Target = item.Key,
+                    Writable = true
+                };
+            }
+        }
+
+        // Recognize the earlier reviewed fixed-value patches so the launcher
+        // can safely migrate the user's current test state to the conditional patch.
+        if (slotHash.Equals(
+            "4D0997446DBD08E7AF24C536AFA7D5055E29E8EBEEA07300B36CB95B9849B469",
+            StringComparison.OrdinalIgnoreCase))
+            return new FpsSlotState { Id = "legacy-180", Label = "旧版全局强制 180 FPS", Target = 180, Writable = true };
+        if (slotHash.Equals(
+            "15AAC9544494399DDDEF72E8278D00DF492D5D45EE29A1D5FE610AA1896943C4",
+            StringComparison.OrdinalIgnoreCase))
+            return new FpsSlotState { Id = "legacy-240", Label = "旧版全局强制 240 FPS", Target = 240, Writable = true };
+
+        return new FpsSlotState { Id = "unknown", Label = "未知或其他补丁", Target = 0, Writable = false };
+    }
+
+    private static string GetFpsUnlockStatusJson()
+    {
+        try
+        {
+            string packagePath = FpsPackagePath();
+            string backupDir = FpsBackupDirectory();
+            if (!IsValidGameRoot(gameRoot))
+                return "{\"ok\":false,\"error\":\"请先选择有效的游戏目录。\"}";
+            if (!File.Exists(packagePath))
+                return "{\"ok\":false,\"error\":\"未找到 Documents\\\\script.py314.lc.npk。\"}";
+
+            byte[] originalPatch = LoadFpsPatch("patch_original.bin", FpsOriginalSlotSha256);
+            FpsNxpkRecord record;
+            byte[] currentSlot;
+            string normalizedHash;
+            string packageHash;
+            using (FileStream stream = new FileStream(
+                packagePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                record = ParseFpsNxpk(stream);
+                currentSlot = FpsReadAt(stream, record.DataOffset, record.CompressedSize);
+                ComputeFpsArchiveHashes(
+                    stream,
+                    record,
+                    currentSlot,
+                    originalPatch,
+                    out packageHash,
+                    out normalizedHash);
+            }
+            FpsSlotState state = IdentifyFpsSlotState(FpsSha256(currentSlot));
+            bool compatible = normalizedHash.Equals(
+                FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase);
+            int transactionBackupCount = GetFpsTransactionBackups().Length;
+            string baseline = FpsOfficialBaselinePath();
+            bool baselineReady = File.Exists(baseline) &&
+                new FileInfo(baseline).Length == new FileInfo(packagePath).Length;
+            int backupCount = transactionBackupCount + (File.Exists(baseline) ? 1 : 0);
+            bool gameRunning = IsFpsGameRunning();
+
+            StringBuilder json = new StringBuilder();
+            json.Append("{\"ok\":true")
+                .Append(",\"compatible\":").Append(compatible ? "true" : "false")
+                .Append(",\"writable\":").Append(
+                    compatible && state.Writable && !gameRunning ? "true" : "false")
+                .Append(",\"gameRunning\":").Append(gameRunning ? "true" : "false")
+                .Append(",\"state\":\"").Append(JsonEscape(state.Id)).Append('"')
+                .Append(",\"stateLabel\":\"").Append(JsonEscape(state.Label)).Append('"')
+                .Append(",\"target\":").Append(state.Target)
+                .Append(",\"packagePath\":\"").Append(JsonEscape(packagePath)).Append('"')
+                .Append(",\"packageHash\":\"").Append(packageHash).Append('"')
+                .Append(",\"normalizedHash\":\"").Append(normalizedHash).Append('"')
+                .Append(",\"slotHash\":\"").Append(FpsSha256(currentSlot)).Append('"')
+                .Append(",\"backupDir\":\"").Append(JsonEscape(backupDir)).Append('"')
+                .Append(",\"backupCount\":").Append(backupCount)
+                .Append(",\"transactionBackupCount\":").Append(transactionBackupCount)
+                .Append(",\"baselineReady\":").Append(baselineReady ? "true" : "false")
+                .Append(",\"packageSize\":").Append(new FileInfo(packagePath).Length)
+                .Append('}');
+            return json.ToString();
+        }
+        catch (Exception ex)
+        {
+            return "{\"ok\":false,\"error\":\"" + JsonEscape(ex.Message) + "\"}";
+        }
+    }
+
+    private static string ApplyFpsUnlock(int target)
+    {
+        FpsPatchDefinition definition;
+        if (!FpsPatches.TryGetValue(target, out definition))
+            throw new InvalidOperationException("仅支持 180、240、300 FPS。");
+        EnsureFpsGameStopped();
+
+        string packagePath = FpsPackagePath();
+        if (!IsValidGameRoot(gameRoot) || !File.Exists(packagePath))
+            throw new InvalidOperationException("未找到兼容的游戏 NPK 包。");
+
+        byte[] originalPatch = LoadFpsPatch("patch_original.bin", FpsOriginalSlotSha256);
+        byte[] targetPatch = LoadFpsPatch(definition.FileName, definition.SlotSha256);
+        string backupPath = null;
+        using (FileStream stream = new FileStream(
+            packagePath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
+        {
+            FpsNxpkRecord record = ParseFpsNxpk(stream);
+            byte[] current = FpsReadAt(stream, record.DataOffset, record.CompressedSize);
+            string currentHash = FpsSha256(current);
+            FpsSlotState state = IdentifyFpsSlotState(currentHash);
+            if (!state.Writable)
+                throw new InvalidDataException("目标槽位不是已知原版或已审查补丁，拒绝覆盖。");
+            string normalizedHash = ComputeFpsNormalizedArchiveHash(stream, record, originalPatch);
+            if (!normalizedHash.Equals(
+                FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("游戏包体版本或非目标区域已变化，拒绝写入。");
+            if (currentHash.Equals(definition.SlotSha256, StringComparison.OrdinalIgnoreCase))
+                return "当前已经是 " + definition.Label + "，无需重复写入。";
+
+            EnsureFpsBackupCapacity(packagePath, 2);
+            EnsureFpsOfficialBaseline(packagePath, stream, record, originalPatch);
+            backupPath = CreateFpsTransactionBackup(state.Id, stream);
+
+            try
+            {
+                FpsWriteAt(stream, record.DataOffset, targetPatch);
+                byte[] written = FpsReadAt(stream, record.DataOffset, record.CompressedSize);
+                if (!FpsSha256(written).Equals(
+                    definition.SlotSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("写入后槽位哈希校验失败。");
+                string verifiedNormalized = ComputeFpsNormalizedArchiveHash(
+                    stream, record, originalPatch);
+                if (!verifiedNormalized.Equals(
+                    FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("写入后包体一致性校验失败。");
+            }
+            catch
+            {
+                FpsWriteAt(stream, record.DataOffset, current);
+                if (!FpsSha256(FpsReadAt(stream, record.DataOffset, record.CompressedSize))
+                    .Equals(currentHash, StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("写入失败且自动回滚校验失败，请使用完整 NPK 备份恢复。");
+                throw;
+            }
+        }
+
+        string cleanupNotice = AutoPruneFpsTransactionBackups();
+        WriteLog("FpsUnlock target=" + target.ToString(CultureInfo.InvariantCulture) +
+                 " backup=" + backupPath + " " + cleanupNotice);
+        return "已启用 " + definition.Label + "。游戏内“120 FPS”标签将实际对应 " +
+               target.ToString(CultureInfo.InvariantCulture) + " FPS；其他帧率档保持原样。" +
+               Environment.NewLine + "写入前完整备份：" + backupPath +
+               Environment.NewLine + cleanupNotice;
+    }
+
+    private static string RestoreFpsUnlock()
+    {
+        EnsureFpsGameStopped();
+        string packagePath = FpsPackagePath();
+        if (!IsValidGameRoot(gameRoot) || !File.Exists(packagePath))
+            throw new InvalidOperationException("未找到兼容的游戏 NPK 包。");
+
+        byte[] originalPatch = LoadFpsPatch("patch_original.bin", FpsOriginalSlotSha256);
+        string backupPath;
+        using (FileStream stream = new FileStream(
+            packagePath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
+        {
+            FpsNxpkRecord record = ParseFpsNxpk(stream);
+            byte[] current = FpsReadAt(stream, record.DataOffset, record.CompressedSize);
+            string currentHash = FpsSha256(current);
+            FpsSlotState state = IdentifyFpsSlotState(currentHash);
+            if (!state.Writable)
+                throw new InvalidDataException("目标槽位不是已知状态，拒绝覆盖。");
+            string normalizedHash = ComputeFpsNormalizedArchiveHash(stream, record, originalPatch);
+            if (!normalizedHash.Equals(
+                FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("游戏包体版本或非目标区域已变化，拒绝恢复。");
+            if (currentHash.Equals(FpsOriginalSlotSha256, StringComparison.OrdinalIgnoreCase))
+                return "当前已经是官方原始 120 FPS 状态。";
+
+            EnsureFpsBackupCapacity(packagePath, 2);
+            EnsureFpsOfficialBaseline(packagePath, stream, record, originalPatch);
+            backupPath = CreateFpsTransactionBackup(state.Id, stream);
+            try
+            {
+                FpsWriteAt(stream, record.DataOffset, originalPatch);
+                if (!FpsSha256(FpsReadAt(stream, record.DataOffset, record.CompressedSize))
+                    .Equals(FpsOriginalSlotSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("恢复后槽位哈希校验失败。");
+                string fullHash = FpsSha256File(stream);
+                if (!fullHash.Equals(
+                    FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("恢复后的完整包体哈希不是官方原始值。");
+            }
+            catch
+            {
+                FpsWriteAt(stream, record.DataOffset, current);
+                if (!FpsSha256(FpsReadAt(stream, record.DataOffset, record.CompressedSize))
+                    .Equals(currentHash, StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("恢复失败且自动回滚校验失败，请使用完整 NPK 备份恢复。");
+                throw;
+            }
+        }
+
+        string cleanupNotice = AutoPruneFpsTransactionBackups();
+        WriteLog("FpsUnlock restore backup=" + backupPath + " " + cleanupNotice);
+        return "已恢复官方原始 120 FPS 槽位。" + Environment.NewLine +
+               "恢复前完整备份：" + backupPath + Environment.NewLine +
+               cleanupNotice;
+    }
+
+    private static FpsNxpkRecord ParseFpsNxpk(FileStream stream)
+    {
+        if (stream.Length < 1024 * 1024 || stream.Length > UInt32.MaxValue)
+            throw new InvalidDataException("NPK 文件大小不在支持范围。");
+        byte[] header = FpsDecryptAesEcb(FpsReadAt(stream, 0, 32));
+        if (Encoding.ASCII.GetString(header, 8, 4) != "NXPK")
+            throw new InvalidDataException("文件不是 NXPK 包。");
+        if (FpsReadUInt32(header, 12) != 3)
+            throw new InvalidDataException("只支持 NXPK v3。");
+        long indexOffset = FpsReadUInt32(header, 16);
+        int recordCount = checked((int)FpsReadUInt32(header, 20));
+        long indexSize = checked((long)recordCount * 48L);
+        if (recordCount <= 0 || recordCount > 500000 ||
+            indexOffset < 32 || indexOffset + indexSize != stream.Length ||
+            indexSize > Int32.MaxValue)
+            throw new InvalidDataException("NXPK 索引边界异常。");
+        byte[] index = FpsDecryptAesEcb(
+            FpsReadAt(stream, indexOffset, checked((int)indexSize)));
+        FpsNxpkRecord found = null;
+        for (int indexNumber = 0; indexNumber < recordCount; indexNumber++)
+        {
+            int offset = indexNumber * 48;
+            if (FpsReadUInt32(index, offset) != FpsTargetNameHash ||
+                FpsReadUInt32(index, offset + 4) != FpsTargetNameId)
+                continue;
+            if (found != null)
+                throw new InvalidDataException("发现多个 SettingManager 目标记录。");
+            found = new FpsNxpkRecord
+            {
+                IndexOffset = indexOffset,
+                RecordCount = recordCount,
+                DataOffset = FpsReadUInt32(index, offset + 8),
+                CompressedSize = checked((int)FpsReadUInt32(index, offset + 12)),
+                OriginalSize = checked((int)FpsReadUInt32(index, offset + 16)),
+                Checksum1 = FpsReadUInt32(index, offset + 20),
+                Checksum2 = FpsReadUInt32(index, offset + 24),
+                CompressionType = FpsReadUInt32(index, offset + 28)
+            };
+            for (int reserved = 0; reserved < 4; reserved++)
+            {
+                if (FpsReadUInt32(index, offset + 32 + reserved * 4) != 0)
+                    throw new InvalidDataException("目标记录保留字段发生变化。");
+            }
+        }
+        if (found == null)
+            throw new InvalidDataException("未找到兼容的 SettingManager 记录。");
+        if (found.CompressedSize != FpsSlotSize ||
+            found.OriginalSize != FpsOriginalSize ||
+            found.Checksum1 != FpsChecksum1 ||
+            found.Checksum2 != FpsChecksum2 ||
+            found.CompressionType != FpsCompressionType ||
+            found.DataOffset < 32 ||
+            found.DataOffset + found.CompressedSize > found.IndexOffset)
+            throw new InvalidDataException("SettingManager 元数据与已审查版本不一致。");
+        return found;
+    }
+
+    private static byte[] LoadFpsPatch(string fileName, string expectedHash)
+    {
+        string path = Path.Combine(FpsPatchDirectory(), fileName);
+        if (!File.Exists(path))
+            throw new FileNotFoundException("缺少帧率补丁资源：" + fileName, path);
+        byte[] data = File.ReadAllBytes(path);
+        if (data.Length != FpsSlotSize ||
+            !FpsSha256(data).Equals(expectedHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("帧率补丁资源校验失败：" + fileName);
+        return data;
+    }
+
+    private static void EnsureFpsOfficialBaseline(
+        string packagePath,
+        FileStream source,
+        FpsNxpkRecord record,
+        byte[] originalPatch)
+    {
+        string backupDir = FpsBackupDirectory();
+        Directory.CreateDirectory(backupDir);
+        string baseline = FpsOfficialBaselinePath();
+        if (File.Exists(baseline))
+        {
+            if (!FpsSha256File(baseline).Equals(
+                FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("官方原始基线备份已存在但哈希异常，请先人工检查。");
+            return;
+        }
+
+        string partial = baseline + ".partial";
+        if (File.Exists(partial)) File.Delete(partial);
+        source.Flush();
+        FpsCopyOpenStream(source, partial);
+        try
+        {
+            using (FileStream backup = new FileStream(
+                partial, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                FpsWriteAt(backup, record.DataOffset, originalPatch);
+                if (!FpsSha256File(backup).Equals(
+                    FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("无法重建经哈希验证的官方原始基线备份。");
+            }
+            File.Move(partial, baseline);
+        }
+        catch
+        {
+            try { if (File.Exists(partial)) File.Delete(partial); } catch { }
+            throw;
+        }
+    }
+
+    private static string CreateFpsTransactionBackup(string stateId, FileStream source)
+    {
+        string backupDir = FpsBackupDirectory();
+        Directory.CreateDirectory(backupDir);
+        string sourceHash = FpsSha256File(source);
+        string safeState = Regex.Replace(stateId ?? "unknown", @"[^A-Za-z0-9\-]", "_");
+        string name = "script.py314.lc.npk." +
+            DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture) +
+            "." + safeState + "." + sourceHash.Substring(0, 16) + ".bak";
+        string target = Path.Combine(backupDir, name);
+        string partial = target + ".partial";
+        try
+        {
+            FpsCopyOpenStream(source, partial);
+            string copiedHash = FpsSha256File(partial);
+            if (!copiedHash.Equals(sourceHash, StringComparison.OrdinalIgnoreCase))
+                throw new IOException("完整 NPK 备份复制后哈希不一致。");
+            File.Move(partial, target);
+            return target;
+        }
+        catch
+        {
+            try { if (File.Exists(partial)) File.Delete(partial); } catch { }
+            throw;
+        }
+    }
+
+    private static string FpsOfficialBaselinePath()
+    {
+        return Path.Combine(FpsBackupDirectory(), FpsOfficialBaselineFileName);
+    }
+
+    private static FileInfo[] GetFpsTransactionBackups()
+    {
+        string backupDir = FpsBackupDirectory();
+        if (String.IsNullOrEmpty(backupDir) || !Directory.Exists(backupDir))
+            return new FileInfo[0];
+
+        List<FileInfo> backups = new List<FileInfo>();
+        foreach (string path in Directory.GetFiles(
+            backupDir, "script.py314.lc.npk.*.bak", SearchOption.TopDirectoryOnly))
+        {
+            string name = Path.GetFileName(path);
+            if (FpsTransactionBackupNamePattern.IsMatch(name))
+                backups.Add(new FileInfo(path));
+        }
+        backups.Sort(delegate(FileInfo left, FileInfo right)
+        {
+            int byName = StringComparer.OrdinalIgnoreCase.Compare(right.Name, left.Name);
+            return byName != 0 ? byName : right.LastWriteTimeUtc.CompareTo(left.LastWriteTimeUtc);
+        });
+        return backups.ToArray();
+    }
+
+    private static int PruneFpsTransactionBackups(int keepLatestCount)
+    {
+        if (keepLatestCount < 0)
+            throw new ArgumentOutOfRangeException("keepLatestCount");
+
+        FileInfo[] backups = GetFpsTransactionBackups();
+        int removed = 0;
+        for (int index = keepLatestCount; index < backups.Length; index++)
+        {
+            backups[index].Delete();
+            removed++;
+        }
+        return removed;
+    }
+
+    private static string AutoPruneFpsTransactionBackups()
+    {
+        try
+        {
+            int removed = PruneFpsTransactionBackups(1);
+            return removed > 0
+                ? "自动清理了 " + removed.ToString(CultureInfo.InvariantCulture) +
+                  " 份旧事务备份；官方初始还原点与最新 1 份备份已保留。"
+                : "备份保留策略已确认：官方初始还原点 + 最新 1 份事务备份。";
+        }
+        catch (Exception ex)
+        {
+            WriteLog("FpsBackup auto-prune failed: " + ex.Message);
+            return "帧率修改已完成，但自动清理旧备份失败：" + ex.Message;
+        }
+    }
+
+    private static string CleanFpsTransactionBackups()
+    {
+        if (!IsValidGameRoot(gameRoot))
+            throw new InvalidOperationException("请先选择有效的游戏目录。");
+
+        string baseline = FpsOfficialBaselinePath();
+        if (!File.Exists(baseline))
+            throw new InvalidOperationException("尚未建立官方初始还原点，拒绝清理事务备份。");
+        if (!FpsSha256File(baseline).Equals(
+            FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("官方初始还原点哈希异常，拒绝清理其他备份。");
+
+        int removed = PruneFpsTransactionBackups(0);
+        WriteLog("FpsBackup manual-clean removed=" +
+            removed.ToString(CultureInfo.InvariantCulture) +
+            " baseline=" + baseline);
+        return removed > 0
+            ? "已清理 " + removed.ToString(CultureInfo.InvariantCulture) +
+              " 份事务备份；官方初始还原点已永久保留。"
+            : "没有可清理的事务备份；官方初始还原点保持不变。";
+    }
+
+    private static void FpsCopyOpenStream(FileStream source, string target)
+    {
+        long originalPosition = source.Position;
+        try
+        {
+            source.Position = 0;
+            using (FileStream output = new FileStream(
+                target, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                source.CopyTo(output);
+                output.Flush(true);
+            }
+        }
+        finally
+        {
+            source.Position = originalPosition;
+        }
+    }
+
+    private static void EnsureFpsBackupCapacity(string packagePath, int possibleCopies)
+    {
+        FileInfo info = new FileInfo(packagePath);
+        string root = Path.GetPathRoot(info.FullName);
+        DriveInfo drive = new DriveInfo(root);
+        long required = checked(info.Length * possibleCopies + 128L * 1024L * 1024L);
+        if (drive.AvailableFreeSpace < required)
+            throw new IOException("备份空间不足；至少需要 " +
+                (required / 1024L / 1024L).ToString(CultureInfo.InvariantCulture) +
+                " MB 可用空间。");
+    }
+
+    private static bool IsFpsGameRunning()
+    {
+        string[] names = new string[] { "lifeafter", "mingrizhihou" };
+        foreach (string name in names)
+        {
+            try
+            {
+                if (Process.GetProcessesByName(name).Length > 0) return true;
+            }
+            catch { }
+        }
+        return false;
+    }
+
+    private static void EnsureFpsGameStopped()
+    {
+        if (IsFpsGameRunning())
+            throw new InvalidOperationException("请先完全退出游戏，再修改或恢复帧率补丁。");
+    }
+
+    private static string ComputeFpsNormalizedArchiveHash(
+        FileStream stream,
+        FpsNxpkRecord record,
+        byte[] originalPatch)
+    {
+        stream.Position = 0;
+        using (SHA256 sha = SHA256.Create())
+        {
+            byte[] buffer = new byte[4 * 1024 * 1024];
+            FpsHashRange(stream, sha, record.DataOffset, buffer);
+            sha.TransformBlock(originalPatch, 0, originalPatch.Length, null, 0);
+            stream.Position = record.DataOffset + record.CompressedSize;
+            FpsHashRange(stream, sha, stream.Length - stream.Position, buffer);
+            sha.TransformFinalBlock(new byte[0], 0, 0);
+            return FpsHex(sha.Hash);
+        }
+    }
+
+    private static void ComputeFpsArchiveHashes(
+        FileStream stream,
+        FpsNxpkRecord record,
+        byte[] currentSlot,
+        byte[] originalPatch,
+        out string packageHash,
+        out string normalizedHash)
+    {
+        if (currentSlot.Length != record.CompressedSize ||
+            originalPatch.Length != record.CompressedSize)
+            throw new InvalidDataException("帧率槽位长度不匹配。");
+
+        stream.Position = 0;
+        using (SHA256 packageSha = SHA256.Create())
+        using (SHA256 normalizedSha = SHA256.Create())
+        {
+            byte[] buffer = new byte[4 * 1024 * 1024];
+            FpsHashRangePair(
+                stream, packageSha, normalizedSha, record.DataOffset, buffer);
+            packageSha.TransformBlock(currentSlot, 0, currentSlot.Length, null, 0);
+            normalizedSha.TransformBlock(originalPatch, 0, originalPatch.Length, null, 0);
+            stream.Position = record.DataOffset + record.CompressedSize;
+            FpsHashRangePair(
+                stream,
+                packageSha,
+                normalizedSha,
+                stream.Length - stream.Position,
+                buffer);
+            packageSha.TransformFinalBlock(new byte[0], 0, 0);
+            normalizedSha.TransformFinalBlock(new byte[0], 0, 0);
+            packageHash = FpsHex(packageSha.Hash);
+            normalizedHash = FpsHex(normalizedSha.Hash);
+        }
+    }
+
+    private static void FpsHashRangePair(
+        FileStream stream,
+        HashAlgorithm first,
+        HashAlgorithm second,
+        long count,
+        byte[] buffer)
+    {
+        long remaining = count;
+        while (remaining > 0)
+        {
+            int wanted = (int)Math.Min(buffer.Length, remaining);
+            int read = stream.Read(buffer, 0, wanted);
+            if (read <= 0) throw new EndOfStreamException();
+            first.TransformBlock(buffer, 0, read, null, 0);
+            second.TransformBlock(buffer, 0, read, null, 0);
+            remaining -= read;
+        }
+    }
+
+    private static void FpsHashRange(
+        FileStream stream,
+        HashAlgorithm hash,
+        long count,
+        byte[] buffer)
+    {
+        long remaining = count;
+        while (remaining > 0)
+        {
+            int wanted = (int)Math.Min(buffer.Length, remaining);
+            int read = stream.Read(buffer, 0, wanted);
+            if (read <= 0) throw new EndOfStreamException();
+            hash.TransformBlock(buffer, 0, read, null, 0);
+            remaining -= read;
+        }
+    }
+
+    private static byte[] FpsReadAt(FileStream stream, long offset, int count)
+    {
+        byte[] data = new byte[count];
+        stream.Position = offset;
+        int total = 0;
+        while (total < count)
+        {
+            int read = stream.Read(data, total, count - total);
+            if (read <= 0) throw new EndOfStreamException();
+            total += read;
+        }
+        return data;
+    }
+
+    private static void FpsWriteAt(FileStream stream, long offset, byte[] data)
+    {
+        stream.Position = offset;
+        stream.Write(data, 0, data.Length);
+        stream.Flush(true);
+    }
+
+    private static uint FpsReadUInt32(byte[] data, int offset)
+    {
+        return (uint)(
+            data[offset] |
+            (data[offset + 1] << 8) |
+            (data[offset + 2] << 16) |
+            (data[offset + 3] << 24));
+    }
+
+    private static byte[] FpsDecryptAesEcb(byte[] encrypted)
+    {
+        if (encrypted.Length % 16 != 0)
+            throw new InvalidDataException("NXPK AES 数据未按 16 字节对齐。");
+        using (Aes aes = Aes.Create())
+        {
+            aes.Key = FpsNxpkKey;
+            aes.Mode = CipherMode.ECB;
+            aes.Padding = PaddingMode.None;
+            using (ICryptoTransform transform = aes.CreateDecryptor())
+                return transform.TransformFinalBlock(encrypted, 0, encrypted.Length);
+        }
+    }
+
+    private static string FpsSha256(byte[] data)
+    {
+        using (SHA256 sha = SHA256.Create()) return FpsHex(sha.ComputeHash(data));
+    }
+
+    private static string FpsSha256File(string path)
+    {
+        using (FileStream stream = File.OpenRead(path)) return FpsSha256File(stream);
+    }
+
+    private static string FpsSha256File(FileStream stream)
+    {
+        long originalPosition = stream.Position;
+        try
+        {
+            stream.Position = 0;
+            using (SHA256 sha = SHA256.Create()) return FpsHex(sha.ComputeHash(stream));
+        }
+        finally
+        {
+            stream.Position = originalPosition;
+        }
+    }
+
+    private static string FpsHex(byte[] data)
+    {
+        StringBuilder result = new StringBuilder(data.Length * 2);
+        foreach (byte value in data)
+            result.Append(value.ToString("X2", CultureInfo.InvariantCulture));
+        return result.ToString();
     }
 
     private static string CaptureInstancesJson()

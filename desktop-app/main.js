@@ -9,6 +9,11 @@ const { HistoryStore } = require('./history-store');
 const execFileAsync = promisify(execFile);
 const cpuHistory = new Map();
 let historyStore = null;
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
 
 function backendDir() {
   return app.isPackaged
@@ -26,6 +31,27 @@ function savedRootPath() {
 
 function persistentRootPath() {
   return path.join(app.getPath('userData'), 'game-root.txt');
+}
+
+function fpsPreferencePath() {
+  return path.join(app.getPath('userData'), 'fps-unlock-preference.json');
+}
+
+function readFpsPreference() {
+  try {
+    const value = Number(JSON.parse(fs.readFileSync(fpsPreferencePath(), 'utf8')).target);
+    if ([120, 180, 240, 300].includes(value)) return value;
+  } catch {
+  }
+  return 180;
+}
+
+function saveFpsPreference(target) {
+  const value = Number(target);
+  if (![120, 180, 240, 300].includes(value)) return false;
+  fs.mkdirSync(path.dirname(fpsPreferencePath()), { recursive: true });
+  fs.writeFileSync(fpsPreferencePath(), JSON.stringify({ target: value }, null, 2), 'utf8');
+  return true;
 }
 
 function readSavedRoot() {
@@ -99,6 +125,17 @@ async function getInstances() {
   }
 }
 
+async function getFpsStatus() {
+  const result = await runBackend(['--fps-status'], 120000);
+  if (!result.ok) return result;
+  try {
+    const data = JSON.parse(result.text);
+    return data.ok ? { ok: true, data } : { ok: false, error: data.error || '帧率包体状态不可用' };
+  } catch (error) {
+    return { ok: false, error: `帧率状态解析失败：${error.message}` };
+  }
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -133,10 +170,11 @@ ipcMain.handle('launcher:init', async () => {
   if (persistedRoot) {
     await runBackend(['--set-root', persistedRoot], 10000);
   }
-  const [rootResult, summary, instances] = await Promise.all([
+  const [rootResult, summary, instances, fpsStatus] = await Promise.all([
     runBackend(['--get-root'], 10000),
     runBackend(['--read-summary'], 10000),
-    getInstances()
+    getInstances(),
+    getFpsStatus()
   ]);
   const detectedRoot = rootResult.ok ? rootResult.text : persistedRoot;
   if (detectedRoot) {
@@ -147,7 +185,9 @@ ipcMain.handle('launcher:init', async () => {
     ok: true,
     root: detectedRoot,
     summary: summary.ok ? summary.text : '未找到游戏目录',
-    instances: instances.ok ? instances.data : { instances: [] }
+    instances: instances.ok ? instances.data : { instances: [] },
+    fpsStatus: fpsStatus.ok ? fpsStatus.data : { ok: false, error: fpsStatus.error },
+    fpsTargetPreference: readFpsPreference()
   };
 });
 
@@ -179,6 +219,24 @@ ipcMain.handle('launcher:restore-factory', () => runBackend(['--restore-factory'
 ipcMain.handle('launcher:clean-backups', () => runBackend(['--clean-backups'], 20000));
 ipcMain.handle('launcher:set-tiaozi', (_event, scale) =>
   runBackend(['--set-tiaozi', String(scale)], 20000));
+ipcMain.handle('launcher:get-fps-status', () => getFpsStatus());
+ipcMain.handle('launcher:save-fps-target', (_event, target) => ({
+  ok: saveFpsPreference(target)
+}));
+ipcMain.handle('launcher:apply-fps', async (_event, target) => {
+  const value = Number(target);
+  if (![180, 240, 300].includes(value)) return { ok: false, error: '不支持的帧率目标' };
+  const result = await runBackend(['--fps-apply', String(value)], 300000);
+  if (result.ok) saveFpsPreference(value);
+  return result;
+});
+ipcMain.handle('launcher:restore-fps', async () => {
+  const result = await runBackend(['--fps-restore'], 300000);
+  if (result.ok) saveFpsPreference(120);
+  return result;
+});
+ipcMain.handle('launcher:clean-fps-backups', () =>
+  runBackend(['--fps-clean-backups'], 300000));
 
 ipcMain.handle('launcher:open-backups', async () => {
   const root = readSavedRoot();
@@ -225,11 +283,29 @@ ipcMain.handle('launcher:open-history-folder', async () => {
 });
 
 app.whenReady().then(() => {
+  if (!hasSingleInstanceLock) return;
   historyStore = new HistoryStore(path.join(app.getPath('userData'), 'history'));
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+ipcMain.handle('launcher:open-fps-backups', async () => {
+  const root = readSavedRoot();
+  if (!root) return { ok: false, error: '请先选择游戏目录' };
+  const target = path.join(root, 'Documents', 'fps_unlock_backups');
+  fs.mkdirSync(target, { recursive: true });
+  const error = await shell.openPath(target);
+  return error ? { ok: false, error } : { ok: true };
+});
+
+app.on('second-instance', () => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
 });
 
 app.on('before-quit', () => {

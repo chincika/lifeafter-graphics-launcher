@@ -27,6 +27,7 @@
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
     <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v5c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-3Z"/><path d="m9 12 2 2 4-5"/></symbol>
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 17a8 8 0 1 1 16 0"/><path d="m12 13 4-4M7 17h10"/></symbol>
   </svg>
 
   <header class="topbar">
@@ -50,13 +51,16 @@
         <button class="nav-item" data-view="history" aria-label="记录">
           <svg><use href="#i-clock"/></svg><span>记录</span>
         </button>
+        <button class="nav-item" data-view="fps" aria-label="帧率解锁">
+          <small class="nav-badge">NEW</small><svg><use href="#i-gauge"/></svg><span>帧率解锁</span>
+        </button>
         <button class="nav-item" data-view="tools" aria-label="工具">
           <svg><use href="#i-wrench"/></svg><span>工具</span>
         </button>
       </nav>
       <div class="sidebar-foot">
         <button class="icon-button" id="aboutButton" aria-label="关于"><svg><use href="#i-info"/></svg></button>
-        <span>v2.0</span>
+        <span>v2.1</span>
       </div>
     </aside>
 
@@ -64,15 +68,19 @@
       <section class="hero">
         <div class="hero-overlay"></div>
         <div class="hero-copy">
-          <span class="eyebrow">LIFEAFTER · GRAPHICS</span>
-          <h1>画质与实例，一处掌控</h1>
-          <p>安全切换预设、稳定多开、实时观察每个窗口。</p>
+          <span class="eyebrow" id="heroEyebrow">LIFEAFTER · GRAPHICS</span>
+          <h1 id="heroTitle">画质与实例，一处掌控</h1>
+          <p id="heroDescription">安全切换预设、稳定多开、实时观察每个窗口。</p>
         </div>
         <button class="path-pill" id="chooseRootButton">
           <svg><use href="#i-folder"/></svg>
           <span class="path-copy"><small>游戏目录</small><strong id="gameRoot">正在检测…</strong></span>
           <svg class="chevron"><use href="#i-chevron"/></svg>
         </button>
+        <div class="fps-takeover-pill" id="fpsTakeoverPill" hidden>
+          <svg><use href="#i-gauge"/></svg>
+          <span><small>当前接管规则</small><strong id="fpsHeroRule">配置选择 120 FPS → 游戏实际 180 FPS</strong></span>
+        </div>
       </section>
 
       <section id="launchView" class="view active">
@@ -229,7 +237,122 @@
             <button class="button secondary" id="exportHistory"><svg><use href="#i-list"/></svg>导出 CSV</button>
             <button class="button ghost" id="openHistoryFolder"><svg><use href="#i-folder"/></svg>打开记录目录</button>
           </div>
-          <p><svg><use href="#i-info"/></svg>从检测到游戏进程开始统计；游戏退出或关闭启动器时封存，游戏 ID 直接作为实例名称。</p>
+          <p><svg><use href="#i-info"/></svg>切换游戏 ID 会自动分段；总时长按多个窗口共同覆盖的时间去重。</p>
+        </div>
+      </section>
+
+      <section id="fpsView" class="view">
+        <div class="fps-layout">
+          <div class="fps-stack">
+            <section class="glass-card fps-target-card">
+              <div class="fps-section-head">
+                <div>
+                  <span class="section-kicker">UNLOCK TARGET</span>
+                  <h2>选择 120 FPS 档的实际目标</h2>
+                  <p>只接管原生 120 档；写入前完整备份，成功后自动清理冗余备份。</p>
+                </div>
+                <span class="fps-state-badge" id="fpsStateBadge"><i></i><b>正在检测包体…</b></span>
+              </div>
+              <div class="fps-targets" role="radiogroup" aria-label="帧率接管目标">
+                <button class="fps-target" data-fps-target="120" role="radio" aria-checked="false">
+                  <i></i><small>OFFICIAL</small><b>120 <span>FPS</span></b>
+                  <p>不接管<br>使用官方原始逻辑</p>
+                </button>
+                <button class="fps-target active" data-fps-target="180" role="radio" aria-checked="true">
+                  <i></i><small>RECOMMENDED</small><b>180 <span>FPS</span></b>
+                  <p>120 档 → 180<br>兼顾负载与流畅度</p>
+                </button>
+                <button class="fps-target" data-fps-target="240" role="radio" aria-checked="false">
+                  <i></i><small>HIGH</small><b>240 <span>FPS</span></b>
+                  <p>120 档 → 240<br>适合高刷设备</p>
+                </button>
+                <button class="fps-target" data-fps-target="300" role="radio" aria-checked="false">
+                  <i></i><small>EXPERIMENTAL</small><b>300 <span>FPS</span></b>
+                  <p>120 档 → 300<br>实验档，负载更高</p>
+                </button>
+              </div>
+            </section>
+
+            <section class="glass-card fps-route-card">
+              <div class="fps-route-head">
+                <div><span class="section-kicker">FRAME ROUTE</span><h2>配置档位生效路径</h2></div>
+                <div class="fps-route-legend"><span><i></i>原样直通</span><span><i></i>接管替换</span></div>
+              </div>
+              <div class="fps-rail">
+                <div class="fps-node"><i></i><b>25</b><small>保持 25</small></div>
+                <div class="fps-node"><i></i><b>30</b><small>保持 30</small></div>
+                <div class="fps-node"><i></i><b>40</b><small>保持 40</small></div>
+                <div class="fps-node"><i></i><b>50</b><small>保持 50</small></div>
+                <div class="fps-node"><i></i><b>60</b><small>保持 60</small></div>
+                <div class="fps-node"><i></i><b>90</b><small>保持 90</small></div>
+                <div class="fps-node takeover"><i></i><b id="fpsRouteTarget">120 → 180</b><small>由启动器接管</small></div>
+              </div>
+              <div class="fps-route-note">
+                <svg><use href="#i-info"/></svg>
+                <span>启用后，游戏界面的“120 FPS”名称不再代表真实上限；启动页会显示当前实际映射值。</span>
+              </div>
+              <div class="fps-guidance-area">
+                <section class="fps-retention-panel">
+                  <div class="retention-heading">
+                    <span class="retention-shield"><svg><use href="#i-shield"/></svg></span>
+                    <div>
+                      <small>BACKUP RETENTION</small>
+                      <strong>官方初始还原点，永久保留</strong>
+                      <p>无论自动清理还是手动清理，都不会删除这份从未修改的数据包。</p>
+                    </div>
+                    <span class="permanent-badge">永久</span>
+                  </div>
+                  <div class="retention-flow">
+                    <span><i>1</i><b>写入前</b><small>创建完整事务备份</small></span>
+                    <em></em>
+                    <span><i>2</i><b>应用成功</b><small>自动清理更早备份</small></span>
+                    <em></em>
+                    <span class="keep"><i>3</i><b>最终保留</b><small>官方原包 + 最新 1 份</small></span>
+                  </div>
+                  <div class="retention-foot"><svg><use href="#i-check"/></svg>失败或校验未通过时不会执行自动清理</div>
+                </section>
+                <div class="fps-guidance-stack">
+                  <div class="fps-launch-link">
+                    <small>启动页联动提示</small>
+                    <p id="fpsLaunchHint">选择“2K 120”等预设时，将显示“配置 120 · 实际 180”；其他帧率预设保持原标签。</p>
+                  </div>
+                  <div class="fps-warning">
+                    <strong>联网游戏文件修改提示</strong>
+                    应用与恢复时要求游戏完全退出；本功能不包含反作弊绕过。
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <aside class="glass-card fps-package-card">
+            <div class="fps-section-head">
+              <div><span class="section-kicker">PACKAGE & RECOVERY</span><h2>包体与恢复保护</h2></div>
+              <button class="fps-refresh" id="refreshFpsStatus" aria-label="刷新帧率状态"><svg><use href="#i-refresh"/></svg></button>
+            </div>
+            <div class="fps-package-state" id="fpsPackageState">
+              <span><svg><use href="#i-shield"/></svg></span>
+              <div><strong>正在识别包体</strong><p>读取 NXPK v3 与 SettingManager 目标槽位</p></div>
+            </div>
+            <div class="fps-details">
+              <div><span>当前状态</span><b class="accent" id="fpsCurrentState">检测中</b></div>
+              <div><span>接管范围</span><b>仅原 120 FPS 档</b></div>
+              <div><span>其他档位</span><b class="ok">保持配置文件控制</b></div>
+              <div><span>官方初始还原点</span><b id="fpsBaselineState">首次应用时创建</b></div>
+              <div><span>备份保留</span><b id="fpsBackupCount">0 份临时</b></div>
+              <div><span>写后校验</span><b class="ok">槽位 + 槽外整包</b></div>
+            </div>
+            <div class="fps-actions">
+              <button class="button primary" id="applyFpsUnlock">应用 180 FPS 接管并备份</button>
+              <button class="button secondary" id="restoreFpsUnlock">恢复官方原版帧率逻辑</button>
+              <button class="button fps-backup-clean" id="cleanFpsBackups">
+                <svg><use href="#i-list"/></svg>
+                <span><b>清理冗余备份</b><small>保留官方初始还原点</small></span>
+              </button>
+              <button class="button ghost" id="openFpsBackups"><svg><use href="#i-folder"/></svg>打开完整备份目录</button>
+            </div>
+            <p class="fps-micro" id="fpsPackagePath">应用后重新启动的游戏实例生效</p>
+          </aside>
         </div>
       </section>
 
@@ -256,7 +379,7 @@
             <p>所有配置与实例数据都只在本机处理。已为后续局域网副屏监控预留数据接口。</p>
             <div class="about-line"><span>界面引擎</span><b>Electron · Fluent UI</b></div>
             <div class="about-line"><span>本地后台</span><b>C# · .NET Framework</b></div>
-            <div class="about-line"><span>版本</span><b>v2.0.0</b></div>
+            <div class="about-line"><span>版本</span><b>v2.1.0</b></div>
           </aside>
         </div>
       </section>

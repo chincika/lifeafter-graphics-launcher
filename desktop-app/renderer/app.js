@@ -19,6 +19,10 @@ let currentView = 'launch';
 let currentHistoryRange = 'week';
 let historyLoading = false;
 let lastHistoryRefresh = 0;
+let fpsStatus = null;
+let selectedFpsTarget = 180;
+let busyButton = null;
+let fpsStatusLoading = false;
 
 function icon(name) {
   return `<svg aria-hidden="true"><use href="#i-${name}"></use></svg>`;
@@ -44,19 +48,71 @@ function setActivity(message, detail = '', kind = 'success') {
   iconBox.style.background = kind === 'error' ? 'rgba(239,107,114,.12)' : 'rgba(67,208,138,.12)';
 }
 
+function syncFpsActionAvailability() {
+  const applyButton = $('#applyFpsUnlock');
+  const restoreButton = $('#restoreFpsUnlock');
+  const cleanButton = $('#cleanFpsBackups');
+  const refreshButton = $('#refreshFpsStatus');
+  const state = String(fpsStatus?.state || '');
+  const safe = Boolean(
+    fpsStatus &&
+    fpsStatus.compatible &&
+    state !== 'unknown' &&
+    !fpsStatus.gameRunning
+  );
+
+  if (applyButton) applyButton.disabled = busy || !safe;
+  if (restoreButton) restoreButton.disabled = busy || !safe || state === 'original';
+  if (cleanButton) {
+    cleanButton.disabled = busy || !fpsStatus?.baselineReady;
+  }
+  if (refreshButton) refreshButton.disabled = busy || fpsStatusLoading;
+  $$('.fps-target').forEach(button => {
+    button.disabled = busy;
+  });
+}
+
 function setBusy(value, activeButton) {
+  if (busyButton && (!value || busyButton !== activeButton)) {
+    busyButton.classList.remove('loading');
+  }
   busy = value;
   $$('.button, .tool-tile, .row-run').forEach(button => button.disabled = value);
-  if (activeButton) activeButton.classList.toggle('loading', value);
+  if (value && activeButton) {
+    busyButton = activeButton;
+    busyButton.classList.add('loading');
+  } else if (!value) {
+    busyButton = null;
+  }
+  syncFpsActionAvailability();
+}
+
+function fpsPresentation(preset) {
+  const native120 = preset.fps === '120 FPS';
+  if (!fpsStatus) return { title: preset.fps, detail: preset.fps };
+  if (String(fpsStatus.state).startsWith('conditional-') && native120) {
+    return {
+      title: `实际 ${fpsStatus.target} FPS`,
+      detail: `配置 120 · 实际 ${fpsStatus.target} FPS`
+    };
+  }
+  if (String(fpsStatus.state).startsWith('legacy-')) {
+    return {
+      title: `实际 ${fpsStatus.target} FPS`,
+      detail: `旧补丁全局强制 ${fpsStatus.target} FPS`
+    };
+  }
+  return { title: preset.fps, detail: preset.fps };
 }
 
 function updatePreset(value) {
   const preset = presets[value] || presets['2K 120'];
+  const fps = fpsPresentation(preset);
   $('#presetSelect').value = value;
   $('#resolutionLabel').textContent = preset.label;
-  $('#fpsLabel').textContent = preset.fps;
+  $('#fpsLabel').textContent = fps.title;
   $('#resolutionValue').textContent = preset.resolution;
-  $('#fpsValue').textContent = preset.fps;
+  $('#fpsValue').textContent = fps.detail;
   $$('.quality-tabs button').forEach(button => {
     button.classList.toggle('active', button.dataset.preset === value);
   });
@@ -86,7 +142,7 @@ function renderPlanRows() {
       <span class="row-icon">${icon('monitor')}</span>
       <span class="plan-name"><b>${row.name}</b><small>${escapeHtml(row.preset)} · ${info.tone}</small></span>
       <span class="plan-meta">${info.resolution}</span>
-      <span class="plan-meta">${info.fps}</span>
+      <span class="plan-meta">${escapeHtml(fpsPresentation(info).detail)}</span>
       <button class="row-run" data-run-index="${index}" aria-label="启动${row.name}">${icon('play')}</button>
     </div>`;
   }).join('');
@@ -216,7 +272,7 @@ function renderInstances(payload) {
     return `<article class="instance-card">
       <div class="instance-head"><i></i><b>${escapeHtml(name)}</b><span>运行中</span><code>PID ${item.pid}</code></div>
       <div class="instance-metrics">
-        <div class="instance-metric"><small>窗口</small><strong>${resolution} · ${profile.fps}</strong></div>
+        <div class="instance-metric"><small>窗口</small><strong>${resolution} · ${escapeHtml(fpsPresentation(profile).detail)}</strong></div>
         <div class="instance-metric"><small>CPU</small><strong>${cpu.toFixed(0)}%</strong><div class="usage"><i style="width:${Math.max(2,cpu)}%"></i></div></div>
         <div class="instance-metric"><small>内存</small><strong>${memoryGb.toFixed(1)} GB</strong><div class="usage"><i style="width:${memoryRatio}%"></i></div></div>
         <div class="instance-metric"><small>运行时长</small><strong>${formatDuration(item.runningSeconds)}</strong></div>
@@ -242,15 +298,21 @@ async function applyPreset(preset, launch, button) {
   if (busy) return false;
   setBusy(true, button);
   setActivity(launch ? `正在应用 ${preset} 并启动…` : `正在应用 ${preset}…`);
-  const result = await window.launcher.applyPreset(preset, launch);
-  setBusy(false, button);
-  if (result.ok) {
-    setActivity(launch ? `${preset} 已应用，游戏正在启动` : `${preset} 已应用`, result.text);
-    setTimeout(() => refreshInstances(), 1600);
-    return true;
+  try {
+    const result = await window.launcher.applyPreset(preset, launch);
+    if (result.ok) {
+      setActivity(launch ? `${preset} 已应用，游戏正在启动` : `${preset} 已应用`, result.text);
+      setTimeout(() => refreshInstances(), 1600);
+      return true;
+    }
+    setActivity('操作失败', result.error, 'error');
+    return false;
+  } catch (error) {
+    setActivity('操作失败', error?.message || String(error), 'error');
+    return false;
+  } finally {
+    setBusy(false, button);
   }
-  setActivity('操作失败', result.error, 'error');
-  return false;
 }
 
 function confirmDialog(title, message, confirmText = '继续') {
@@ -339,9 +401,192 @@ async function runTool(action, button) {
   }
   setBusy(true, button);
   setActivity(config[0]);
-  const result = await config[1]();
-  setBusy(false, button);
-  result.ok ? setActivity('操作已完成', result.text || config[0]) : setActivity('操作失败', result.error, 'error');
+  try {
+    const result = await config[1]();
+    result.ok ? setActivity('操作已完成', result.text || config[0]) : setActivity('操作失败', result.error, 'error');
+  } catch (error) {
+    setActivity('操作失败', error?.message || String(error), 'error');
+  } finally {
+    setBusy(false, button);
+  }
+}
+
+function renderFpsTargetSelection() {
+  $$('.fps-target').forEach(button => {
+    const active = Number(button.dataset.fpsTarget) === selectedFpsTarget;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-checked', String(active));
+  });
+  const route = selectedFpsTarget === 120 ? '120 · 官方原版' : `120 → ${selectedFpsTarget}`;
+  $('#fpsRouteTarget').textContent = route;
+  $('#fpsHeroRule').textContent = selectedFpsTarget === 120
+    ? '配置选择 120 FPS → 游戏官方原始 120 FPS'
+    : `配置选择 120 FPS → 游戏实际 ${selectedFpsTarget} FPS`;
+  $('#fpsLaunchHint').textContent = selectedFpsTarget === 120
+    ? '恢复后，“2K 120”等预设继续使用官方 120 FPS；25/60 FPS 预设保持原标签。'
+    : `选择“2K 120”等预设时，将显示“配置 120 · 实际 ${selectedFpsTarget}”；25/60 FPS 预设保持原标签。`;
+  $('#applyFpsUnlock').textContent = selectedFpsTarget === 120
+    ? '恢复官方原版帧率逻辑'
+    : `应用 ${selectedFpsTarget} FPS 接管并备份`;
+}
+
+function renderFpsStatus(status) {
+  fpsStatus = status?.ok === false ? null : status;
+  const stateBadge = $('#fpsStateBadge');
+  const packageState = $('#fpsPackageState');
+  stateBadge.className = 'fps-state-badge';
+  packageState.className = 'fps-package-state';
+
+  if (!fpsStatus) {
+    const error = status?.error || '无法读取帧率包体状态';
+    stateBadge.classList.add('error');
+    stateBadge.querySelector('b').textContent = '包体不可用';
+    packageState.classList.add('error');
+    packageState.querySelector('strong').textContent = '当前包体无法安全修改';
+    packageState.querySelector('p').textContent = error;
+    $('#fpsCurrentState').textContent = '不可用';
+    $('#fpsBaselineState').textContent = '未检测';
+    $('#fpsBackupCount').textContent = '未检测';
+    $('#fpsPackagePath').textContent = error;
+    syncFpsActionAvailability();
+    renderFpsTargetSelection();
+    updatePreset($('#presetSelect').value);
+    renderPlanRows();
+    return;
+  }
+
+  const legacy = String(fpsStatus.state).startsWith('legacy-');
+  const unknown = fpsStatus.state === 'unknown';
+  const safe = fpsStatus.compatible && !unknown;
+  if (!safe || fpsStatus.gameRunning || legacy) {
+    stateBadge.classList.add(safe ? 'warning' : 'error');
+  }
+  stateBadge.querySelector('b').textContent = fpsStatus.gameRunning
+    ? '游戏运行中 · 已锁定写入'
+    : legacy
+      ? '检测到旧版全局强制补丁'
+      : safe
+        ? `当前已识别 · ${fpsStatus.stateLabel}`
+        : '包体版本或槽位不兼容';
+
+  if (!safe) packageState.classList.add('error');
+  packageState.querySelector('strong').textContent = safe ? '当前包体已识别' : '当前包体拒绝写入';
+  packageState.querySelector('p').textContent = safe
+    ? 'NXPK v3 · SettingManager 槽位匹配 · 槽外整包哈希通过'
+    : '版本锁、目标槽或槽外整包哈希未通过';
+  $('#fpsCurrentState').textContent = fpsStatus.stateLabel;
+  $('#fpsBaselineState').textContent = fpsStatus.baselineReady
+    ? '永久保留 · 官方初始原包'
+    : '首次应用时自动创建';
+  $('#fpsBaselineState').className = fpsStatus.baselineReady ? 'ok' : '';
+  const transactionBackupCount = Number(
+    fpsStatus.transactionBackupCount ??
+    Math.max(0, Number(fpsStatus.backupCount || 0) - (fpsStatus.baselineReady ? 1 : 0))
+  );
+  $('#fpsBackupCount').textContent = fpsStatus.baselineReady
+    ? transactionBackupCount === 1
+      ? '1 份最新 + 1 份永久'
+      : `${transactionBackupCount} 份事务 + 1 份永久`
+    : `${transactionBackupCount} 份事务备份`;
+  $('#fpsPackagePath').textContent = fpsStatus.packagePath;
+  syncFpsActionAvailability();
+  renderFpsTargetSelection();
+  updatePreset($('#presetSelect').value);
+  renderPlanRows();
+}
+
+async function loadFpsStatus(silent = false) {
+  if (fpsStatusLoading) return;
+  fpsStatusLoading = true;
+  const refreshButton = $('#refreshFpsStatus');
+  refreshButton?.classList.add('loading');
+  syncFpsActionAvailability();
+  try {
+    const result = await window.launcher.getFpsStatus();
+    renderFpsStatus(result.ok ? result.data : { ok: false, error: result.error });
+    if (!silent) {
+      result.ok
+        ? setActivity('帧率包体状态已刷新', result.data.stateLabel)
+        : setActivity('帧率包体状态不可用', result.error, 'error');
+    }
+  } catch (error) {
+    const message = error?.message || String(error);
+    renderFpsStatus({ ok: false, error: message });
+    if (!silent) setActivity('帧率包体状态不可用', message, 'error');
+  } finally {
+    fpsStatusLoading = false;
+    refreshButton?.classList.remove('loading');
+    syncFpsActionAvailability();
+  }
+}
+
+async function chooseFpsTarget(target) {
+  selectedFpsTarget = target;
+  renderFpsTargetSelection();
+  await window.launcher.saveFpsTarget(target);
+}
+
+async function applySelectedFpsTarget(button) {
+  if (busy || !fpsStatus) return;
+  const restoring = selectedFpsTarget === 120;
+  const accepted = await confirmDialog(
+    restoring ? '恢复官方帧率逻辑' : `接管 120 FPS 档为 ${selectedFpsTarget} FPS`,
+    restoring
+      ? '启动器会先完整备份当前 NPK，再恢复官方原始槽位并校验整包 SHA-256。成功后只保留最新事务备份，官方初始还原点永久保留。请确认游戏已经完全退出。'
+      : `只有原生 120 FPS 档会被替换为 ${selectedFpsTarget} FPS，25/30/40/50/60/90 保持原样。\n启动器会先创建完整 NPK 事务备份；成功后自动清理更早备份，官方初始还原点永久保留。`,
+    restoring ? '备份并恢复' : '备份并应用'
+  );
+  if (!accepted) return;
+  setBusy(true, button);
+  setActivity(
+    restoring ? '正在创建完整备份并恢复官方帧率…' : `正在创建完整备份并应用 ${selectedFpsTarget} FPS 接管…`,
+    '正在处理约 323 MB 的游戏包，请保持启动器开启'
+  );
+  try {
+    const result = restoring
+      ? await window.launcher.restoreFpsUnlock()
+      : await window.launcher.applyFpsUnlock(selectedFpsTarget);
+    if (result.ok) {
+      setActivity(restoring ? '官方帧率逻辑已恢复' : `120 FPS 档已接管为 ${selectedFpsTarget} FPS`, result.text);
+    } else {
+      setActivity('帧率补丁操作失败', result.error, 'error');
+    }
+    await loadFpsStatus(true);
+  } catch (error) {
+    setActivity('帧率补丁操作失败', error?.message || String(error), 'error');
+    await loadFpsStatus(true);
+  } finally {
+    setBusy(false, button);
+  }
+}
+
+async function cleanFpsTransactionBackups(button) {
+  if (busy || !fpsStatus?.baselineReady) return;
+  const transactionBackupCount = Number(fpsStatus.transactionBackupCount || 0);
+
+  const accepted = await confirmDialog(
+    '清理冗余帧率备份',
+    transactionBackupCount > 0
+      ? `将删除 ${transactionBackupCount} 份事务备份，仅保留经过 SHA-256 验证的官方初始还原点。\n该官方还原点不会被删除。`
+      : '当前没有事务备份。启动器仍会重新验证官方初始还原点，且不会删除该还原点。',
+    '确认清理'
+  );
+  if (!accepted) return;
+
+  setBusy(true, button);
+  setActivity('正在验证官方还原点并清理事务备份…');
+  try {
+    const result = await window.launcher.cleanFpsBackups();
+    result.ok
+      ? setActivity('冗余帧率备份已清理', result.text)
+      : setActivity('帧率备份清理失败', result.error, 'error');
+    await loadFpsStatus(true);
+  } catch (error) {
+    setActivity('帧率备份清理失败', error?.message || String(error), 'error');
+    await loadFpsStatus(true);
+  } finally {
+    setBusy(false, button);
+  }
 }
 
 function switchView(view) {
@@ -349,12 +594,22 @@ function switchView(view) {
   $$('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === view));
   $('#launchView').classList.toggle('active', view === 'launch' || view === 'multi');
   $('#historyView').classList.toggle('active', view === 'history');
+  $('#fpsView').classList.toggle('active', view === 'fps');
   $('#toolsView').classList.toggle('active', view === 'tools');
   $('.main').classList.toggle('history-mode', view === 'history');
+  const fpsMode = view === 'fps';
+  $('#heroEyebrow').textContent = fpsMode ? 'LIFEAFTER · FRAME ROUTING' : 'LIFEAFTER · GRAPHICS';
+  $('#heroTitle').textContent = fpsMode ? '只接管 120，其余档位照常' : '画质与实例，一处掌控';
+  $('#heroDescription').textContent = fpsMode
+    ? '保留原有低帧与中帧配置，仅将游戏的 120 FPS 档映射到新的高帧目标。'
+    : '安全切换预设、稳定多开、实时观察每个窗口。';
+  $('#chooseRootButton').hidden = fpsMode;
+  $('#fpsTakeoverPill').hidden = !fpsMode;
   if (view === 'multi') {
     setTimeout(() => $('#plansCard').scrollIntoView({ behavior: 'smooth', block: 'center' }), 20);
   }
   if (view === 'history') loadHistory(currentHistoryRange, true);
+  if (view === 'fps') loadFpsStatus(true);
 }
 
 async function initialize() {
@@ -368,6 +623,10 @@ async function initialize() {
   $('#gameRoot').textContent = result.root || '点击选择游戏目录';
   $('#topStatus').textContent = result.root ? '游戏已就绪' : '等待配置';
   renderInstances(result.instances);
+  selectedFpsTarget = [120, 180, 240, 300].includes(Number(result.fpsTargetPreference))
+    ? Number(result.fpsTargetPreference)
+    : 180;
+  renderFpsStatus(result.fpsStatus || { ok: false, error: '未返回帧率包体状态' });
   const match = String(result.summary || '').match(/当前档位：([^/]+)/);
   if (match && presets[match[1].trim()]) updatePreset(match[1].trim());
   setActivity(result.root ? '游戏环境检测通过，可以启动' : '请先选择游戏目录', result.summary);
@@ -387,6 +646,7 @@ $('#chooseRootButton').addEventListener('click', async () => {
     $('#gameRoot').textContent = result.root;
     $('#topStatus').textContent = '游戏已就绪';
     setActivity('游戏目录已更新', result.root);
+    await loadFpsStatus(true);
   } else if (!result.canceled) {
     setActivity('目录选择失败', result.error, 'error');
   }
@@ -415,15 +675,39 @@ $('#readConfigButton').addEventListener('click', async () => {
   result.ok ? setActivity('已读取当前配置', result.text) : setActivity('读取失败', result.error, 'error');
 });
 
+$$('.fps-target').forEach(button =>
+  button.addEventListener('click', () => chooseFpsTarget(Number(button.dataset.fpsTarget))));
+$('#refreshFpsStatus').addEventListener('click', () => loadFpsStatus(false));
+$('#applyFpsUnlock').addEventListener('click', event => applySelectedFpsTarget(event.currentTarget));
+$('#restoreFpsUnlock').addEventListener('click', async event => {
+  if (!fpsStatus || fpsStatus.state === 'original') return;
+  selectedFpsTarget = 120;
+  renderFpsTargetSelection();
+  await applySelectedFpsTarget(event.currentTarget);
+});
+$('#cleanFpsBackups').addEventListener('click', event =>
+  cleanFpsTransactionBackups(event.currentTarget));
+$('#openFpsBackups').addEventListener('click', async () => {
+  const result = await window.launcher.openFpsBackups();
+  result.ok
+    ? setActivity('已打开帧率完整备份目录')
+    : setActivity('无法打开帧率备份目录', result.error, 'error');
+});
+
 $$('.tool-tile[data-action]').forEach(button =>
   button.addEventListener('click', () => runTool(button.dataset.action, button)));
 
 $('#applyTiaozi').addEventListener('click', async event => {
   if (busy) return;
   setBusy(true, event.currentTarget);
-  const result = await window.launcher.setTiaozi(Number($('#tiaoziScale').value));
-  setBusy(false, event.currentTarget);
-  result.ok ? setActivity('跳字缩放已更新', result.text) : setActivity('修改失败', result.error, 'error');
+  try {
+    const result = await window.launcher.setTiaozi(Number($('#tiaoziScale').value));
+    result.ok ? setActivity('跳字缩放已更新', result.text) : setActivity('修改失败', result.error, 'error');
+  } catch (error) {
+    setActivity('修改失败', error?.message || String(error), 'error');
+  } finally {
+    setBusy(false, event.currentTarget);
+  }
 });
 
 $('#activityDetails').addEventListener('click', () => confirmDialog('操作详情', lastDetail || '暂无详情', '知道了'));
