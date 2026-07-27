@@ -28,6 +28,10 @@
     <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v5c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-3Z"/><path d="m9 12 2 2 4-5"/></symbol>
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
     <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 17a8 8 0 1 1 16 0"/><path d="m12 13 4-4M7 17h10"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 14 0M8 16a6 6 0 0 1 8 0M11 19.5a2 2 0 0 1 2 0"/><path d="M12 22h.01"/></symbol>
+    <symbol id="i-tray" viewBox="0 0 24 24"><path d="M4 11h16l-1 9H5l-1-9Z"/><path d="M8 15h8M12 3v8M8 7l4 4 4-4"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="7" rx="2"/><rect x="4" y="14" width="16" height="7" rx="2"/><path d="M8 7h.01M8 18h.01M12 7h5M12 18h5"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></symbol>
   </svg>
 
   <header class="topbar">
@@ -54,13 +58,16 @@
         <button class="nav-item" data-view="fps" aria-label="帧率解锁">
           <small class="nav-badge">NEW</small><svg><use href="#i-gauge"/></svg><span>帧率解锁</span>
         </button>
+        <button class="nav-item" data-view="remote" aria-label="后台与远程">
+          <small class="nav-badge">BETA</small><svg><use href="#i-wifi"/></svg><span>后台与远程</span>
+        </button>
         <button class="nav-item" data-view="tools" aria-label="工具">
           <svg><use href="#i-wrench"/></svg><span>工具</span>
         </button>
       </nav>
       <div class="sidebar-foot">
         <button class="icon-button" id="aboutButton" aria-label="关于"><svg><use href="#i-info"/></svg></button>
-        <span>v2.1</span>
+        <span>v2.2</span>
       </div>
     </aside>
 
@@ -356,6 +363,107 @@
         </div>
       </section>
 
+      <section id="remoteView" class="view">
+        <div class="remote-page-head">
+          <div>
+            <span class="section-kicker">BACKGROUND · LAN RELAY</span>
+            <h1>后台记录与局域网副屏</h1>
+            <p>关闭窗口后继续统计游戏时长；远端只查看，不接管本机操作。</p>
+          </div>
+          <span class="remote-runtime-badge"><i></i><span><small>守护状态</small><b id="remoteGuardState">正在连接后台守护</b></span></span>
+        </div>
+
+        <div class="remote-layout">
+          <div class="remote-stack">
+            <section class="glass-card remote-guard-card">
+              <div class="remote-card-head">
+                <div><span class="section-kicker">TRAY GUARD</span><h2>托盘常驻</h2><p>隐藏界面后释放渲染窗口，只保留监控与记录核心。</p></div>
+                <span class="remote-state-chip"><i></i>运行中</span>
+              </div>
+              <div class="remote-settings">
+                <div class="remote-setting">
+                  <span class="remote-setting-icon"><svg><use href="#i-tray"/></svg></span>
+                  <span><b>关闭窗口时收至托盘</b><small>最小化始终进入托盘；关闭按钮可按此设置处理</small></span>
+                  <button class="switch-control active" id="minimizeToTrayToggle" aria-pressed="true" aria-label="关闭窗口时收至托盘"><i></i></button>
+                </div>
+                <div class="remote-setting">
+                  <span class="remote-setting-icon"><svg><use href="#i-play"/></svg></span>
+                  <span><b>随系统静默启动</b><small>登录 Windows 后直接驻留托盘，不弹出主窗口</small></span>
+                  <button class="switch-control" id="autoStartToggle" aria-pressed="false" aria-label="随系统静默启动"><i></i></button>
+                </div>
+                <div class="remote-setting">
+                  <span class="remote-setting-icon"><svg><use href="#i-gauge"/></svg></span>
+                  <span><b>后台采样策略</b><small>有游戏或远端连接时加快，无游戏时自动降频</small></span>
+                  <strong class="remote-select-chip">自适应 · 推荐</strong>
+                </div>
+              </div>
+              <div class="remote-resource-strip">
+                <span><small>当前模式</small><b id="remotePollMode">正在检测</b></span>
+                <span><small>渲染窗口</small><b id="remoteRendererState" class="ok">前台使用中</b></span>
+                <span><small>记录落盘</small><b>状态变化 / 60 秒</b></span>
+                <span><small>远端连接</small><b id="remoteClientCount">0 台设备</b></span>
+              </div>
+            </section>
+
+            <section class="glass-card remote-route-card">
+              <div class="remote-route-head">
+                <div><span class="section-kicker">STATUS ROUTE</span><h2>状态只向外读，不接受远程控制</h2></div>
+                <span>READ ONLY</span>
+              </div>
+              <div class="remote-route">
+                <span><i><svg><use href="#i-monitor"/></svg></i><b>本机监控核心</b><small>实例 · 时长 · 性能</small></span>
+                <em></em>
+                <span><i><svg><use href="#i-server"/></svg></i><b>局域网接口</b><small>缓存快照 · SSE 推送</small></span>
+                <em></em>
+                <span><i><svg><use href="#i-phone"/></svg></i><b>远端浏览器</b><small>手机 · 平板 · PC</small></span>
+              </div>
+            </section>
+          </div>
+
+          <aside class="glass-card remote-server-card">
+            <div class="remote-card-head">
+              <div><span class="section-kicker">LOCAL STATUS SERVICE</span><h2>局域网只读访问</h2><p>只监听自动识别的家庭或专用网络 IPv4。</p></div>
+              <button class="switch-control" id="lanEnabledToggle" aria-pressed="false" aria-label="局域网只读访问"><i></i></button>
+            </div>
+
+            <div class="remote-server-state" id="remoteServerState">
+              <span><svg><use href="#i-shield"/></svg></span>
+              <div><b id="remoteServerTitle">服务未开启</b><small id="remoteServerDetail">开启后生成本机访问地址与临时配对码</small></div>
+            </div>
+
+            <div class="remote-url-row">
+              <code id="remoteUrl">等待开启局域网服务</code>
+              <button id="copyRemoteUrl" disabled>复制</button>
+            </div>
+
+            <div class="remote-pairing">
+              <div class="remote-qr"><img id="remoteQrCode" alt="远端页面二维码" hidden><span id="remoteQrPlaceholder"><svg><use href="#i-wifi"/></svg>等待服务</span></div>
+              <div>
+                <h3>连接新设备</h3>
+                <p>扫码打开页面，再输入五分钟内有效的六位配对码。</p>
+                <button class="remote-pair-code" id="remotePairCode" disabled>--- ---</button>
+                <small id="remotePairExpiry">服务开启后可配对</small>
+                <button class="remote-text-action" id="rotatePairingCode" disabled>刷新配对码</button>
+              </div>
+            </div>
+
+            <div class="remote-devices-head">
+              <span><b>已授权设备</b><small id="remoteDeviceCount">0 台</small></span>
+              <button id="revokeAllDevices" disabled>全部撤销</button>
+            </div>
+            <div class="remote-device-list" id="remoteDeviceList">
+              <div class="remote-device-empty">还没有已授权设备</div>
+            </div>
+
+            <div class="remote-privacy-note">
+              <svg><use href="#i-shield"/></svg>
+              <span><b>本功能不经过云端</b><small>仅公开实例状态与运行记录，并隐藏游戏目录、备份位置等本机路径。</small></span>
+            </div>
+            <button class="button primary remote-preview-button" id="openRemotePage" disabled>在浏览器中预览远端页面</button>
+          </aside>
+        </div>
+      </section>
+
       <section id="toolsView" class="view">
         <div class="tools-grid">
           <section class="glass-card tools-main">
@@ -376,10 +484,10 @@
             <div class="about-icon">LA</div>
             <span class="section-kicker">PORTABLE EDITION</span>
             <h2>本地、离线、可扩展</h2>
-            <p>所有配置与实例数据都只在本机处理。已为后续局域网副屏监控预留数据接口。</p>
+            <p>所有配置与实例数据都只在本机处理。局域网副屏仅提供经过设备配对的只读状态。</p>
             <div class="about-line"><span>界面引擎</span><b>Electron · Fluent UI</b></div>
             <div class="about-line"><span>本地后台</span><b>C# · .NET Framework</b></div>
-            <div class="about-line"><span>版本</span><b>v2.1.0</b></div>
+            <div class="about-line"><span>版本</span><b>v2.2.0</b></div>
           </aside>
         </div>
       </section>

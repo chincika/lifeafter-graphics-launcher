@@ -12,7 +12,6 @@ const presets = {
   '540p 25': { label: '540p', resolution: '960 × 540', fps: '25 FPS', tone: '最低负载' }
 };
 
-let instanceTimer = null;
 let lastDetail = '';
 let busy = false;
 let currentView = 'launch';
@@ -23,6 +22,10 @@ let fpsStatus = null;
 let selectedFpsTarget = 180;
 let busyButton = null;
 let fpsStatusLoading = false;
+let backgroundState = null;
+let backgroundLoading = false;
+let unsubscribeInstances = null;
+let unsubscribeBackground = null;
 
 function icon(name) {
   return `<svg aria-hidden="true"><use href="#i-${name}"></use></svg>`;
@@ -291,6 +294,121 @@ async function refreshInstances(silent = true) {
     if (!silent) setActivity(`实例状态已刷新，共 ${result.data.instances.length} 个窗口`);
   } else if (!silent) {
     setActivity('无法读取实例状态', result.error, 'error');
+  }
+}
+
+function setSwitchState(button, active, disabled = false) {
+  if (!button) return;
+  button.classList.toggle('active', Boolean(active));
+  button.setAttribute('aria-pressed', String(Boolean(active)));
+  button.disabled = disabled;
+}
+
+function formatPairingExpiry(timestamp) {
+  if (!timestamp) return '服务开启后可配对';
+  const remaining = Number(timestamp) - Date.now();
+  if (remaining <= 0) return '配对码已过期，请刷新';
+  return `有效至 ${new Date(timestamp).toLocaleTimeString('zh-CN', { hour12: false })}`;
+}
+
+function formatDeviceSeen(timestamp) {
+  const elapsed = Date.now() - Number(timestamp || 0);
+  if (elapsed < 60 * 1000) return '刚刚访问';
+  if (elapsed < 60 * 60 * 1000) return `${Math.floor(elapsed / 60000)} 分钟前访问`;
+  return new Date(timestamp).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+}
+
+function renderBackgroundState(state) {
+  if (!state) return;
+  backgroundState = state;
+  const monitor = state.monitor || {};
+  const server = state.server || {};
+  setSwitchState($('#minimizeToTrayToggle'), state.minimizeToTray, backgroundLoading);
+  setSwitchState($('#autoStartToggle'), state.autoStart, backgroundLoading);
+  setSwitchState($('#lanEnabledToggle'), server.enabled, backgroundLoading);
+
+  const intervalSeconds = Math.max(1, Math.round(Number(monitor.intervalMs || 15000) / 1000));
+  $('#remoteGuardState').textContent = monitor.instanceCount
+    ? `正在记录 ${monitor.instanceCount} 个实例`
+    : '低功耗等待游戏';
+  $('#remotePollMode').textContent = monitor.instanceCount
+    ? `游戏运行 · 每 ${intervalSeconds} 秒`
+    : `空闲等待 · 每 ${intervalSeconds} 秒`;
+  $('#remoteRendererState').textContent = monitor.visible ? '前台使用中' : '已释放';
+  $('#remoteClientCount').textContent = `${Number(server.clientCount || 0)} 个实时连接`;
+
+  $('#remoteServerState').classList.toggle('online', Boolean(server.running));
+  $('#remoteServerTitle').textContent = server.running ? '服务已开启' : '服务未开启';
+  $('#remoteServerDetail').textContent = server.running
+    ? `专用网络 · 端口 ${server.port} · 只读`
+    : '开启后生成本机访问地址与临时配对码';
+  $('#remoteUrl').textContent = server.url || '等待开启局域网服务';
+  $('#copyRemoteUrl').disabled = !server.url;
+  $('#openRemotePage').disabled = !server.running;
+  $('#rotatePairingCode').disabled = !server.running;
+
+  const code = String(server.pairingCode || '');
+  $('#remotePairCode').textContent = code.length === 6
+    ? `${code.slice(0, 3)} ${code.slice(3)}`
+    : '--- ---';
+  $('#remotePairCode').disabled = !server.running || code.length !== 6;
+  $('#remotePairExpiry').textContent = formatPairingExpiry(server.pairingExpiresAt);
+  $('#remoteQrCode').hidden = !state.qrDataUrl;
+  $('#remoteQrPlaceholder').hidden = Boolean(state.qrDataUrl);
+  if (state.qrDataUrl) $('#remoteQrCode').src = state.qrDataUrl;
+
+  const devices = server.devices || [];
+  $('#remoteDeviceCount').textContent = `${devices.length} 台`;
+  $('#revokeAllDevices').disabled = !devices.length;
+  $('#remoteDeviceList').innerHTML = devices.length
+    ? devices.map(device => `<div class="remote-device">
+      ${icon('phone')}
+      <span><b>${escapeHtml(device.name)}</b><small>${escapeHtml(device.address || '局域网设备')} · ${formatDeviceSeen(device.lastSeenAt)}</small></span>
+      <button data-revoke-device="${escapeHtml(device.id)}">撤销</button>
+    </div>`).join('')
+    : '<div class="remote-device-empty">还没有已授权设备</div>';
+}
+
+async function loadBackgroundState(silent = true) {
+  if (backgroundLoading) return;
+  backgroundLoading = true;
+  try {
+    const result = await window.launcher.getBackgroundState();
+    renderBackgroundState(result);
+    if (!silent) setActivity('后台与局域网状态已刷新');
+  } catch (error) {
+    if (!silent) setActivity('无法读取后台状态', error?.message || String(error), 'error');
+  } finally {
+    backgroundLoading = false;
+    if (backgroundState) renderBackgroundState(backgroundState);
+  }
+}
+
+async function updateBackgroundOption(key, value, label) {
+  if (backgroundLoading) return;
+  backgroundLoading = true;
+  if (backgroundState) renderBackgroundState(backgroundState);
+  try {
+    const result = await window.launcher.setBackgroundOption(key, value);
+    if (!result.ok) {
+      setActivity(`${label}失败`, result.error, 'error');
+      backgroundLoading = false;
+      await loadBackgroundState(true);
+      return;
+    }
+    renderBackgroundState(result.data);
+    setActivity(`${label}已${value ? '开启' : '关闭'}`);
+  } catch (error) {
+    setActivity(`${label}失败`, error?.message || String(error), 'error');
+  } finally {
+    backgroundLoading = false;
+    if (backgroundState) renderBackgroundState(backgroundState);
   }
 }
 
@@ -595,8 +713,10 @@ function switchView(view) {
   $('#launchView').classList.toggle('active', view === 'launch' || view === 'multi');
   $('#historyView').classList.toggle('active', view === 'history');
   $('#fpsView').classList.toggle('active', view === 'fps');
+  $('#remoteView').classList.toggle('active', view === 'remote');
   $('#toolsView').classList.toggle('active', view === 'tools');
   $('.main').classList.toggle('history-mode', view === 'history');
+  $('.main').classList.toggle('remote-mode', view === 'remote');
   const fpsMode = view === 'fps';
   $('#heroEyebrow').textContent = fpsMode ? 'LIFEAFTER · FRAME ROUTING' : 'LIFEAFTER · GRAPHICS';
   $('#heroTitle').textContent = fpsMode ? '只接管 120，其余档位照常' : '画质与实例，一处掌控';
@@ -610,6 +730,7 @@ function switchView(view) {
   }
   if (view === 'history') loadHistory(currentHistoryRange, true);
   if (view === 'fps') loadFpsStatus(true);
+  if (view === 'remote') loadBackgroundState(true);
 }
 
 async function initialize() {
@@ -623,6 +744,7 @@ async function initialize() {
   $('#gameRoot').textContent = result.root || '点击选择游戏目录';
   $('#topStatus').textContent = result.root ? '游戏已就绪' : '等待配置';
   renderInstances(result.instances);
+  renderBackgroundState(result.background);
   selectedFpsTarget = [120, 180, 240, 300].includes(Number(result.fpsTargetPreference))
     ? Number(result.fpsTargetPreference)
     : 180;
@@ -630,7 +752,18 @@ async function initialize() {
   const match = String(result.summary || '').match(/当前档位：([^/]+)/);
   if (match && presets[match[1].trim()]) updatePreset(match[1].trim());
   setActivity(result.root ? '游戏环境检测通过，可以启动' : '请先选择游戏目录', result.summary);
-  instanceTimer = setInterval(() => refreshInstances(), 1400);
+  unsubscribeInstances = window.launcher.onInstancesUpdated?.(payload => {
+    renderInstances(payload);
+    const count = payload?.instances?.length || 0;
+    $('#topStatus').textContent = count ? `后台记录中 · ${count} 个实例` : '游戏已就绪';
+    if (currentView === 'history' && Date.now() - lastHistoryRefresh > 10000) {
+      loadHistory(currentHistoryRange, true);
+    }
+    if (currentView === 'remote') loadBackgroundState(true);
+  });
+  unsubscribeBackground = window.launcher.onBackgroundUpdated?.(state => {
+    renderBackgroundState(state);
+  });
 }
 
 $$('.nav-item').forEach(item => item.addEventListener('click', () => switchView(item.dataset.view)));
@@ -670,6 +803,78 @@ $('#openHistoryFolder').addEventListener('click', async () => {
   const result = await window.launcher.openHistoryFolder();
   result.ok ? setActivity('已打开记录目录') : setActivity('无法打开记录目录', result.error, 'error');
 });
+
+$('#minimizeToTrayToggle').addEventListener('click', () => {
+  updateBackgroundOption(
+    'minimizeToTray',
+    !backgroundState?.minimizeToTray,
+    '关闭窗口时收至托盘'
+  );
+});
+$('#autoStartToggle').addEventListener('click', () => {
+  updateBackgroundOption('autoStart', !backgroundState?.autoStart, '随系统静默启动');
+});
+$('#lanEnabledToggle').addEventListener('click', () => {
+  updateBackgroundOption(
+    'lanEnabled',
+    !backgroundState?.server?.enabled,
+    '局域网只读访问'
+  );
+});
+$('#copyRemoteUrl').addEventListener('click', async () => {
+  const url = backgroundState?.server?.url;
+  if (!url) return;
+  await window.launcher.copyText(url);
+  setActivity('局域网访问地址已复制', url);
+});
+$('#remotePairCode').addEventListener('click', async () => {
+  const code = String(backgroundState?.server?.pairingCode || '');
+  if (!code) return;
+  await window.launcher.copyText(code);
+  setActivity('设备配对码已复制');
+});
+$('#rotatePairingCode').addEventListener('click', async () => {
+  const result = await window.launcher.rotatePairingCode();
+  if (result.ok) {
+    renderBackgroundState(result.data);
+    setActivity('已生成新的五分钟配对码');
+  } else {
+    setActivity('无法刷新配对码', result.error, 'error');
+  }
+});
+$('#openRemotePage').addEventListener('click', async () => {
+  const result = await window.launcher.openRemotePage();
+  result.ok
+    ? setActivity('已在默认浏览器打开远端状态页', result.url)
+    : setActivity('无法打开远端状态页', result.error, 'error');
+});
+$('#remoteDeviceList').addEventListener('click', async event => {
+  const button = event.target.closest('[data-revoke-device]');
+  if (!button) return;
+  const result = await window.launcher.revokeRemoteDevice(button.dataset.revokeDevice);
+  if (result.ok) {
+    renderBackgroundState(result.data);
+    setActivity('远端设备授权已撤销');
+  } else {
+    setActivity('无法撤销设备授权', result.error, 'error');
+  }
+});
+$('#revokeAllDevices').addEventListener('click', async () => {
+  const accepted = await confirmDialog(
+    '撤销全部远端设备？',
+    '所有已配对浏览器都会立即断开。之后需要使用新的六位配对码重新连接。',
+    '全部撤销'
+  );
+  if (!accepted) return;
+  const result = await window.launcher.revokeAllRemoteDevices();
+  if (result.ok) {
+    renderBackgroundState(result.data);
+    setActivity('所有远端设备授权已撤销');
+  } else {
+    setActivity('无法撤销设备授权', result.error, 'error');
+  }
+});
+
 $('#readConfigButton').addEventListener('click', async () => {
   const result = await window.launcher.readSummary();
   result.ok ? setActivity('已读取当前配置', result.text) : setActivity('读取失败', result.error, 'error');
@@ -714,7 +919,8 @@ $('#activityDetails').addEventListener('click', () => confirmDialog('操作详�
 $('#aboutButton').addEventListener('click', () => switchView('tools'));
 
 window.addEventListener('beforeunload', () => {
-  if (instanceTimer) clearInterval(instanceTimer);
+  unsubscribeInstances?.();
+  unsubscribeBackground?.();
 });
 
 initialize();

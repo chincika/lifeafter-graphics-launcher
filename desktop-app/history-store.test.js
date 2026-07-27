@@ -6,6 +6,8 @@ function createStore(sessions = []) {
   store.dataDir = 'test';
   store.sessions = sessions;
   store.lastSyncAt = 0;
+  store.lastSavedAt = 0;
+  store.persistIntervalMs = 60 * 1000;
   store.save = () => {};
   return store;
 }
@@ -195,6 +197,26 @@ function testOutOfOrderPollCannotUndoAccountSwitch() {
   assert.equal(store.sessions[1].account, 'Account_B');
 }
 
+function testActiveHeartbeatIsPersistedAtMostOncePerMinute() {
+  const store = createStore();
+  const base = Date.UTC(2026, 6, 20, 8, 0, 0);
+  let saves = 0;
+  store.save = () => {
+    saves += 1;
+    store.lastSavedAt = store.lastSyncAt;
+  };
+
+  store.syncInstances([{ pid: 606, name: 'Account_A' }], base);
+  assert.equal(saves, 1, 'new sessions must be saved immediately');
+  store.syncInstances([{ pid: 606, name: 'Account_A' }], base + 5000);
+  store.syncInstances([{ pid: 606, name: 'Account_A' }], base + 55000);
+  assert.equal(saves, 1, 'active polling must not write on every capture');
+  store.syncInstances([{ pid: 606, name: 'Account_A' }], base + 61000);
+  assert.equal(saves, 2, 'active sessions must receive a periodic safety flush');
+  store.syncInstances([], base + 62000);
+  assert.equal(saves, 3, 'session end must be saved immediately');
+}
+
 testAccountSwitchSplitsOneProcess();
 testInitialPlaceholderBecomesRealAccount();
 testParallelWindowsUseWallClockUnion();
@@ -204,5 +226,6 @@ testReopeningLauncherDoesNotCountAsAnotherLaunch();
 testPendingSwitchDoesNotRewriteOldSessionTitle();
 testConfirmedAccountWinsOverConflictingTitle();
 testOutOfOrderPollCannotUndoAccountSwitch();
+testActiveHeartbeatIsPersistedAtMostOncePerMinute();
 
 console.log('history-store tests passed');

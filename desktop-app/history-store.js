@@ -7,6 +7,8 @@ class HistoryStore {
     this.filePath = path.join(dataDir, 'launch-history.json');
     this.sessions = [];
     this.lastSyncAt = 0;
+    this.lastSavedAt = 0;
+    this.persistIntervalMs = 60 * 1000;
     this.load();
   }
 
@@ -49,6 +51,7 @@ class HistoryStore {
       updatedAt: Date.now(),
       sessions: this.sessions
     }, null, 2), 'utf8');
+    this.lastSavedAt = Date.now();
   }
 
   isPlaceholderAccount(name, pid) {
@@ -211,7 +214,13 @@ class HistoryStore {
       }
     }
 
-    if (changed || currentPids.size) this.save();
+    const heartbeatDue = currentPids.size &&
+      capturedAt - Number(this.lastSavedAt || 0) >= this.persistIntervalMs;
+    if (changed || heartbeatDue) this.save();
+  }
+
+  flush() {
+    this.save();
   }
 
   rangeBounds(range, now = new Date()) {

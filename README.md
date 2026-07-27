@@ -21,6 +21,9 @@ GitHub 地址：https://github.com/chincika/lifeafter-graphics-launcher
 - 帧率解锁菜单可将游戏原生 120 FPS 档单独接管为 180、240 或 300 FPS；25/30/40/50/60/90 等其他档位保持游戏原逻辑。
 - 帧率补丁使用包体版本锁、目标槽位哈希锁与写后整包校验；每次写入前保留完整 NPK 事务备份，并自动建立永久保护的官方原包基线。
 - 帧率修改成功后只保留最新 1 份事务备份；也可手动清理全部事务备份，官方初始还原点不会被删除。
+- 支持最小化到系统托盘继续记录游戏时长；托盘状态下释放主界面渲染窗口，并使用自适应低频实例检测。
+- 可选开启局域网只读副屏，通过手机、平板或电脑浏览器实时查看实例状态、账号排行和最近会话。
+- 远端设备使用五分钟配对码授权；接口不提供游戏启动、配置修改、帧率操作或本机文件访问。
 - 每次写入配置前自动备份，并保留默认 2K120 的恢复点。
 - 日志和工具数据写入游戏配置目录下的 `launcher_data`，避免污染 exe 所在目录。
 - 运行数据仅保存在本机，并为后续局域网副屏监控预留了独立实例数据接口。
@@ -57,7 +60,7 @@ npm install
 npm run portable
 ```
 
-便携版输出到 `desktop-app/release/LifeAfter-Graphics-Launcher-2.1.0.exe`。
+便携版输出到 `desktop-app/release/LifeAfter-Graphics-Launcher-2.2.0.exe`。
 
 ## 编译经典版
 
@@ -71,9 +74,9 @@ if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framewo
 
 ## 版本
 
-当前版本：v2.1.0
+当前版本：v2.2.0
 
-- 现代便携版：v2.1.0
+- 现代便携版：v2.2.0
 - 经典单文件版：v1.8.0
 
 完整更新内容见 [CHANGELOG.md](CHANGELOG.md)。

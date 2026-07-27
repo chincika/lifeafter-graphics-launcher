@@ -20,5 +20,23 @@ contextBridge.exposeInMainWorld('launcher', {
   openLog: () => ipcRenderer.invoke('launcher:open-log'),
   getHistory: (range) => ipcRenderer.invoke('launcher:get-history', range),
   exportHistory: (range) => ipcRenderer.invoke('launcher:export-history', range),
-  openHistoryFolder: () => ipcRenderer.invoke('launcher:open-history-folder')
+  openHistoryFolder: () => ipcRenderer.invoke('launcher:open-history-folder'),
+  getBackgroundState: () => ipcRenderer.invoke('launcher:get-background-state'),
+  setBackgroundOption: (key, value) =>
+    ipcRenderer.invoke('launcher:set-background-option', { key, value }),
+  rotatePairingCode: () => ipcRenderer.invoke('launcher:rotate-pairing-code'),
+  revokeRemoteDevice: (id) => ipcRenderer.invoke('launcher:revoke-remote-device', id),
+  revokeAllRemoteDevices: () => ipcRenderer.invoke('launcher:revoke-all-remote-devices'),
+  openRemotePage: () => ipcRenderer.invoke('launcher:open-remote-page'),
+  copyText: (value) => ipcRenderer.invoke('launcher:copy-text', value),
+  onInstancesUpdated: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('launcher:instances-updated', listener);
+    return () => ipcRenderer.removeListener('launcher:instances-updated', listener);
+  },
+  onBackgroundUpdated: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('launcher:background-updated', listener);
+    return () => ipcRenderer.removeListener('launcher:background-updated', listener);
+  }
 });
