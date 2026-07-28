@@ -34,8 +34,6 @@ let packageScanLoading = false;
 let unsubscribeInstances = null;
 let unsubscribeBackground = null;
 let unsubscribeUpdate = null;
-let currentInstanceCount = 0;
-let lastInstanceCount = null;
 
 function icon(name) {
   return `<svg aria-hidden="true"><use href="#i-${name}"></use></svg>`;
@@ -67,8 +65,6 @@ function syncFpsActionAvailability() {
   const cleanButton = $('#cleanFpsBackups');
   const refreshButton = $('#refreshFpsStatus');
   const state = String(fpsStatus?.state || '');
-  const gameLocked = Boolean(fpsStatus?.gameRunning);
-  const lockHint = $('#fpsActionLock');
   const safe = Boolean(
     fpsStatus &&
     fpsStatus.compatible &&
@@ -85,32 +81,6 @@ function syncFpsActionAvailability() {
   $$('.fps-target').forEach(button => {
     button.disabled = busy;
   });
-  if (applyButton) {
-    applyButton.title = gameLocked ? '请先完全退出全部游戏实例' : '';
-  }
-  if (restoreButton) {
-    restoreButton.title = gameLocked ? '请先完全退出全部游戏实例' : '';
-  }
-  if (cleanButton) {
-    cleanButton.title = !fpsStatus?.baselineReady
-      ? '首次成功应用或恢复后才会建立永久还原点'
-      : '';
-  }
-  if (lockHint) {
-    if (gameLocked) {
-      const countText = currentInstanceCount > 0
-        ? `检测到 ${currentInstanceCount} 个游戏实例`
-        : '检测到游戏仍在运行';
-      lockHint.textContent = `${countText}，为防止 NPK 正在使用时被写入，应用与恢复操作已锁定。全部退出后会自动解除。`;
-      lockHint.hidden = false;
-    } else if (fpsStatus && !fpsStatus.baselineReady) {
-      lockHint.textContent = '永久还原点尚未建立；首次成功应用或恢复后会自动创建，随后才能清理事务备份。';
-      lockHint.hidden = false;
-    } else {
-      lockHint.hidden = true;
-      lockHint.textContent = '';
-    }
-  }
 }
 
 function renderHistoryRecordingState(enabled = historyEnabled) {
@@ -132,7 +102,7 @@ function renderUpdateState(state) {
   const busyPhases = new Set(['checking', 'downloading', 'installing']);
   const button = $('#checkForUpdates');
   const frequency = $('#updateFrequency');
-  $('#aboutVersion').textContent = `v${state.currentVersion || '2.3.7'}`;
+  $('#aboutVersion').textContent = `v${state.currentVersion || '2.3.8'}`;
   $('#updateStatus').textContent = state.message || '尚未检查更新';
   $('#updateProgress').style.width = `${Math.max(0, Math.min(100, Number(state.progress) || 0))}%`;
   frequency.value = state.frequency || 'startup';
@@ -1174,8 +1144,6 @@ async function initialize() {
   $('#gameRoot').textContent = result.root || '点击选择游戏目录';
   renderGameInstallations(result.installations);
   $('#topStatus').textContent = result.root ? '游戏已就绪' : '等待配置';
-  currentInstanceCount = result.instances?.instances?.length || 0;
-  lastInstanceCount = currentInstanceCount;
   renderInstances(result.instances);
   renderHistoryRecordingState(result.historyEnabled);
   renderUpdateState(result.update);
@@ -1193,21 +1161,7 @@ async function initialize() {
   unsubscribeInstances = window.launcher.onInstancesUpdated?.(payload => {
     renderInstances(payload);
     const count = payload?.instances?.length || 0;
-    const previousCount = lastInstanceCount;
-    currentInstanceCount = count;
-    lastInstanceCount = count;
     $('#topStatus').textContent = count ? `后台记录中 · ${count} 个实例` : '游戏已就绪';
-    if (count > 0 && fpsStatus && !fpsStatus.gameRunning) {
-      renderFpsStatus({ ...fpsStatus, gameRunning: true, writable: false });
-    }
-    const runningStateChanged = previousCount !== null &&
-      (previousCount > 0) !== (count > 0);
-    if (runningStateChanged) {
-      if (count === 0) {
-        setActivity('游戏已完全退出，正在解除帧率操作锁定');
-      }
-      loadFpsStatus(true);
-    }
     if (currentView === 'history' && Date.now() - lastHistoryRefresh > 10000) {
       loadHistory(currentHistoryRange, true);
     }

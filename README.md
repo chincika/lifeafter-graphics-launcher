@@ -67,7 +67,7 @@ npm install
 npm run portable
 ```
 
-便携版输出到 `desktop-app/release/LifeAfter-Graphics-Launcher-2.3.0.exe`。
+便携版输出到 `desktop-app/release/LifeAfter-Graphics-Launcher-2.3.8.exe`。
 
 ## 编译经典版
 
@@ -81,9 +81,9 @@ if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framewo
 
 ## 版本
 
-当前版本：v2.3.0
+当前版本：v2.3.8
 
-- 现代便携版：v2.3.0
+- 现代便携版：v2.3.8
 - 经典单文件版：v1.8.0
 
 完整更新内容见 [CHANGELOG.md](CHANGELOG.md)。

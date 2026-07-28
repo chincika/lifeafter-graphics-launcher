@@ -1,6 +1,6 @@
 {
   "name": "lifeafter-graphics-launcher",
-  "version": "2.3.7",
+  "version": "2.3.8",
   "description": "Windows 11 Fluent desktop launcher for LifeAfter graphics profiles",
   "main": "main.js",
   "author": "不与世俗纷争",
@@ -27,8 +27,8 @@
       "settings-store.js",
       "game-installations-store.js",
       "runtime-assets.js",
+      "runtime-assets-manifest.json",
       "update-service.js",
-      "frame-core-integrity.json",
       "renderer/**/*"
     ],
     "extraResources": [
@@ -37,19 +37,10 @@
         "to": "backend/LifeAfterBackend.exe"
       },
       {
-        "from": "backend/LifeAfterFrameCore.exe",
-        "to": "backend/LifeAfterFrameCore.exe"
+        "from": "backend/fps-patches",
+        "to": "backend/fps-patches"
       }
     ],
-    "electronFuses": {
-      "runAsNode": false,
-      "enableCookieEncryption": true,
-      "enableNodeOptionsEnvironmentVariable": false,
-      "enableNodeCliInspectArguments": false,
-      "enableEmbeddedAsarIntegrityValidation": true,
-      "onlyLoadAppFromAsar": true,
-      "grantFileProtocolExtraPrivileges": true
-    },
     "win": {
       "icon": "renderer/assets/app-icon.png",
       "artifactName": "LifeAfter-Graphics-Launcher-${version}.${ext}",

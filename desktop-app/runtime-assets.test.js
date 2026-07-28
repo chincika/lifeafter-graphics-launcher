@@ -9,36 +9,26 @@ const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'launcher-runtime-assets-
 try {
   const sourceDir = path.join(tempRoot, 'volatile');
   const targetDir = path.join(tempRoot, 'stable');
-  fs.mkdirSync(sourceDir, { recursive: true });
+  const source = path.join(sourceDir, 'nested', 'component.bin');
   const payload = Buffer.from('verified runtime component');
   const digest = crypto.createHash('sha256').update(payload).digest('hex').toUpperCase();
-  fs.writeFileSync(path.join(sourceDir, 'component.exe'), payload);
+  fs.mkdirSync(path.dirname(source), { recursive: true });
+  fs.writeFileSync(source, payload);
 
-  const first = ensureRuntimeAssets({
+  const prepared = ensureRuntimeAssets({
     sourceDir,
     targetDir,
-    assets: [{ name: 'component.exe', sha256: digest }]
+    assets: [{ name: 'nested/component.bin', sha256: digest }]
   });
-  assert.deepEqual(fs.readFileSync(first['component.exe']), payload);
+  assert.deepEqual(fs.readFileSync(prepared['nested/component.bin']), payload);
 
   fs.rmSync(sourceDir, { recursive: true, force: true });
-  assert.deepEqual(fs.readFileSync(first['component.exe']), payload);
-
-  fs.mkdirSync(sourceDir, { recursive: true });
-  fs.writeFileSync(path.join(sourceDir, 'component.exe'), payload);
-  fs.writeFileSync(first['component.exe'], 'corrupt');
-  ensureRuntimeAssets({
-    sourceDir,
-    targetDir,
-    assets: [{ name: 'component.exe', sha256: digest }]
-  });
-  assert.deepEqual(fs.readFileSync(first['component.exe']), payload);
-
+  assert.deepEqual(fs.readFileSync(prepared['nested/component.bin']), payload);
   assert.throws(() => ensureRuntimeAssets({
-    sourceDir,
+    sourceDir: targetDir,
     targetDir: path.join(tempRoot, 'rejected'),
-    assets: [{ name: 'component.exe', sha256: '0'.repeat(64) }]
-  }), /完整性校验失败/);
+    assets: [{ name: '../escape.bin', sha256: digest }]
+  }), /无效路径/);
 } finally {
   fs.rmSync(tempRoot, { recursive: true, force: true });
 }

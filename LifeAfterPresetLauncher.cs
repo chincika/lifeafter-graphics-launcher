@@ -62,9 +62,6 @@ internal static class LifeAfterPresetLauncher
         public int Bottom;
     }
 
-    // The FPS/NPK implementation is intentionally compiled only for internal
-    // migration builds. Production builds use the hardened native frame core.
-#if LEGACY_MANAGED_FPS_CORE
     private sealed class FpsPatchDefinition
     {
         public int Target;
@@ -159,7 +156,6 @@ internal static class LifeAfterPresetLauncher
             }
         }
     };
-#endif
 
 
     private static string gameRoot;
@@ -262,7 +258,6 @@ internal static class LifeAfterPresetLauncher
             return;
         }
 
-#if LEGACY_MANAGED_FPS_CORE
         if (args.Length >= 1 && args[0].Equals("--fps-status", StringComparison.OrdinalIgnoreCase))
         {
             Console.WriteLine(GetFpsUnlockStatusJson());
@@ -322,7 +317,6 @@ internal static class LifeAfterPresetLauncher
             }
             return;
         }
-#endif
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
@@ -1453,7 +1447,6 @@ internal static class LifeAfterPresetLauncher
         }
     }
 
-#if LEGACY_MANAGED_FPS_CORE
     private static string FpsPackagePath()
     {
         return String.IsNullOrEmpty(gameRoot)
@@ -2270,7 +2263,6 @@ internal static class LifeAfterPresetLauncher
         return result.ToString();
     }
 
-#endif
     private static string CaptureInstancesJson()
     {
         List<InstanceSnapshot> snapshots = new GameInstanceMonitor().Capture();
