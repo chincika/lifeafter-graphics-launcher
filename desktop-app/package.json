@@ -1,13 +1,13 @@
 {
   "name": "lifeafter-graphics-launcher",
-  "version": "2.3.6",
+  "version": "2.3.7",
   "description": "Windows 11 Fluent desktop launcher for LifeAfter graphics profiles",
   "main": "main.js",
   "author": "不与世俗纷争",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "test": "node history-store.test.js && node background-services.test.js && node game-installations-store.test.js && node update-service.test.js",
+    "test": "node history-store.test.js && node background-services.test.js && node game-installations-store.test.js && node runtime-assets.test.js && node update-service.test.js",
     "pack": "electron-builder --dir",
     "portable": "electron-builder --win portable"
   },
@@ -26,6 +26,7 @@
       "monitor-service.js",
       "settings-store.js",
       "game-installations-store.js",
+      "runtime-assets.js",
       "update-service.js",
       "frame-core-integrity.json",
       "renderer/**/*"

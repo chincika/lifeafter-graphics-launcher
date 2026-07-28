@@ -25,6 +25,7 @@ const { HistoryStore } = require('./history-store');
 const { LanStatusServer } = require('./lan-status-server');
 const { MonitorService } = require('./monitor-service');
 const { SettingsStore } = require('./settings-store');
+const { ensureRuntimeAssets } = require('./runtime-assets');
 const {
   UpdateService,
   cleanupUpdateCache,
@@ -47,6 +48,7 @@ let tray = null;
 let isQuitting = false;
 let cachedQrUrl = '';
 let cachedQrDataUrl = '';
+let stableBackendDir = '';
 const isTraySmoke = process.argv.includes('--tray-smoke');
 const isRuntimeSmoke = process.argv.includes('--runtime-smoke') || isTraySmoke;
 if (isRuntimeSmoke && process.env.LAUNCHER_SMOKE_USER_DATA) {
@@ -59,10 +61,44 @@ if (!hasSingleInstanceLock) {
   app.quit();
 }
 
-function backendDir() {
+function bundledBackendDir() {
   return app.isPackaged
     ? path.join(process.resourcesPath, 'backend')
     : path.join(__dirname, 'backend');
+}
+
+function backendDir() {
+  return stableBackendDir || bundledBackendDir();
+}
+
+function prepareBackendRuntime() {
+  if (!app.isPackaged) {
+    stableBackendDir = bundledBackendDir();
+    return stableBackendDir;
+  }
+  const integrity = require('./frame-core-integrity.json');
+  const targetDir = path.join(
+    app.getPath('userData'),
+    'runtime',
+    `v${app.getVersion()}`,
+    'backend'
+  );
+  ensureRuntimeAssets({
+    sourceDir: bundledBackendDir(),
+    targetDir,
+    assets: [
+      {
+        name: 'LifeAfterBackend.exe',
+        sha256: integrity.backendSha256
+      },
+      {
+        name: 'LifeAfterFrameCore.exe',
+        sha256: integrity.sha256
+      }
+    ]
+  });
+  stableBackendDir = targetDir;
+  return stableBackendDir;
 }
 
 function backendPath() {
@@ -976,6 +1012,16 @@ ipcMain.handle('launcher:open-fps-protected-backups', async () => {
 
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
+  try {
+    prepareBackendRuntime();
+  } catch (error) {
+    dialog.showErrorBox(
+      '启动器组件准备失败',
+      `${error?.message || error}\n\n请从官方发布页重新下载启动器。`
+    );
+    app.quit();
+    return;
+  }
   gameInstallationsStore = new GameInstallationsStore(installationsPath());
   settingsStore = new SettingsStore(settingsPath());
   cleanupUpdateCache(app.getPath('userData'), app.getVersion());
