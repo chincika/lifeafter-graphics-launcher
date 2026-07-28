@@ -96,6 +96,14 @@ function cleanupUpdateCache(dataDir, currentVersion, now = Date.now()) {
   return { removed };
 }
 
+function quotePowerShellLiteral(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
+function encodePowerShellCommand(command) {
+  return Buffer.from(String(command), 'utf16le').toString('base64');
+}
+
 class UpdateService {
   constructor(options) {
     this.currentVersion = String(options.currentVersion || '0.0.0');
@@ -309,7 +317,8 @@ function schedulePortableReplacement({
   portablePath,
   currentPid,
   scriptDir,
-  spawnImpl = spawn
+  spawnImpl = spawn,
+  useShellBroker = true
 }) {
   if (process.platform !== 'win32') {
     return { ok: false, error: '自动替换目前只支持 Windows 便携版。' };
@@ -348,6 +357,7 @@ function schedulePortableReplacement({
     '  Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ("[{0:O}] {1}" -f [DateTime]::UtcNow,$Message)',
     '}',
     'try {',
+    '  Write-InstallLog "Updater worker started. PID=$PID Target=$Target"',
     '  try { Wait-Process -Id $ProcessId -Timeout 90 -ErrorAction SilentlyContinue } catch {}',
     '  if ((Get-FileHash -LiteralPath $Source -Algorithm SHA256).Hash -ne $ExpectedDigest) { throw "Downloaded update digest changed before installation." }',
     '  Copy-Item -LiteralPath $Source -Destination $newFile -Force',
@@ -394,24 +404,67 @@ function schedulePortableReplacement({
     '}'
   ].join('\r\n');
   fs.writeFileSync(scriptPath, script, 'utf8');
-  const child = spawnImpl('powershell.exe', [
+  const powershellPath = path.join(
+    process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows',
+    'System32',
+    'WindowsPowerShell',
+    'v1.0',
+    'powershell.exe'
+  );
+  const workerCommand = [
+    `& ${quotePowerShellLiteral(scriptPath)}`,
+    `-ProcessId ${Math.max(0, Number(currentPid) || 0)}`,
+    `-Source ${quotePowerShellLiteral(source)}`,
+    `-Target ${quotePowerShellLiteral(target)}`,
+    `-ExpectedDigest ${quotePowerShellLiteral(String(expectedDigest).toUpperCase())}`,
+    `-ResultPath ${quotePowerShellLiteral(resultPath)}`,
+    `-LogPath ${quotePowerShellLiteral(logPath)}`
+  ].join(' ');
+  const workerArguments = [
     '-NoProfile',
     '-NonInteractive',
     '-ExecutionPolicy', 'Bypass',
-    '-File', scriptPath,
-    '-ProcessId', String(currentPid),
-    '-Source', source,
-    '-Target', target,
-    '-ExpectedDigest', String(expectedDigest).toUpperCase(),
-    '-ResultPath', resultPath,
-    '-LogPath', logPath
-  ], {
-    detached: true,
+    '-EncodedCommand', encodePowerShellCommand(workerCommand)
+  ];
+  let launchArguments = workerArguments;
+  if (useShellBroker) {
+    const workerArgumentLine = workerArguments
+      .map(argument => String(argument).includes(' ')
+        ? `"${String(argument).replaceAll('"', '`"')}"`
+        : String(argument))
+      .join(' ');
+    const bootstrapCommand = [
+      '$ErrorActionPreference = "Stop"',
+      'try {',
+      '  $shell = New-Object -ComObject Shell.Application',
+      `  $shell.ShellExecute(${quotePowerShellLiteral(powershellPath)},${quotePowerShellLiteral(workerArgumentLine)},"","open",0)`,
+      `  Add-Content -LiteralPath ${quotePowerShellLiteral(logPath)} -Encoding UTF8 -Value ("[{0:O}] Update worker dispatched through Windows Shell." -f [DateTime]::UtcNow)`,
+      '} catch {',
+      `  Add-Content -LiteralPath ${quotePowerShellLiteral(logPath)} -Encoding UTF8 -Value ("[{0:O}] Shell dispatch failed: {1}" -f [DateTime]::UtcNow,$_.Exception.Message)`,
+      '  exit 1',
+      '}'
+    ].join('\r\n');
+    launchArguments = [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy', 'Bypass',
+      '-EncodedCommand', encodePowerShellCommand(bootstrapCommand)
+    ];
+  }
+  const child = spawnImpl(powershellPath, launchArguments, {
+    detached: false,
     windowsHide: true,
     stdio: 'ignore'
   });
   child.unref();
-  return { ok: true, scriptPath, resultPath, logPath, target };
+  return {
+    ok: true,
+    brokered: useShellBroker,
+    scriptPath,
+    resultPath,
+    logPath,
+    target
+  };
 }
 
 module.exports = {
@@ -419,6 +472,7 @@ module.exports = {
   UpdateService,
   cleanupUpdateCache,
   digestFromText,
+  encodePowerShellCommand,
   isNewerVersion,
   schedulePortableReplacement,
   selectPortableAsset,

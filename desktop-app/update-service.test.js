@@ -155,6 +155,7 @@ assert.equal(
         portablePath: target,
         currentPid: 999999,
         scriptDir: installRoot,
+        useShellBroker: false,
         spawnImpl(command, args, options) {
           invocation = { command, args, options };
           return { unref() {} };
@@ -224,6 +225,7 @@ assert.equal(
         portablePath: rollbackTarget,
         currentPid: 999999,
         scriptDir: rollbackRoot,
+        useShellBroker: false,
         spawnImpl(command, args, options) {
           rollbackInvocation = { command, args, options };
           return { unref() {} };
@@ -250,6 +252,46 @@ assert.equal(
       );
       assert.equal(fs.existsSync(invalidSource), true);
       assert.equal(fs.existsSync(rollbackScheduled.scriptPath), false);
+
+      if (!process.env.CI) {
+        const brokerRoot = path.join(tempRoot, 'shell-broker');
+        fs.mkdirSync(brokerRoot, { recursive: true });
+        const brokerTarget = path.join(brokerRoot, 'current.exe');
+        const brokerSource = path.join(brokerRoot, 'downloaded.exe');
+        fs.copyFileSync(path.join(process.env.WINDIR, 'System32', 'where.exe'), brokerTarget);
+        fs.copyFileSync(path.join(process.env.WINDIR, 'System32', 'whoami.exe'), brokerSource);
+        const brokerDigest = crypto.createHash('sha256')
+          .update(fs.readFileSync(brokerSource))
+          .digest('hex')
+          .toUpperCase();
+        const brokerScheduled = schedulePortableReplacement({
+          downloadedPath: brokerSource,
+          expectedDigest: brokerDigest,
+          portablePath: brokerTarget,
+          currentPid: 999999,
+          scriptDir: brokerRoot
+        });
+        assert.equal(brokerScheduled.brokered, true);
+        const brokerDeadline = Date.now() + 30000;
+        while (!fs.existsSync(brokerScheduled.resultPath) && Date.now() < brokerDeadline) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        assert.equal(fs.existsSync(brokerScheduled.resultPath), true);
+        assert.equal(
+          JSON.parse(fs.readFileSync(brokerScheduled.resultPath, 'utf8')).success,
+          true
+        );
+        const brokerLog = fs.readFileSync(brokerScheduled.logPath, 'utf8');
+        assert.match(brokerLog, /dispatched through Windows Shell/);
+        assert.match(brokerLog, /Updater worker started/);
+        assert.equal(
+          crypto.createHash('sha256')
+            .update(fs.readFileSync(brokerTarget))
+            .digest('hex')
+            .toUpperCase(),
+          brokerDigest
+        );
+      }
     }
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });

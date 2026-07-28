@@ -59,10 +59,10 @@ let updateFrequency = 'startup';
 let mockGameRunning = false;
 const updateState = {
   phase: 'current',
-    currentVersion: '2.3.3',
-    latestVersion: '2.3.3',
+    currentVersion: '2.3.4',
+    latestVersion: '2.3.4',
   progress: 100,
-    message: '当前已是最新版本 v2.3.3',
+    message: '当前已是最新版本 v2.3.4',
   releaseUrl: 'https://github.com/chincika/lifeafter-graphics-launcher/releases/tag/v2.2.0',
   downloadedPath: '',
   error: '',

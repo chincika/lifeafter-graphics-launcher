@@ -132,7 +132,7 @@ function renderUpdateState(state) {
   const busyPhases = new Set(['checking', 'downloading', 'installing']);
   const button = $('#checkForUpdates');
   const frequency = $('#updateFrequency');
-  $('#aboutVersion').textContent = `v${state.currentVersion || '2.3.3'}`;
+  $('#aboutVersion').textContent = `v${state.currentVersion || '2.3.4'}`;
   $('#updateStatus').textContent = state.message || '尚未检查更新';
   $('#updateProgress').style.width = `${Math.max(0, Math.min(100, Number(state.progress) || 0))}%`;
   frequency.value = state.frequency || 'startup';

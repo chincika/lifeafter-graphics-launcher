@@ -234,7 +234,7 @@ function installPendingUpdate() {
       isQuitting = true;
       app.quit();
     });
-  }, 500);
+  }, 2000);
   return { ok: true, scheduled: true };
 }
 
