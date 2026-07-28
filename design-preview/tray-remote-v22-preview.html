@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>后台与远程设计预览</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg:#08131b; --deep:#061018; --panel:#172832; --panel2:#1b303b;
+      --line:rgba(215,239,246,.13); --line2:rgba(215,239,246,.22);
+      --text:#eef6f8; --soft:#a8bbc2; --muted:#708992;
+      --cyan:#4dd4e8; --teal:#49d4bd; --green:#46d48b; --amber:#eab561;
+      --danger:#f0787d;
+    }
+    *{box-sizing:border-box} html,body{margin:0;width:100%;height:100%;overflow:hidden}
+    body{
+      font-family:"Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",sans-serif;
+      color:var(--text); background:
+        radial-gradient(circle at 17% 96%,rgba(31,151,174,.16),transparent 32%),
+        radial-gradient(circle at 86% 2%,rgba(34,94,134,.18),transparent 34%),
+        linear-gradient(145deg,#07121a,#0d202b);
+    }
+    svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+    .only-mobile{display:none}
+    body.mobile .only-desktop{display:none}
+    body.mobile .only-mobile{display:block}
+
+    /* Desktop shell */
+    .desktop{width:100vw;height:100vh;background:rgba(6,15,22,.3)}
+    .topbar{height:74px;display:flex;align-items:center;padding:0 30px;border-bottom:1px solid rgba(255,255,255,.08);background:rgba(6,16,23,.84)}
+    .mark{width:39px;height:43px;display:grid;place-items:center;color:var(--cyan);font-size:13px;font-weight:800;border:1px solid rgba(77,212,232,.58);clip-path:polygon(50% 0,94% 18%,94% 72%,50% 100%,6% 72%,6% 18%);background:rgba(77,212,232,.09)}
+    .brand{display:flex;align-items:baseline;gap:14px;margin-left:15px}.brand b{font-size:21px}.brand span{font-size:11px;letter-spacing:2.4px;color:#76909a}
+    .top-status{margin-left:auto;display:flex;align-items:center;gap:10px;color:#b9c9ce;font-size:14px}.top-status i{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 15px rgba(70,212,139,.9)}
+    .window-controls{display:flex;gap:28px;margin-left:42px;color:#c6d3d7;font-size:22px}
+    .shell{height:calc(100vh - 74px);display:grid;grid-template-columns:174px 1fr}
+    .sidebar{display:flex;flex-direction:column;padding:18px;border-right:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(7,23,33,.86),rgba(6,17,26,.72))}
+    .nav{display:flex;flex-direction:column;gap:8px}.nav-item{height:103px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#9cb1b9;border:1px solid transparent;border-radius:18px;position:relative}.nav-item svg{width:29px;height:29px}.nav-item b{font-size:16px;font-weight:520}.nav-item.active{color:#eff9fb;border-color:rgba(122,198,217,.18);background:linear-gradient(145deg,rgba(52,92,107,.45),rgba(25,47,59,.55));box-shadow:inset 0 1px rgba(255,255,255,.05),0 10px 28px rgba(0,0,0,.14)}.nav-item.active:before{content:"";position:absolute;left:-2px;top:25px;bottom:25px;width:4px;border-radius:4px;background:var(--cyan);box-shadow:0 0 14px rgba(77,212,232,.8)}
+    .nav-item em{position:absolute;right:9px;top:8px;font-style:normal;font-size:9px;letter-spacing:.8px;color:#dffcff;padding:3px 7px;border-radius:6px;background:rgba(35,171,193,.27)}
+    .side-foot{margin-top:auto;text-align:center;color:#718b94;font-size:12px}
+    .main{position:relative;overflow:hidden;padding:26px 30px 32px}
+    .page-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:22px}
+    .eyebrow{color:#73ddea;font-size:11px;font-weight:700;letter-spacing:2px}.page-head h1{font-size:31px;margin:8px 0 5px;font-weight:650}.page-head p{margin:0;color:#9eb1b8;font-size:14px}
+    .runtime-badge{display:flex;align-items:center;gap:12px;padding:12px 17px;border:1px solid rgba(70,212,139,.25);border-radius:13px;background:rgba(34,91,76,.17)}.runtime-badge span{display:flex;flex-direction:column;gap:2px}.runtime-badge small{color:#80aa9b}.runtime-badge b{font-size:14px;color:#bff5dc}.pulse{width:11px;height:11px;border-radius:50%;background:var(--green);box-shadow:0 0 0 6px rgba(70,212,139,.1),0 0 14px rgba(70,212,139,.7)}
+    .layout{display:grid;grid-template-columns:minmax(660px,1.18fr) minmax(480px,.82fr);gap:16px;height:calc(100% - 102px)}
+    .stack{display:grid;grid-template-rows:1fr 0.72fr;gap:16px;min-height:0}
+    .card{position:relative;border:1px solid var(--line);border-radius:18px;background:linear-gradient(145deg,rgba(29,47,58,.94),rgba(18,32,41,.9));box-shadow:inset 0 1px rgba(255,255,255,.05),0 18px 42px rgba(0,0,0,.18);overflow:hidden}
+    .card:before{content:"";position:absolute;left:20px;right:20px;top:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.16),transparent)}
+    .card-pad{padding:25px 27px}.card-head{display:flex;align-items:flex-start;justify-content:space-between}.card-head h2{margin:6px 0 3px;font-size:21px}.card-head p{margin:0;color:#849ba4;font-size:13px}
+    .state-chip{display:flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid rgba(73,212,189,.2);border-radius:9px;background:rgba(39,126,108,.12);color:#9aead6;font-size:12px}.state-chip i{width:7px;height:7px;border-radius:50%;background:var(--teal)}
+    .settings{margin-top:22px;border-top:1px solid var(--line)}
+    .setting{height:68px;display:grid;grid-template-columns:46px 1fr auto;align-items:center;border-bottom:1px solid var(--line)}.setting-icon{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:#83ddeb;background:rgba(65,163,181,.12)}.setting-icon svg{width:18px}.setting-copy b{display:block;font-size:14px;font-weight:620}.setting-copy span{display:block;margin-top:4px;color:#849aa2;font-size:12px}
+    .toggle{width:47px;height:25px;border-radius:20px;background:#22414a;border:1px solid rgba(255,255,255,.09);padding:3px}.toggle:after{content:"";display:block;width:17px;height:17px;border-radius:50%;background:#91a4aa;transition:.2s}.toggle.on{background:rgba(44,174,191,.38);border-color:rgba(77,212,232,.46)}.toggle.on:after{margin-left:21px;background:#72e2ee;box-shadow:0 0 10px rgba(77,212,232,.6)}
+    .select-chip{padding:8px 12px;border:1px solid var(--line2);border-radius:9px;color:#c2d1d5;background:rgba(5,15,20,.25);font-size:12px}
+    .resource-strip{display:grid;grid-template-columns:1.5fr repeat(3,1fr);gap:1px;margin-top:18px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--line)}.resource-strip>div{padding:12px 14px;background:#13242d}.resource-strip small{display:block;color:#6f8891;font-size:10px;letter-spacing:.4px}.resource-strip b{display:block;margin-top:5px;font-size:13px;color:#d8e5e8}.resource-strip .good{color:#85e3ba}
+    .route-card{padding:22px 27px}.route-head{display:flex;justify-content:space-between;align-items:center}.route-head h2{font-size:19px;margin:6px 0 0}.readonly{color:#92daca;font-size:11px;border:1px solid rgba(73,212,189,.2);padding:6px 9px;border-radius:7px;background:rgba(73,212,189,.08)}
+    .route{position:relative;display:grid;grid-template-columns:1fr 55px 1fr 55px 1fr;align-items:center;margin-top:25px}.route-line{height:2px;background:linear-gradient(90deg,rgba(77,212,232,.5),rgba(73,212,189,.75));position:relative}.route-line:after{content:"";position:absolute;right:-2px;top:-3px;border-left:6px solid var(--teal);border-top:4px solid transparent;border-bottom:4px solid transparent}.route-node{display:flex;align-items:center;gap:12px}.node-icon{width:43px;height:43px;border:1px solid rgba(77,212,232,.28);border-radius:13px;display:grid;place-items:center;color:var(--cyan);background:rgba(53,140,158,.12)}.route-node:nth-of-type(5) .node-icon{color:var(--teal);border-color:rgba(73,212,189,.28)}.route-node b{font-size:13px}.route-node small{display:block;margin-top:3px;color:#728b94;font-size:11px}
+    .server-card{height:100%;padding:25px 27px;display:flex;flex-direction:column}.server-state{margin-top:22px;padding:18px;border:1px solid rgba(73,212,189,.23);border-radius:14px;background:linear-gradient(135deg,rgba(35,110,97,.19),rgba(22,54,59,.17))}.server-state-top{display:flex;align-items:center;gap:12px}.server-state-top .shield{width:44px;height:48px;display:grid;place-items:center;color:var(--teal);background:rgba(73,212,189,.12);clip-path:polygon(50% 0,93% 18%,93% 68%,50% 100%,7% 68%,7% 18%)}.server-state-top b{font-size:16px}.server-state-top small{display:block;color:#80a89e;margin-top:3px}.url{margin-top:16px;height:45px;display:flex;align-items:center;padding:0 13px;border:1px solid var(--line);border-radius:10px;background:rgba(5,14,20,.38);color:#bfeef2;font:13px "Cascadia Mono","Consolas",monospace}.url button{margin-left:auto;color:#82dfea;background:none;border:0;font:12px inherit}
+    .pairing{display:grid;grid-template-columns:146px 1fr;gap:18px;margin-top:20px}.qr{height:146px;border-radius:13px;background:#e7f4f3;padding:11px;display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(7,1fr);gap:3px}.qr i{background:#14343d;border-radius:1px}.qr i:nth-child(3n),.qr i:nth-child(5n){opacity:.08}.pair-copy h3{font-size:16px;margin:5px 0 8px}.pair-copy p{color:#8ea3aa;line-height:1.65;font-size:12px;margin:0}.code{display:inline-flex;margin-top:13px;padding:8px 12px;border-radius:9px;background:rgba(234,181,97,.1);border:1px solid rgba(234,181,97,.22);color:#f3c679;font:700 16px "Cascadia Mono","Consolas",monospace;letter-spacing:3px}
+    .access{margin-top:22px;border-top:1px solid var(--line)}.access-row{display:flex;align-items:center;padding:15px 0;border-bottom:1px solid var(--line)}.access-row span{display:flex;flex-direction:column}.access-row b{font-size:13px}.access-row small{margin-top:4px;color:#718a93}.access-row strong{margin-left:auto;font-size:12px;color:#a6e6d2}.access-row strong.amber{color:#efc274}
+    .server-actions{display:flex;gap:10px;margin-top:auto;padding-top:20px}.btn{height:44px;border-radius:11px;border:1px solid var(--line2);padding:0 17px;color:#c9d8dc;background:rgba(255,255,255,.03);font-weight:600}.btn.primary{flex:1;border-color:rgba(77,212,232,.45);background:linear-gradient(180deg,#238da3,#17758b);color:#f2fdff}
+    .tray-pop{position:absolute;z-index:10;right:20px;top:70px;width:324px;border:1px solid rgba(199,231,240,.2);border-radius:15px;background:rgba(15,28,36,.97);box-shadow:0 24px 70px rgba(0,0,0,.52),inset 0 1px rgba(255,255,255,.06);overflow:hidden}.tray-head{padding:16px 17px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:11px}.tray-head .mini-mark{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:rgba(77,212,232,.11);color:var(--cyan);font-size:11px;font-weight:800}.tray-head b{font-size:13px}.tray-head small{display:block;color:#789098;margin-top:3px}.tray-live{margin:12px;padding:12px 13px;border-radius:11px;background:rgba(48,117,104,.13);border:1px solid rgba(73,212,189,.16)}.tray-live b{font-size:13px;color:#c5f2e4}.tray-live span{display:block;margin-top:5px;color:#88a69e;font-size:11px}.tray-menu{padding:0 8px 8px}.tray-menu div{height:39px;padding:0 10px;display:flex;align-items:center;border-radius:8px;color:#c5d3d7;font-size:12px}.tray-menu div:hover{background:rgba(255,255,255,.05)}.tray-menu i{width:7px;height:7px;border-radius:50%;margin-left:auto;background:var(--green)}.tray-menu .sep{height:1px;margin:5px 10px;background:var(--line)}.tray-menu .exit{color:#ef9699}
+
+    /* Remote mobile */
+    .mobile-app{width:100vw;height:100vh;overflow:hidden;background:linear-gradient(165deg,#07131c,#0c202b);padding:0 17px 76px}
+    .m-head{height:75px;display:flex;align-items:center;border-bottom:1px solid var(--line)}.m-brand{display:flex;align-items:center;gap:10px}.m-logo{width:34px;height:36px;display:grid;place-items:center;border:1px solid rgba(77,212,232,.55);clip-path:polygon(50% 0,94% 18%,94% 72%,50% 100%,6% 72%,6% 18%);color:var(--cyan);font-size:10px;font-weight:800;background:rgba(77,212,232,.08)}.m-brand b{font-size:15px}.m-brand small{display:block;color:#66818a;font-size:9px;letter-spacing:1.3px;margin-top:3px}.m-online{margin-left:auto;padding:7px 9px;border:1px solid rgba(70,212,139,.2);border-radius:8px;color:#99e6bd;background:rgba(70,212,139,.08);font-size:10px}.m-scroll{height:calc(100vh - 75px);overflow:hidden;padding-top:17px}.m-overview{position:relative;padding:19px;border:1px solid rgba(77,212,232,.2);border-radius:17px;background:linear-gradient(135deg,rgba(30,74,87,.58),rgba(19,42,53,.76));overflow:hidden}.m-overview:after{content:"";position:absolute;width:145px;height:145px;border:1px solid rgba(77,212,232,.14);border-radius:50%;right:-55px;top:-70px;box-shadow:0 0 0 23px rgba(77,212,232,.025),0 0 0 47px rgba(77,212,232,.02)}.m-overview small{color:#7fd5df;font-size:10px;letter-spacing:1.4px}.m-overview h1{font-size:27px;margin:8px 0 4px}.m-overview p{font-size:12px;color:#8da4ac;margin:0}.m-overview .updated{position:absolute;right:15px;bottom:16px;color:#6e8992;font-size:9px}
+    .m-section-title{display:flex;align-items:center;margin:18px 2px 10px}.m-section-title b{font-size:14px}.m-section-title span{margin-left:auto;color:#77dce8;font-size:10px}.m-instance{padding:14px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(145deg,rgba(27,45,56,.93),rgba(17,32,41,.92));margin-bottom:9px}.m-instance-head{display:flex;align-items:center}.m-instance-head i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px rgba(70,212,139,.65);margin-right:9px}.m-instance-head b{font-size:13px}.m-instance-head span{margin-left:auto;color:#7f979f;font-size:10px}.m-metrics{display:grid;grid-template-columns:1fr 1fr 1.3fr;margin-top:13px}.m-metrics div{border-right:1px solid var(--line);padding-left:10px}.m-metrics div:first-child{padding-left:0}.m-metrics div:last-child{border:0}.m-metrics small{display:block;color:#718992;font-size:9px}.m-metrics b{display:block;font-size:12px;margin-top:4px;color:#cddadd}.m-metrics div:last-child b{color:#9be5cf}
+    .m-stats{display:grid;grid-template-columns:1fr 1fr;gap:9px}.m-stat{padding:14px;border:1px solid var(--line);border-radius:13px;background:rgba(24,42,52,.88)}.m-stat small{color:#728b94;font-size:9px}.m-stat b{display:block;font-size:20px;margin-top:7px}.m-stat span{display:block;color:#709087;font-size:9px;margin-top:5px}.m-recent{margin-top:9px;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:rgba(22,39,49,.88)}.m-recent-row{display:grid;grid-template-columns:1.2fr 1fr .8fr;align-items:center;height:34px;border-bottom:1px solid var(--line);font-size:10px;color:#91a6ad}.m-recent-row:last-child{border:0}.m-recent-row b{color:#d2dfe2;font-weight:580}.m-recent-row span:last-child{text-align:right;color:#88ddc5}
+    .m-nav{position:fixed;left:0;right:0;bottom:0;height:65px;display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid rgba(220,242,248,.12);background:rgba(7,18,26,.96);backdrop-filter:blur(15px)}.m-nav div{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#66808a;font-size:9px}.m-nav svg{width:18px;height:18px}.m-nav .active{color:var(--cyan)}.safe-area{position:fixed;left:0;right:0;bottom:0;height:4px;background:#0a1821}
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute">
+    <symbol id="play" viewBox="0 0 24 24"><path d="m7 4 12 8-12 8V4Z"/></symbol>
+    <symbol id="layers" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/></symbol>
+    <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="gauge" viewBox="0 0 24 24"><path d="M4 17a8 8 0 1 1 16 0"/><path d="m12 13 4-4M7 17h10"/></symbol>
+    <symbol id="wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5-5L12 3.6 9.6 6 7.3 3.7a4 4 0 0 0 5 5L4 17l3 3 7.7-8.3Z"/></symbol>
+    <symbol id="wifi" viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 14 0M8 16a6 6 0 0 1 8 0M11 19.5a2 2 0 0 1 2 0"/><path d="M12 22h.01"/></symbol>
+    <symbol id="tray" viewBox="0 0 24 24"><path d="M4 11h16l-1 9H5l-1-9Z"/><path d="M8 15h8M12 3v8M8 7l4 4 4-4"/></symbol>
+    <symbol id="shield" viewBox="0 0 24 24"><path d="M12 3 4 6v5c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-3Z"/><path d="m9 12 2 2 4-5"/></symbol>
+    <symbol id="monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+    <symbol id="phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></symbol>
+    <symbol id="server" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="7" rx="2"/><rect x="4" y="14" width="16" height="7" rx="2"/><path d="M8 7h.01M8 18h.01M12 7h5M12 18h5"/></symbol>
+    <symbol id="list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v9H3v-9Z"/><path d="M9 20v-6h6v6"/></symbol>
+  </svg>
+
+  <div class="desktop only-desktop">
+    <header class="topbar">
+      <div class="mark">LA</div><div class="brand"><b>明日之后画质启动器</b><span>CONTROL CENTER</span></div>
+      <div class="top-status"><i></i><span>后台记录中 · 2 个实例</span></div>
+      <div class="window-controls"><span>—</span><span>□</span><span>×</span></div>
+    </header>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="nav">
+          <div class="nav-item"><svg><use href="#play"/></svg><b>启动</b></div>
+          <div class="nav-item"><svg><use href="#layers"/></svg><b>多开</b></div>
+          <div class="nav-item"><svg><use href="#clock"/></svg><b>记录</b></div>
+          <div class="nav-item"><svg><use href="#gauge"/></svg><b>帧率解锁</b></div>
+          <div class="nav-item active"><em>BETA</em><svg><use href="#wifi"/></svg><b>后台与远程</b></div>
+          <div class="nav-item"><svg><use href="#wrench"/></svg><b>工具</b></div>
+        </div>
+        <div class="side-foot">ⓘ<br><br>v2.2</div>
+      </aside>
+      <main class="main">
+        <div class="page-head">
+          <div><span class="eyebrow">BACKGROUND · LAN RELAY</span><h1>后台记录与局域网副屏</h1><p>关闭窗口后继续统计游戏时长；远端仅查看，不接管本机操作。</p></div>
+          <div class="runtime-badge"><i class="pulse"></i><span><small>守护状态</small><b>正在低功耗记录</b></span></div>
+        </div>
+        <div class="layout">
+          <div class="stack">
+            <section class="card card-pad">
+              <div class="card-head"><div><span class="eyebrow">TRAY GUARD</span><h2>托盘常驻</h2><p>隐藏界面后销毁渲染窗口，只保留监控与记录核心。</p></div><div class="state-chip"><i></i>运行中</div></div>
+              <div class="settings">
+                <div class="setting"><div class="setting-icon"><svg><use href="#tray"/></svg></div><div class="setting-copy"><b>关闭窗口时收至托盘</b><span>点击右上角关闭后仍持续记录，托盘菜单可彻底退出</span></div><div class="toggle on"></div></div>
+                <div class="setting"><div class="setting-icon"><svg><use href="#play"/></svg></div><div class="setting-copy"><b>随系统静默启动</b><span>登录 Windows 后直接驻留托盘，不弹出主窗口</span></div><div class="toggle"></div></div>
+                <div class="setting"><div class="setting-icon"><svg><use href="#gauge"/></svg></div><div class="setting-copy"><b>后台采样策略</b><span>有游戏时加快，无游戏时自动降频</span></div><div class="select-chip">自适应 · 推荐⌄</div></div>
+              </div>
+              <div class="resource-strip">
+                <div><small>当前模式</small><b>游戏运行 · 每 5 秒</b></div>
+                <div><small>渲染窗口</small><b class="good">已释放</b></div>
+                <div><small>磁盘写入</small><b>状态变化 / 60 秒</b></div>
+                <div><small>远端连接</small><b>1 台设备</b></div>
+              </div>
+            </section>
+            <section class="card route-card">
+              <div class="route-head"><div><span class="eyebrow">STATUS ROUTE</span><h2>状态只向外读，不接受远程控制</h2></div><span class="readonly">READ ONLY</span></div>
+              <div class="route">
+                <div class="route-node"><div class="node-icon"><svg><use href="#monitor"/></svg></div><div><b>本机监控核心</b><small>实例 · 时长 · 性能</small></div></div>
+                <div class="route-line"></div>
+                <div class="route-node"><div class="node-icon"><svg><use href="#server"/></svg></div><div><b>局域网接口</b><small>缓存快照 · SSE 推送</small></div></div>
+                <div class="route-line"></div>
+                <div class="route-node"><div class="node-icon"><svg><use href="#phone"/></svg></div><div><b>远端浏览器</b><small>手机 · 平板 · PC</small></div></div>
+              </div>
+            </section>
+          </div>
+          <section class="card server-card">
+            <div class="card-head"><div><span class="eyebrow">LOCAL STATUS SERVICE</span><h2>局域网只读访问</h2><p>只监听选定的家庭 / 专用网络。</p></div><div class="toggle on"></div></div>
+            <div class="server-state">
+              <div class="server-state-top"><div class="shield"><svg><use href="#shield"/></svg></div><div><b>服务已开启</b><small>专用网络 · 端口 17666 · 只读</small></div></div>
+              <div class="url">http://192.168.1.23:17666<button>复制地址</button></div>
+            </div>
+            <div class="pairing">
+              <div class="qr">
+                <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+              </div>
+              <div class="pair-copy"><h3>扫码连接新设备</h3><p>配对码 5 分钟后失效。连接成功后可随时在本机撤销该设备。</p><span class="code">583 204</span></div>
+            </div>
+            <div class="access">
+              <div class="access-row"><span><b>iPhone · Safari</b><small>192.168.1.51 · 刚刚在线</small></span><strong>已授权</strong></div>
+              <div class="access-row"><span><b>对外数据</b><small>实例状态、汇总统计、账号排行、最近会话</small></span><strong class="amber">隐藏本机路径</strong></div>
+            </div>
+            <div class="server-actions"><button class="btn">管理设备</button><button class="btn primary">在本机预览远端页面</button></div>
+          </section>
+        </div>
+        <aside class="tray-pop">
+          <div class="tray-head"><div class="mini-mark">LA</div><div><b>明日之后画质启动器</b><small>后台守护正在运行</small></div></div>
+          <div class="tray-live"><b>● 2 个游戏实例运行中</b><span>主号 01:42:18 · 小号 02:16:40</span></div>
+          <div class="tray-menu"><div>打开控制中心</div><div>打开远端状态页</div><div>局域网访问<i></i></div><div class="sep"></div><div class="exit">退出并停止记录</div></div>
+        </aside>
+      </main>
+    </div>
+  </div>
+
+  <div class="mobile-app only-mobile">
+    <header class="m-head">
+      <div class="m-brand"><div class="m-logo">LA</div><div><b>明日之后 · 副屏</b><small>HOME NETWORK STATUS</small></div></div>
+      <span class="m-online">● 本机在线</span>
+    </header>
+    <div class="m-scroll">
+      <section class="m-overview"><small>LIVE GUARD</small><h1>2 个实例运行中</h1><p>后台记录正常 · 总占用内存 7.8 GB</p><span class="updated">刚刚更新</span></section>
+      <div class="m-section-title"><b>当前实例</b><span>实时推送</span></div>
+      <article class="m-instance">
+        <div class="m-instance-head"><i></i><b>不与世俗纷争</b><span>PID 18472</span></div>
+        <div class="m-metrics"><div><small>画面</small><b>2560 × 1440</b></div><div><small>帧率</small><b>实际 180 FPS</b></div><div><small>运行时长</small><b>01:42:18</b></div></div>
+      </article>
+      <article class="m-instance">
+        <div class="m-instance-head"><i></i><b>挂机账号 02</b><span>PID 20640</span></div>
+        <div class="m-metrics"><div><small>画面</small><b>960 × 540</b></div><div><small>帧率</small><b>25 FPS</b></div><div><small>运行时长</small><b>02:16:40</b></div></div>
+      </article>
+      <div class="m-section-title"><b>今日记录</b><span>查看全部 →</span></div>
+      <div class="m-stats">
+        <div class="m-stat"><small>总运行时长</small><b>3小时 58分</b><span>多开重叠时段已去重</span></div>
+        <div class="m-stat"><small>启动次数</small><b>4 次</b><span>2 个游戏账号</span></div>
+      </div>
+      <div class="m-recent">
+        <div class="m-recent-row"><b>最近会话</b><span>开始时间</span><span>时长</span></div>
+        <div class="m-recent-row"><b>不与世俗纷争</b><span>今天 18:24</span><span>进行中</span></div>
+        <div class="m-recent-row"><b>挂机账号 02</b><span>今天 17:50</span><span>进行中</span></div>
+        <div class="m-recent-row"><b>资源号 01</b><span>今天 15:02</span><span>46 分钟</span></div>
+      </div>
+    </div>
+    <nav class="m-nav">
+      <div class="active"><svg><use href="#home"/></svg>状态</div>
+      <div><svg><use href="#clock"/></svg>记录</div>
+      <div><svg><use href="#shield"/></svg>只读连接</div>
+    </nav>
+    <div class="safe-area"></div>
+  </div>
+  <script>
+    const mode = new URLSearchParams(location.search).get('mode') || 'desktop';
+    if (mode === 'mobile') document.body.classList.add('mobile');
+  </script>
+</body>
+</html>

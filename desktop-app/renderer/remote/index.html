@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#08131b">
+  <title>明日之后 · 局域网副屏</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand-mark">LA</div>
+      <div class="brand-copy"><strong>明日之后 · 副屏</strong><span>HOME NETWORK STATUS</span></div>
+      <span class="connection" id="connectionState"><i></i><b>正在连接</b></span>
+    </header>
+
+    <main>
+      <section class="pair-view" id="pairView" hidden>
+        <div class="pair-shield">
+          <svg viewBox="0 0 24 24"><path d="M12 3 4 6v5c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-3Z"/><path d="m9 12 2 2 4-5"/></svg>
+        </div>
+        <span class="eyebrow">LOCAL PAIRING</span>
+        <h1>连接这台启动器</h1>
+        <p>在启动器的“后台与远程”页面查看六位配对码。配对只在当前家庭或专用网络内有效。</p>
+        <form id="pairForm">
+          <label for="pairCode">六位配对码</label>
+          <input id="pairCode" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="000 000">
+          <label for="deviceName">设备名称</label>
+          <input id="deviceName" maxlength="40" placeholder="例如：我的 iPhone">
+          <button type="submit">连接并查看状态</button>
+        </form>
+        <span class="form-error" id="pairError"></span>
+        <small>本页面只提供状态查看，不接受游戏启动、画质或帧率修改。</small>
+      </section>
+
+      <div id="dashboard" hidden>
+        <section class="overview">
+          <span class="eyebrow">LIVE GUARD</span>
+          <h1><b id="instanceCount">0</b> 个实例运行中</h1>
+          <p id="overviewText">后台记录正常，等待游戏实例</p>
+          <span class="updated" id="updatedAt">正在同步</span>
+        </section>
+
+        <div class="section-title"><h2>当前实例</h2><span id="pushState">实时推送</span></div>
+        <div class="instance-list" id="instanceList"></div>
+
+        <div class="history-head">
+          <div class="section-title"><h2>运行记录</h2><span>多开重叠时段已去重</span></div>
+          <div class="range-tabs" id="rangeTabs">
+            <button data-range="day" class="active">今日</button>
+            <button data-range="week">本周</button>
+            <button data-range="month">本月</button>
+            <button data-range="total">全部</button>
+          </div>
+        </div>
+
+        <section class="summary-grid">
+          <article><small>总运行时长</small><strong id="totalDuration">0分钟</strong><span id="historyGenerated">等待记录</span></article>
+          <article><small>启动次数</small><strong id="launchCount">0 次</strong><span id="accountCount">0 个账号</span></article>
+          <article><small>最常用账号</small><strong id="mostUsed">暂无</strong><span id="mostUsedShare">等待记录</span></article>
+          <article><small>平均单次</small><strong id="averageDuration">0分钟</strong><span>按账号会话计算</span></article>
+        </section>
+
+        <div class="history-grid">
+          <section class="panel">
+            <div class="panel-title"><span class="eyebrow">ACCOUNT RANKING</span><h2>账号时长排行</h2></div>
+            <div id="ranking"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-title"><span class="eyebrow">RECENT SESSIONS</span><h2>最近会话</h2></div>
+            <div id="recent"></div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <footer><span>局域网只读连接</span><i></i><span>不经过云端服务器</span></footer>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
