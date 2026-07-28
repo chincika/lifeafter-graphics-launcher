@@ -17,6 +17,7 @@ let busy = false;
 let currentView = 'launch';
 let currentHistoryRange = 'week';
 let historyLoading = false;
+let historyEnabled = true;
 let lastHistoryRefresh = 0;
 let fpsStatus = null;
 let selectedFpsTarget = 180;
@@ -24,8 +25,15 @@ let busyButton = null;
 let fpsStatusLoading = false;
 let backgroundState = null;
 let backgroundLoading = false;
+let updateState = null;
+let performanceModeAvailable = false;
+let performanceModeLoading = false;
+let gameInstallations = { activeRoot: '', installations: [], scan: null };
+let packageMenuOpen = false;
+let packageScanLoading = false;
 let unsubscribeInstances = null;
 let unsubscribeBackground = null;
+let unsubscribeUpdate = null;
 
 function icon(name) {
   return `<svg aria-hidden="true"><use href="#i-${name}"></use></svg>`;
@@ -73,6 +81,318 @@ function syncFpsActionAvailability() {
   $$('.fps-target').forEach(button => {
     button.disabled = busy;
   });
+}
+
+function renderHistoryRecordingState(enabled = historyEnabled) {
+  historyEnabled = enabled !== false;
+  const input = $('#historyEnabled');
+  const label = $('#historyEnabledLabel');
+  const badge = $('#historyRecordingBadge');
+  if (input) input.checked = historyEnabled;
+  if (label) label.textContent = historyEnabled ? '自动记录已开启' : '自动记录已暂停';
+  if (badge) {
+    badge.classList.toggle('paused', !historyEnabled);
+    badge.lastChild.textContent = historyEnabled ? '自动记录' : '记录已暂停';
+  }
+}
+
+function renderUpdateState(state) {
+  if (!state) return;
+  updateState = state;
+  const busyPhases = new Set(['checking', 'downloading', 'installing']);
+  const button = $('#checkForUpdates');
+  const frequency = $('#updateFrequency');
+  $('#aboutVersion').textContent = `v${state.currentVersion || '2.3.0'}`;
+  $('#updateStatus').textContent = state.message || '尚未检查更新';
+  $('#updateProgress').style.width = `${Math.max(0, Math.min(100, Number(state.progress) || 0))}%`;
+  frequency.value = state.frequency || 'startup';
+  frequency.disabled = busyPhases.has(state.phase);
+  button.disabled = busyPhases.has(state.phase);
+  button.classList.toggle('loading', busyPhases.has(state.phase));
+  button.lastChild.textContent = state.phase === 'checking'
+    ? '正在检查'
+    : state.phase === 'downloading'
+      ? `${Number(state.progress) || 0}%`
+      : state.phase === 'installing'
+        ? '正在重启'
+        : '立即检查';
+  const details = [];
+  if (state.error) details.push(state.error);
+  else if (state.lastCheckedAt) {
+    details.push(`上次检查 ${new Date(state.lastCheckedAt).toLocaleString('zh-CN', { hour12: false })}`);
+  } else {
+    details.push('从 GitHub Release 获取并校验 Windows 便携版');
+  }
+  if (!state.automaticInstallSupported && state.phase === 'available') {
+    details.push('当前运行方式不支持原位替换');
+  }
+  $('#updateDetail').textContent = details.join(' · ');
+}
+
+async function setUpdateFrequency(frequency) {
+  const result = await window.launcher.setUpdateFrequency(frequency);
+  if (result.ok) {
+    renderUpdateState(result.data);
+    const labels = {
+      startup: '每次启动',
+      daily: '每天一次',
+      weekly: '每周一次',
+      monthly: '每月一次'
+    };
+    setActivity('更新检查频率已调整', labels[frequency]);
+  } else {
+    renderUpdateState(updateState);
+    setActivity('无法更新检查频率', result.error, 'error');
+  }
+}
+
+async function checkForUpdatesNow() {
+  renderUpdateState({
+    ...(updateState || {}),
+    phase: 'checking',
+    progress: 0,
+    message: '正在检查 GitHub 最新版本…',
+    error: ''
+  });
+  try {
+    const result = await window.launcher.checkForUpdates();
+    if (result.data) renderUpdateState(result.data);
+    if (!result.ok) {
+      setActivity('检查更新失败', result.error, 'error');
+    } else if (!result.updateAvailable) {
+      setActivity('当前已是最新版本', result.data?.message || '');
+    } else if (result.deferred) {
+      setActivity('新版本已下载', '游戏退出后将自动替换并重启启动器。');
+    } else {
+      setActivity('发现新版本', result.data?.message || '正在准备更新');
+    }
+  } catch (error) {
+    setActivity('检查更新失败', error?.message || String(error), 'error');
+    const refreshed = await window.launcher.getUpdateState();
+    if (refreshed.ok) renderUpdateState(refreshed.data);
+  }
+}
+
+async function updateHistoryRecording(enabled) {
+  const input = $('#historyEnabled');
+  input.disabled = true;
+  try {
+    const result = await window.launcher.setHistoryEnabled(enabled);
+    if (!result.ok) {
+      renderHistoryRecordingState(!enabled);
+      setActivity('无法更新启动记录设置', result.error, 'error');
+      return;
+    }
+    renderHistoryRecordingState(result.value);
+    setActivity(
+      result.value ? '启动记录已开启' : '启动记录已暂停',
+      result.value
+        ? '之后检测到的游戏会话将继续保存在本机。'
+        : '暂停期间仍会显示实例状态，但不会累计启动记录。'
+    );
+    await loadHistory(currentHistoryRange, true);
+  } catch (error) {
+    renderHistoryRecordingState(!enabled);
+    setActivity('无法更新启动记录设置', error?.message || String(error), 'error');
+  } finally {
+    input.disabled = false;
+  }
+}
+
+function formatLastUsed(timestamp) {
+  const value = Number(timestamp || 0);
+  if (!value) return '尚未使用';
+  return new Date(value).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+}
+
+function setPackageMenuOpen(open) {
+  packageMenuOpen = Boolean(open);
+  $('#packageMenu').hidden = !packageMenuOpen;
+  $('#packageMenuBackdrop').hidden = !packageMenuOpen;
+  $('#chooseRootButton').setAttribute('aria-expanded', String(packageMenuOpen));
+}
+
+function renderPackageScanState(scan = gameInstallations.scan) {
+  const state = $('#packageScanState');
+  state.classList.toggle('scanning', packageScanLoading);
+  if (packageScanLoading) {
+    state.querySelector('b').textContent = '正在扫描全部磁盘';
+    state.querySelector('small').textContent = '只读取目录结构，不会修改任何游戏文件。';
+    state.querySelector('time').textContent = '请稍候';
+    return;
+  }
+  const drives = Array.isArray(scan?.drives)
+    ? scan.drives.map(item => String(item).replace('\\', '')).join('、')
+    : '';
+  const count = gameInstallations.installations.filter(item => item.valid).length;
+  state.querySelector('b').textContent = '自动检测已完成';
+  state.querySelector('small').textContent = drives
+    ? `已检查 ${drives}，当前记录 ${count} 个有效游戏包体`
+    : `当前记录 ${count} 个有效游戏包体`;
+  state.querySelector('time').textContent = scan?.completedAt ? '刚刚' : '已就绪';
+}
+
+function renderGameInstallations(payload = gameInstallations) {
+  gameInstallations = payload || { activeRoot: '', installations: [], scan: null };
+  const records = Array.isArray(gameInstallations.installations)
+    ? gameInstallations.installations
+    : [];
+  const active = records.find(item => item.active) ||
+    records.find(item => item.root === gameInstallations.activeRoot);
+  $('#gameRoot').textContent = active?.root || gameInstallations.activeRoot || '点击添加游戏目录';
+  $('#gamePlatformLabel').textContent = active?.platformLabel || '尚未选择';
+
+  const list = $('#packageList');
+  if (!records.length) {
+    list.innerHTML = '<div class="package-empty">没有发现游戏包体<br><small>可以扫描磁盘或手动添加游戏目录</small></div>';
+  } else {
+    list.innerHTML = records.map((item, index) => {
+      const caps = [
+        item.valid ? '画质配置' : '目录已失效',
+        item.performanceAvailable ? '性能 x64-3' : '标准启动',
+        item.fpsAvailable ? '帧率可用' : '帧率待检测'
+      ];
+      const action = item.active
+        ? '<button class="package-switch on" disabled>正在使用</button>'
+        : item.valid
+          ? `<button class="package-switch" data-switch-installation="${index}">切换到此包体</button>`
+          : '<button class="package-switch" disabled>无法使用</button>';
+      const remove = item.active
+        ? ''
+        : `<button class="package-remove" data-remove-installation="${index}">移除记录</button>`;
+      return `
+        <article class="package-installation ${item.platformId === 'fever' ? 'fever' : ''} ${item.active ? 'active' : ''} ${item.valid ? '' : 'invalid'}">
+          <span class="package-installation-icon">${icon('folder')}</span>
+          <div class="package-installation-info">
+            <div class="package-installation-title">
+              <b>${escapeHtml(item.platformLabel)}</b>
+              <span class="package-badge">${item.platformId === 'fever' ? 'MRZH' : 'LIFEAFTER'}</span>
+              ${item.active ? '<span class="package-current">当前使用</span>' : ''}
+            </div>
+            <p title="${escapeHtml(item.root)}">${escapeHtml(item.root)}</p>
+            <div class="package-meta">
+              <span>版本 <strong>${escapeHtml(item.version)}</strong></span>
+              <span>${escapeHtml(item.sourceLabel)} · ${escapeHtml(item.folderHint)}</span>
+              <span>最后使用 ${escapeHtml(formatLastUsed(item.lastUsedAt))}</span>
+            </div>
+            <div class="package-caps">${caps.map(value => `<span>${escapeHtml(value)}</span>`).join('')}</div>
+          </div>
+          <div class="package-installation-actions">${action}${remove}</div>
+        </article>`;
+    }).join('');
+  }
+
+  $$('[data-switch-installation]', list).forEach(button => {
+    button.addEventListener('click', () =>
+      switchGameInstallation(records[Number(button.dataset.switchInstallation)], button));
+  });
+  $$('[data-remove-installation]', list).forEach(button => {
+    button.addEventListener('click', () =>
+      removeGameInstallation(records[Number(button.dataset.removeInstallation)]));
+  });
+  renderPackageScanState();
+}
+
+function applyGameRootResult(result) {
+  renderGameInstallations(result.installations);
+  $('#gameRoot').textContent = result.root;
+  $('#gamePlatformLabel').textContent =
+    result.installation?.platformLabel || result.launchMode?.platformLabel || '游戏包体';
+  $('#topStatus').textContent = '游戏已就绪';
+  performanceModeAvailable = result.launchMode?.performanceAvailable === true;
+  renderPerformanceMode();
+  if (result.fpsStatus) renderFpsStatus(result.fpsStatus);
+  const match = String(result.summary || '').match(/当前档位：([^/]+)/);
+  if (match && presets[match[1].trim()]) updatePreset(match[1].trim());
+}
+
+async function addGameInstallation() {
+  const result = await window.launcher.chooseGameRoot();
+  if (result.ok) {
+    applyGameRootResult(result);
+    setPackageMenuOpen(false);
+    setActivity(`已切换到${result.installation?.platformLabel || '游戏包体'}`, result.root);
+  } else if (!result.canceled) {
+    setActivity('目录添加失败', result.error, 'error');
+  }
+}
+
+async function scanGameInstallations() {
+  if (packageScanLoading) return;
+  packageScanLoading = true;
+  $('#scanGameRoots').disabled = true;
+  renderPackageScanState();
+  try {
+    const result = await window.launcher.scanGameRoots();
+    if (result.ok) {
+      renderGameInstallations(result.data);
+      const count = result.data.installations.filter(item => item.valid).length;
+      setActivity('游戏包体扫描完成', `共记录 ${count} 个有效游戏包体`);
+    } else {
+      setActivity('游戏包体扫描失败', result.error, 'error');
+    }
+  } catch (error) {
+    setActivity('游戏包体扫描失败', error?.message || String(error), 'error');
+  } finally {
+    packageScanLoading = false;
+    $('#scanGameRoots').disabled = false;
+    renderPackageScanState();
+  }
+}
+
+async function switchGameInstallation(item, button) {
+  if (!item?.valid || item.active) return;
+  if (fpsStatus?.gameRunning) {
+    setActivity('游戏运行中，暂时不能切换包体', '请完全退出游戏后再切换目录。', 'error');
+    return;
+  }
+  button.disabled = true;
+  button.textContent = '正在切换…';
+  try {
+    const result = await window.launcher.switchGameRoot(item.root);
+    if (result.ok) {
+      applyGameRootResult(result);
+      setPackageMenuOpen(false);
+      setActivity(`已切换到${result.installation.platformLabel}`, result.root);
+    } else {
+      setActivity('包体切换失败', result.error, 'error');
+      renderGameInstallations(gameInstallations);
+    }
+  } catch (error) {
+    setActivity('包体切换失败', error?.message || String(error), 'error');
+    renderGameInstallations(gameInstallations);
+  }
+}
+
+async function removeGameInstallation(item) {
+  if (!item || item.active) return;
+  const accepted = await confirmDialog(
+    '移除目录记录？',
+    `只会从启动器列表移除该记录，不会删除任何游戏文件。\n${item.root}`,
+    '移除记录'
+  );
+  if (!accepted) return;
+  const result = await window.launcher.removeGameRoot(item.root);
+  if (result.ok) {
+    renderGameInstallations(result.data);
+    setActivity('目录记录已移除', item.root);
+  } else {
+    setActivity('无法移除目录记录', result.error, 'error');
+  }
+}
+
+function formatPackageSize(bytes) {
+  const value = Number(bytes || 0);
+  if (!Number.isFinite(value) || value <= 0) return '未检测到';
+  return value >= 1024 ** 3
+    ? `${(value / 1024 ** 3).toFixed(2)} GB`
+    : `${(value / 1024 ** 2).toFixed(1)} MB`;
 }
 
 function setBusy(value, activeButton) {
@@ -415,11 +735,21 @@ async function updateBackgroundOption(key, value, label) {
 async function applyPreset(preset, launch, button) {
   if (busy) return false;
   setBusy(true, button);
-  setActivity(launch ? `正在应用 ${preset} 并启动…` : `正在应用 ${preset}…`);
+  const performanceMode = launch && isPerformanceModeActive();
+  setActivity(
+    launch
+      ? `正在应用 ${preset} 并以${performanceMode ? '性能' : '标准'}模式启动…`
+      : `正在应用 ${preset}…`
+  );
   try {
-    const result = await window.launcher.applyPreset(preset, launch);
+    const result = await window.launcher.applyPreset(preset, launch, performanceMode);
     if (result.ok) {
-      setActivity(launch ? `${preset} 已应用，游戏正在启动` : `${preset} 已应用`, result.text);
+      setActivity(
+        launch
+          ? `${preset} 已应用，游戏正以${performanceMode ? '性能' : '标准'}模式启动`
+          : `${preset} 已应用`,
+        result.text
+      );
       setTimeout(() => refreshInstances(), 1600);
       return true;
     }
@@ -430,6 +760,52 @@ async function applyPreset(preset, launch, button) {
     return false;
   } finally {
     setBusy(false, button);
+  }
+}
+
+function isPerformanceModeActive() {
+  return performanceModeAvailable && $('#performanceMode').checked;
+}
+
+function renderPerformanceMode() {
+  const checkbox = $('#performanceMode');
+  const status = $('#performanceModeStatus');
+  checkbox.disabled = performanceModeLoading || !performanceModeAvailable;
+  if (!performanceModeAvailable) {
+    status.textContent = '未找到 x64-3 性能通道';
+    status.dataset.state = 'unavailable';
+  } else if (checkbox.checked) {
+    status.textContent = '性能通道 · x64-3';
+    status.dataset.state = 'performance';
+  } else {
+    status.textContent = '标准通道 · 根目录';
+    status.dataset.state = 'standard';
+  }
+}
+
+async function updatePerformanceMode(enabled) {
+  if (performanceModeLoading) return;
+  performanceModeLoading = true;
+  renderPerformanceMode();
+  try {
+    const result = await window.launcher.setPerformanceMode(enabled);
+    if (!result.ok) {
+      $('#performanceMode').checked = !enabled;
+      setActivity('性能启动模式切换失败', result.error, 'error');
+      return;
+    }
+    setActivity(
+      enabled ? '性能启动模式已开启' : '已切换为标准启动模式',
+      enabled
+        ? '启动游戏时将使用官方 Documents\\bin\\x64-3\\lifeafter.exe 通道'
+        : '启动游戏时将使用游戏根目录 lifeafter.exe'
+    );
+  } catch (error) {
+    $('#performanceMode').checked = !enabled;
+    setActivity('性能启动模式切换失败', error?.message || String(error), 'error');
+  } finally {
+    performanceModeLoading = false;
+    renderPerformanceMode();
   }
 }
 
@@ -469,7 +845,11 @@ async function runMultiLaunch() {
   const sequence = [mainPreset, ...Array(count).fill(idlePreset)];
   for (let index = 0; index < sequence.length; index++) {
     setActivity(`正在启动窗口 ${index + 1}/${sequence.length} · ${sequence[index]}`);
-    const result = await window.launcher.applyPreset(sequence[index], true);
+    const result = await window.launcher.applyPreset(
+      sequence[index],
+      true,
+      isPerformanceModeActive()
+    );
     if (!result.ok) {
       setBusy(false);
       setActivity(`窗口 ${index + 1} 启动失败`, result.error, 'error');
@@ -563,6 +943,12 @@ function renderFpsStatus(status) {
     packageState.querySelector('strong').textContent = '当前包体无法安全修改';
     packageState.querySelector('p').textContent = error;
     $('#fpsCurrentState').textContent = '不可用';
+    $('#fpsPlatformLabel').textContent = '未识别';
+    $('#fpsPlatformChip span').textContent = '游戏平台未识别';
+    $('#fpsPlatformChip small').textContent = '写入已锁定';
+    $('#fpsTargetPackageMeta').textContent = error;
+    $('#fpsRootPackageMeta').textContent = '未执行根目录包体检测';
+    $('#fpsCompatibilitySummary').textContent = '安全检查未通过，不会写入任何 NPK 文件。';
     $('#fpsBaselineState').textContent = '未检测';
     $('#fpsBackupCount').textContent = '未检测';
     $('#fpsPackagePath').textContent = error;
@@ -590,12 +976,25 @@ function renderFpsStatus(status) {
   if (!safe) packageState.classList.add('error');
   packageState.querySelector('strong').textContent = safe ? '当前包体已识别' : '当前包体拒绝写入';
   packageState.querySelector('p').textContent = safe
-    ? 'NXPK v3 · SettingManager 槽位匹配 · 槽外整包哈希通过'
+    ? `NXPK v3 · SettingManager 槽位匹配 · ${fpsStatus.compatibilityLabel || '兼容档案已建立'}`
     : '版本锁、目标槽或槽外整包哈希未通过';
+  const platformLabel = fpsStatus.platformLabel || '老PC包体';
+  const gameVersion = fpsStatus.gameVersion || '版本号未知';
+  $('#fpsPlatformLabel').textContent = `${platformLabel} · ${gameVersion}`;
+  $('#fpsPlatformChip span').textContent = platformLabel;
+  $('#fpsPlatformChip small').textContent = fpsStatus.knownProfile ? '已验证档案' : '自动兼容档案';
+  $('#fpsTargetPackageMeta').textContent =
+    `${gameVersion} · ${formatPackageSize(fpsStatus.packageSize)} · 仅此文件可写`;
+  $('#fpsRootPackageMeta').textContent = fpsStatus.rootPackagePresent
+    ? `${formatPackageSize(fpsStatus.rootPackageSize)} · 已识别并保持只读`
+    : '当前安装未检测到根目录完整包 · 无写入行为';
+  $('#fpsCompatibilitySummary').textContent = fpsStatus.knownProfile
+    ? `已命中 ${platformLabel} 的审核档案 ${String(fpsStatus.normalizedHash || '').slice(0, 16)}；更新后仍会重新校验。`
+    : `包体整包哈希为新版本，但 NXPK 结构、SettingManager 元数据和槽位均与审核模型一致，已建立隔离档案 ${fpsStatus.profileId || ''}。`;
   $('#fpsCurrentState').textContent = fpsStatus.stateLabel;
   $('#fpsBaselineState').textContent = fpsStatus.baselineReady
-    ? '永久保留 · 官方初始原包'
-    : '首次应用时自动创建';
+    ? `永久保留 · ${platformLabel} 当前版本`
+    : '首次应用时在启动器数据区创建';
   $('#fpsBaselineState').className = fpsStatus.baselineReady ? 'ok' : '';
   const transactionBackupCount = Number(
     fpsStatus.transactionBackupCount ??
@@ -708,6 +1107,7 @@ async function cleanFpsTransactionBackups(button) {
 }
 
 function switchView(view) {
+  setPackageMenuOpen(false);
   currentView = view;
   $$('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === view));
   $('#launchView').classList.toggle('active', view === 'launch' || view === 'multi');
@@ -742,9 +1142,15 @@ async function initialize() {
     return;
   }
   $('#gameRoot').textContent = result.root || '点击选择游戏目录';
+  renderGameInstallations(result.installations);
   $('#topStatus').textContent = result.root ? '游戏已就绪' : '等待配置';
   renderInstances(result.instances);
+  renderHistoryRecordingState(result.historyEnabled);
+  renderUpdateState(result.update);
   renderBackgroundState(result.background);
+  performanceModeAvailable = result.launchMode?.performanceAvailable === true;
+  $('#performanceMode').checked = result.performanceMode !== false;
+  renderPerformanceMode();
   selectedFpsTarget = [120, 180, 240, 300].includes(Number(result.fpsTargetPreference))
     ? Number(result.fpsTargetPreference)
     : 180;
@@ -764,6 +1170,9 @@ async function initialize() {
   unsubscribeBackground = window.launcher.onBackgroundUpdated?.(state => {
     renderBackgroundState(state);
   });
+  unsubscribeUpdate = window.launcher.onUpdateState?.(state => {
+    renderUpdateState(state);
+  });
 }
 
 $$('.nav-item').forEach(item => item.addEventListener('click', () => switchView(item.dataset.view)));
@@ -772,21 +1181,23 @@ $$('.quality-tabs button').forEach(button => button.addEventListener('click', ()
 $('#mainPreset').addEventListener('change', renderPlanRows);
 $('#idlePreset').addEventListener('change', renderPlanRows);
 $('#idleCount').addEventListener('change', renderPlanRows);
+$('#historyEnabled').addEventListener('change', event =>
+  updateHistoryRecording(event.currentTarget.checked));
+$('#updateFrequency').addEventListener('change', event =>
+  setUpdateFrequency(event.currentTarget.value));
+$('#checkForUpdates').addEventListener('click', checkForUpdatesNow);
 
-$('#chooseRootButton').addEventListener('click', async () => {
-  const result = await window.launcher.chooseGameRoot();
-  if (result.ok) {
-    $('#gameRoot').textContent = result.root;
-    $('#topStatus').textContent = '游戏已就绪';
-    setActivity('游戏目录已更新', result.root);
-    await loadFpsStatus(true);
-  } else if (!result.canceled) {
-    setActivity('目录选择失败', result.error, 'error');
-  }
+$('#chooseRootButton').addEventListener('click', () => setPackageMenuOpen(!packageMenuOpen));
+$('#packageMenuBackdrop').addEventListener('click', () => setPackageMenuOpen(false));
+$('#addGameRoot').addEventListener('click', addGameInstallation);
+$('#scanGameRoots').addEventListener('click', scanGameInstallations);
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && packageMenuOpen) setPackageMenuOpen(false);
 });
 
 $('#applyButton').addEventListener('click', event => applyPreset($('#presetSelect').value, false, event.currentTarget));
 $('#applyLaunchButton').addEventListener('click', event => applyPreset($('#presetSelect').value, true, event.currentTarget));
+$('#performanceMode').addEventListener('change', event => updatePerformanceMode(event.currentTarget.checked));
 $('#multiLaunchButton').addEventListener('click', runMultiLaunch);
 $('#refreshInstances').addEventListener('click', () => refreshInstances(false));
 $$('.range-tabs button').forEach(button => button.addEventListener('click', () => {
@@ -895,8 +1306,14 @@ $('#cleanFpsBackups').addEventListener('click', event =>
 $('#openFpsBackups').addEventListener('click', async () => {
   const result = await window.launcher.openFpsBackups();
   result.ok
-    ? setActivity('已打开帧率完整备份目录')
+    ? setActivity('已打开帧率事务备份目录')
     : setActivity('无法打开帧率备份目录', result.error, 'error');
+});
+$('#openFpsProtectedBackups').addEventListener('click', async () => {
+  const result = await window.launcher.openFpsProtectedBackups();
+  result.ok
+    ? setActivity('已打开永久还原点目录')
+    : setActivity('无法打开永久还原点目录', result.error, 'error');
 });
 
 $$('.tool-tile[data-action]').forEach(button =>
@@ -921,6 +1338,7 @@ $('#aboutButton').addEventListener('click', () => switchView('tools'));
 window.addEventListener('beforeunload', () => {
   unsubscribeInstances?.();
   unsubscribeBackground?.();
+  unsubscribeUpdate?.();
 });
 
 initialize();

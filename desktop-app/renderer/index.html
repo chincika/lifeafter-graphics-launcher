@@ -32,6 +32,7 @@
     <symbol id="i-tray" viewBox="0 0 24 24"><path d="M4 11h16l-1 9H5l-1-9Z"/><path d="M8 15h8M12 3v8M8 7l4 4 4-4"/></symbol>
     <symbol id="i-server" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="7" rx="2"/><rect x="4" y="14" width="16" height="7" rx="2"/><path d="M8 7h.01M8 18h.01M12 7h5M12 18h5"/></symbol>
     <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></symbol>
+    <symbol id="i-coffee" viewBox="0 0 24 24"><path d="M5 8h12v6a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5V8Z"/><path d="M17 10h2a3 3 0 0 1 0 6h-2M8 4c0 1 1 1 1 2M12 3c0 1 1 1 1 2"/></symbol>
   </svg>
 
   <header class="topbar">
@@ -67,7 +68,7 @@
       </nav>
       <div class="sidebar-foot">
         <button class="icon-button" id="aboutButton" aria-label="关于"><svg><use href="#i-info"/></svg></button>
-        <span>v2.2</span>
+        <span>v2.3</span>
       </div>
     </aside>
 
@@ -80,14 +81,42 @@
           <p id="heroDescription">安全切换预设、稳定多开、实时观察每个窗口。</p>
         </div>
         <button class="path-pill" id="chooseRootButton">
-          <svg><use href="#i-folder"/></svg>
-          <span class="path-copy"><small>游戏目录</small><strong id="gameRoot">正在检测…</strong></span>
+          <span class="path-icon"><svg><use href="#i-folder"/></svg></span>
+          <span class="path-copy">
+            <span class="path-label"><small>当前游戏包体</small><b id="gamePlatformLabel">正在识别</b><em>使用中</em></span>
+            <strong id="gameRoot">正在检测…</strong>
+          </span>
           <svg class="chevron"><use href="#i-chevron"/></svg>
         </button>
         <div class="fps-takeover-pill" id="fpsTakeoverPill" hidden>
           <svg><use href="#i-gauge"/></svg>
           <span><small>当前接管规则</small><strong id="fpsHeroRule">配置选择 120 FPS → 游戏实际 180 FPS</strong></span>
         </div>
+      </section>
+
+      <div class="package-menu-backdrop" id="packageMenuBackdrop" hidden></div>
+      <section class="package-menu" id="packageMenu" aria-label="游戏包体" hidden>
+        <header class="package-menu-head">
+          <div>
+            <span class="section-kicker">GAME INSTALLATIONS</span>
+            <h2>游戏包体</h2>
+            <p>切换后，画质、启动通道和帧率状态会重新检测。</p>
+          </div>
+          <div class="package-menu-actions">
+            <button id="scanGameRoots"><svg><use href="#i-refresh"/></svg>扫描全部磁盘</button>
+            <button class="primary" id="addGameRoot"><svg><use href="#i-plus"/></svg>添加游戏目录</button>
+          </div>
+        </header>
+        <div class="package-scan-state" id="packageScanState">
+          <i></i>
+          <span><b>正在自动检测游戏包体</b><small>读取目录结构，不会修改游戏文件。</small></span>
+          <time>请稍候</time>
+        </div>
+        <div class="package-list" id="packageList"></div>
+        <footer class="package-menu-foot">
+          <svg><use href="#i-shield"/></svg>
+          自动扫描只读取目录结构；移除记录不会删除任何游戏文件。发现多个包体时保持当前选择。
+        </footer>
       </section>
 
       <section id="launchView" class="view active">
@@ -99,10 +128,22 @@
                   <span class="section-kicker">CURRENT PRESET</span>
                   <h2>当前预设</h2>
                 </div>
-                <label class="toggle">
-                  <input id="performanceMode" type="checkbox" checked>
-                  <span></span>性能优先
-                </label>
+                <div class="preset-header-actions">
+                  <div class="launch-mode-control">
+                    <label class="toggle" title="启动时使用游戏官方 x64-3 性能通道">
+                      <input id="performanceMode" type="checkbox" checked>
+                      <span></span>性能优先
+                    </label>
+                    <small id="performanceModeStatus" data-state="checking">正在检测性能通道…</small>
+                  </div>
+                  <div class="preset-select-wrap">
+                    <select id="presetSelect" aria-label="画质预设">
+                      <option>2K 120</option><option>1080p 120</option><option>1080p 60</option>
+                      <option>900p 120</option><option>900p 60</option><option>720p 60</option>
+                      <option>540p 60</option><option>540p 25</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
               <div class="preset-body">
@@ -111,13 +152,6 @@
                   <svg><use href="#i-monitor"/></svg>
                 </div>
                 <div class="preset-details">
-                  <div class="preset-select-wrap">
-                    <select id="presetSelect" aria-label="画质预设">
-                      <option>2K 120</option><option>1080p 120</option><option>1080p 60</option>
-                      <option>900p 120</option><option>900p 60</option><option>720p 60</option>
-                      <option>540p 60</option><option>540p 25</option>
-                    </select>
-                  </div>
                   <div class="preset-title"><span id="resolutionLabel">2K</span><b>·</b><span id="fpsLabel">120 FPS</span></div>
                   <div class="metric-pair">
                     <div><small>分辨率</small><strong id="resolutionValue">2560 × 1440</strong></div>
@@ -175,7 +209,14 @@
         <div class="history-head">
           <div>
             <span class="section-kicker">LAUNCH ANALYTICS</span>
-            <h1>启动记录</h1>
+            <div class="history-title-row">
+              <h1>启动记录</h1>
+              <label class="toggle history-record-toggle">
+                <input id="historyEnabled" type="checkbox" checked>
+                <span></span>
+                <b id="historyEnabledLabel">自动记录已开启</b>
+              </label>
+            </div>
             <p>按游戏 ID 统计每个账号的运行时长</p>
           </div>
           <div class="history-head-actions">
@@ -228,7 +269,7 @@
           <section class="glass-card sessions-card">
             <div class="section-header compact">
               <div><span class="section-kicker">RECENT SESSIONS</span><h2>最近启动会话</h2></div>
-              <span class="live-badge subtle"><i></i>自动记录</span>
+              <span class="live-badge subtle" id="historyRecordingBadge"><i></i>自动记录</span>
             </div>
             <div class="session-table">
               <div class="session-row session-header-row">
@@ -337,11 +378,37 @@
               <div><span class="section-kicker">PACKAGE & RECOVERY</span><h2>包体与恢复保护</h2></div>
               <button class="fps-refresh" id="refreshFpsStatus" aria-label="刷新帧率状态"><svg><use href="#i-refresh"/></svg></button>
             </div>
+            <div class="fps-platform-chip" id="fpsPlatformChip">
+              <i></i><span>正在识别游戏平台</span><small>自动检测</small>
+            </div>
             <div class="fps-package-state" id="fpsPackageState">
               <span><svg><use href="#i-shield"/></svg></span>
               <div><strong>正在识别包体</strong><p>读取 NXPK v3 与 SettingManager 目标槽位</p></div>
             </div>
+            <div class="fps-package-route">
+              <div class="fps-package-route-item target">
+                <span class="route-icon"><svg><use href="#i-check"/></svg></span>
+                <div>
+                  <small>唯一写入目标 · DOCUMENTS 增量包</small>
+                  <b>script.py314.lc.npk</b>
+                  <p id="fpsTargetPackageMeta">等待读取包体信息</p>
+                </div>
+                <em>可修改</em>
+              </div>
+              <div class="fps-package-route-line"><i></i><span>严格隔离</span><i></i></div>
+              <div class="fps-package-route-item protected">
+                <span class="route-icon"><svg><use href="#i-shield"/></svg></span>
+                <div>
+                  <small>游戏根目录完整包</small>
+                  <b>script.py314.lc.npk</b>
+                  <p id="fpsRootPackageMeta">仅检测存在性，不读取槽位</p>
+                </div>
+                <em>只读保护</em>
+              </div>
+              <p class="fps-compatibility-summary" id="fpsCompatibilitySummary">正在建立版本兼容档案…</p>
+            </div>
             <div class="fps-details">
+              <div><span>游戏平台</span><b class="accent" id="fpsPlatformLabel">检测中</b></div>
               <div><span>当前状态</span><b class="accent" id="fpsCurrentState">检测中</b></div>
               <div><span>接管范围</span><b>仅原 120 FPS 档</b></div>
               <div><span>其他档位</span><b class="ok">保持配置文件控制</b></div>
@@ -356,7 +423,8 @@
                 <svg><use href="#i-list"/></svg>
                 <span><b>清理冗余备份</b><small>保留官方初始还原点</small></span>
               </button>
-              <button class="button ghost" id="openFpsBackups"><svg><use href="#i-folder"/></svg>打开完整备份目录</button>
+              <button class="button ghost" id="openFpsBackups"><svg><use href="#i-folder"/></svg>打开事务备份目录</button>
+              <button class="button ghost" id="openFpsProtectedBackups"><svg><use href="#i-shield"/></svg>打开永久还原点目录</button>
             </div>
             <p class="fps-micro" id="fpsPackagePath">应用后重新启动的游戏实例生效</p>
           </aside>
@@ -479,15 +547,45 @@
                 <div><input id="tiaoziScale" type="number" min="0.1" max="8" step="0.1" value="1.5"><button id="applyTiaozi">应用</button></div>
               </div>
             </div>
+            <section class="update-panel">
+              <span class="update-icon"><svg><use href="#i-refresh"/></svg></span>
+              <div class="update-copy">
+                <span class="section-kicker">SECURE UPDATE</span>
+                <b id="updateStatus">正在读取更新设置…</b>
+                <small id="updateDetail">从 GitHub Release 获取并校验 Windows 便携版</small>
+                <div class="update-progress"><i id="updateProgress"></i></div>
+              </div>
+              <label class="update-frequency">
+                <small>检查频率</small>
+                <select id="updateFrequency">
+                  <option value="startup">每次启动</option>
+                  <option value="daily">每天一次</option>
+                  <option value="weekly">每周一次</option>
+                  <option value="monthly">每月一次</option>
+                </select>
+              </label>
+              <button class="button secondary" id="checkForUpdates"><svg><use href="#i-refresh"/></svg>立即检查</button>
+            </section>
           </section>
           <aside class="glass-card about-card">
-            <div class="about-icon">LA</div>
-            <span class="section-kicker">PORTABLE EDITION</span>
-            <h2>本地、离线、可扩展</h2>
-            <p>所有配置与实例数据都只在本机处理。局域网副屏仅提供经过设备配对的只读状态。</p>
-            <div class="about-line"><span>界面引擎</span><b>Electron · Fluent UI</b></div>
-            <div class="about-line"><span>本地后台</span><b>C# · .NET Framework</b></div>
-            <div class="about-line"><span>版本</span><b>v2.2.0</b></div>
+            <div class="about-top">
+              <div class="about-icon">LA</div>
+              <span class="section-kicker">ABOUT & SUPPORT</span>
+              <h2>本地、离线、可扩展</h2>
+              <p>所有配置与实例数据都只在本机处理。局域网副屏仅提供经过设备配对的只读状态。</p>
+              <div class="about-line"><span>界面引擎</span><b>Electron · Fluent UI</b></div>
+              <div class="about-line"><span>本地后台</span><b>C# · .NET Framework</b></div>
+              <div class="about-line"><span>版本</span><b id="aboutVersion">v2.3.0</b></div>
+            </div>
+            <section class="support-card">
+              <div class="support-head">
+                <span class="support-cup"><svg><use href="#i-coffee"/></svg></span>
+                <span><small>SUPPORT THE PROJECT</small><b>请我喝杯咖啡</b></span>
+              </div>
+              <div class="support-code"><img src="assets/support-coffee.png" alt="个人赞赏码"></div>
+              <p>如果这个工具帮你省下一些折腾时间，<br>有余力的话，可以支持一杯咖啡。</p>
+              <span class="support-voluntary"><i></i>完全自愿 · 不影响任何功能</span>
+            </section>
           </aside>
         </div>
       </section>

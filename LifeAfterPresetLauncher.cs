@@ -90,6 +90,18 @@ internal static class LifeAfterPresetLauncher
         public bool Writable;
     }
 
+    private sealed class FpsCompatibilityProfile
+    {
+        public string PlatformId;
+        public string PlatformLabel;
+        public string GameVersion;
+        public string NormalizedSha256;
+        public string Mode;
+        public string ModeLabel;
+        public string ProfileId;
+        public bool KnownProfile;
+    }
+
     private const int FpsSlotSize = 110791;
     private const int FpsOriginalSize = 328632;
     private const uint FpsTargetNameHash = 4238962030;
@@ -97,12 +109,12 @@ internal static class LifeAfterPresetLauncher
     private const uint FpsChecksum1 = 3881385757;
     private const uint FpsChecksum2 = 3180330809;
     private const uint FpsCompressionType = 2;
-    private const string FpsOriginalArchiveSha256 =
+    private const string FpsNeteaseOriginalArchiveSha256 =
         "D28A80EE2F0A209BD24ADE0838848B49FE2D9816946C304D15E9A83FEA6D2738";
+    private const string FpsFeverOriginalArchiveSha256 =
+        "BCACC8B1CFD4C4DB6F2B5633069EFDB39A1C8835A2436EAB338FB1B90BD69CC2";
     private const string FpsOriginalSlotSha256 =
         "6F9165B65B8E32391E32FBC5174B8CC680E90C33C5887B46999D087ACE8FE050";
-    private const string FpsOfficialBaselineFileName =
-        "script.py314.lc.npk.official-original-D28A80EE2F0A209B.bak";
     private static readonly Regex FpsTransactionBackupNamePattern = new Regex(
         @"^script\.py314\.lc\.npk\.\d{8}-\d{6}-\d{3}\.[A-Za-z0-9_-]+\.[0-9A-F]{16}\.bak$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -176,8 +188,14 @@ internal static class LifeAfterPresetLauncher
 
         if (args.Length >= 2 && args[0].Equals("--apply", StringComparison.OrdinalIgnoreCase))
         {
-            bool launch = args.Length >= 3 && args[2].Equals("--launch", StringComparison.OrdinalIgnoreCase);
-            Console.WriteLine(ApplyPreset(args[1], launch));
+            bool launch = false;
+            bool performanceMode = false;
+            for (int i = 2; i < args.Length; i++)
+            {
+                if (args[i].Equals("--launch", StringComparison.OrdinalIgnoreCase)) launch = true;
+                if (args[i].Equals("--performance", StringComparison.OrdinalIgnoreCase)) performanceMode = true;
+            }
+            Console.WriteLine(ApplyPreset(args[1], launch, performanceMode));
             return;
         }
 
@@ -246,6 +264,15 @@ internal static class LifeAfterPresetLauncher
             return;
         }
 
+        if (args.Length >= 2 && args[0].Equals("--fps-status-root", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!IsValidGameRoot(args[1]))
+                throw new InvalidOperationException("所选目录不是有效的 LifeAfter 安装目录。");
+            SetGameRoot(args[1]);
+            Console.WriteLine(GetFpsUnlockStatusJson());
+            return;
+        }
+
         if (args.Length >= 2 && args[0].Equals("--fps-apply", StringComparison.OrdinalIgnoreCase))
         {
             try
@@ -308,16 +335,45 @@ internal static class LifeAfterPresetLauncher
         configDir = Path.Combine(root, @"Documents\configs");
         pcConfigPath = Path.Combine(configDir, "pcconfig");
         qualityConfigPath = Path.Combine(configDir, "qualityconfig");
-        gameExe = Path.Combine(root, "lifeafter.exe");
+        gameExe = DetectGamePlatformId(root) == "fever"
+            ? Path.Combine(root, "mingrizhihou.exe")
+            : Path.Combine(root, "lifeafter.exe");
         performanceGameExe = Path.Combine(root, @"Documents\bin\x64-3\lifeafter.exe");
     }
 
     private static bool IsValidGameRoot(string root)
     {
         if (String.IsNullOrEmpty(root)) return false;
-        return File.Exists(Path.Combine(root, "lifeafter.exe")) &&
+        bool standardExecutable =
+            File.Exists(Path.Combine(root, "lifeafter.exe")) ||
+            IsFeverGameRoot(root);
+        return standardExecutable &&
                File.Exists(Path.Combine(root, @"Documents\configs\pcconfig")) &&
                File.Exists(Path.Combine(root, @"Documents\configs\qualityconfig"));
+    }
+
+    private static bool IsFeverGameRoot(string root)
+    {
+        if (String.IsNullOrEmpty(root) ||
+            !File.Exists(Path.Combine(root, "mingrizhihou.exe")))
+            return false;
+        string folderName = null;
+        try { folderName = new DirectoryInfo(root).Name; } catch { }
+        return String.Equals(folderName, "mrzh", StringComparison.OrdinalIgnoreCase) ||
+               File.Exists(Path.Combine(root, "FeverGamesLauncher.exe")) ||
+               !File.Exists(Path.Combine(root, "lifeafter.exe"));
+    }
+
+    private static string DetectGamePlatformId(string root)
+    {
+        if (IsFeverGameRoot(root))
+            return "fever";
+        return "netease";
+    }
+
+    private static string GetGamePlatformLabel(string platformId)
+    {
+        return platformId == "fever" ? "发烧平台包体" : "老PC包体";
     }
 
     private static string FindGameRoot()
@@ -433,7 +489,8 @@ internal static class LifeAfterPresetLauncher
                 Path.Combine(root, @"Program Files\LifeAfter"),
                 Path.Combine(root, "LifeAfter"),
                 Path.Combine(root, @"Games\LifeAfter"),
-                Path.Combine(root, @"Netease\LifeAfter")
+                Path.Combine(root, @"Netease\LifeAfter"),
+                Path.Combine(root, @"FeverGames\mrzh")
             };
 
             foreach (string candidate in candidates)
@@ -1404,6 +1461,86 @@ internal static class LifeAfterPresetLauncher
             : Path.Combine(gameRoot, @"Documents\fps_unlock_backups");
     }
 
+    private static string FpsRootPackagePath()
+    {
+        return String.IsNullOrEmpty(gameRoot)
+            ? null
+            : Path.Combine(gameRoot, "script.py314.lc.npk");
+    }
+
+    private static string ReadGameVersion()
+    {
+        try
+        {
+            string path = Path.Combine(gameRoot, @"Documents\configs\release_version_config");
+            if (!File.Exists(path)) return "";
+            string version = File.ReadAllText(path, Encoding.UTF8).Trim();
+            return version.Length <= 64 ? version : version.Substring(0, 64);
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private static FpsCompatibilityProfile BuildFpsCompatibilityProfile(string normalizedHash)
+    {
+        string platformId = DetectGamePlatformId(gameRoot);
+        bool knownProfile =
+            (platformId == "fever" && normalizedHash.Equals(
+                FpsFeverOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase)) ||
+            (platformId == "netease" && normalizedHash.Equals(
+                FpsNeteaseOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase));
+        string normalized = normalizedHash.ToUpperInvariant();
+        return new FpsCompatibilityProfile
+        {
+            PlatformId = platformId,
+            PlatformLabel = GetGamePlatformLabel(platformId),
+            GameVersion = ReadGameVersion(),
+            NormalizedSha256 = normalized,
+            Mode = knownProfile ? "known-profile" : "auto-compatible",
+            ModeLabel = knownProfile ? "已验证档案" : "结构一致 · 自动兼容",
+            ProfileId = platformId + "-" + normalized.Substring(0, 16),
+            KnownProfile = knownProfile
+        };
+    }
+
+    private static string FpsProtectedBackupRoot()
+    {
+        string configured = Environment.GetEnvironmentVariable(
+            "LIFEAFTER_PROTECTED_BACKUP_ROOT");
+        if (!String.IsNullOrWhiteSpace(configured))
+            return Path.GetFullPath(configured.Trim());
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "LifeAfterGraphicsLauncher",
+            "protected-backups");
+    }
+
+    private static string FpsInstallId()
+    {
+        string normalizedRoot = Path.GetFullPath(gameRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .ToUpperInvariant();
+        return FpsSha256(Encoding.UTF8.GetBytes(normalizedRoot)).Substring(0, 16);
+    }
+
+    private static string FpsProtectedBackupDirectory(FpsCompatibilityProfile profile)
+    {
+        return Path.Combine(
+            FpsProtectedBackupRoot(),
+            FpsInstallId(),
+            profile.ProfileId);
+    }
+
+    private static string FpsOfficialBaselinePath(FpsCompatibilityProfile profile)
+    {
+        return Path.Combine(
+            FpsProtectedBackupDirectory(profile),
+            "script.py314.lc.npk.official-original-" +
+            profile.NormalizedSha256.Substring(0, 16) + ".bak");
+    }
+
     private static string FpsPatchDirectory()
     {
         return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "fps-patches");
@@ -1472,14 +1609,21 @@ internal static class LifeAfterPresetLauncher
                     out normalizedHash);
             }
             FpsSlotState state = IdentifyFpsSlotState(FpsSha256(currentSlot));
-            bool compatible = normalizedHash.Equals(
-                FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase);
+            FpsCompatibilityProfile profile = BuildFpsCompatibilityProfile(normalizedHash);
+            bool compatible = state.Writable;
             int transactionBackupCount = GetFpsTransactionBackups().Length;
-            string baseline = FpsOfficialBaselinePath();
+            string baseline = FpsOfficialBaselinePath(profile);
             bool baselineReady = File.Exists(baseline) &&
-                new FileInfo(baseline).Length == new FileInfo(packagePath).Length;
+                new FileInfo(baseline).Length == new FileInfo(packagePath).Length &&
+                FpsSha256File(baseline).Equals(
+                    profile.NormalizedSha256, StringComparison.OrdinalIgnoreCase);
             int backupCount = transactionBackupCount + (File.Exists(baseline) ? 1 : 0);
             bool gameRunning = IsFpsGameRunning();
+            string rootPackagePath = FpsRootPackagePath();
+            bool rootPackagePresent = File.Exists(rootPackagePath);
+            long rootPackageSize = rootPackagePresent
+                ? new FileInfo(rootPackagePath).Length
+                : 0;
 
             StringBuilder json = new StringBuilder();
             json.Append("{\"ok\":true")
@@ -1490,11 +1634,26 @@ internal static class LifeAfterPresetLauncher
                 .Append(",\"state\":\"").Append(JsonEscape(state.Id)).Append('"')
                 .Append(",\"stateLabel\":\"").Append(JsonEscape(state.Label)).Append('"')
                 .Append(",\"target\":").Append(state.Target)
+                .Append(",\"platformId\":\"").Append(JsonEscape(profile.PlatformId)).Append('"')
+                .Append(",\"platformLabel\":\"").Append(JsonEscape(profile.PlatformLabel)).Append('"')
+                .Append(",\"gameVersion\":\"").Append(JsonEscape(profile.GameVersion)).Append('"')
+                .Append(",\"compatibilityMode\":\"").Append(JsonEscape(profile.Mode)).Append('"')
+                .Append(",\"compatibilityLabel\":\"").Append(JsonEscape(profile.ModeLabel)).Append('"')
+                .Append(",\"profileId\":\"").Append(JsonEscape(profile.ProfileId)).Append('"')
+                .Append(",\"knownProfile\":").Append(profile.KnownProfile ? "true" : "false")
                 .Append(",\"packagePath\":\"").Append(JsonEscape(packagePath)).Append('"')
+                .Append(",\"packageRole\":\"write-target\"")
                 .Append(",\"packageHash\":\"").Append(packageHash).Append('"')
                 .Append(",\"normalizedHash\":\"").Append(normalizedHash).Append('"')
                 .Append(",\"slotHash\":\"").Append(FpsSha256(currentSlot)).Append('"')
+                .Append(",\"rootPackagePath\":\"").Append(JsonEscape(rootPackagePath)).Append('"')
+                .Append(",\"rootPackagePresent\":").Append(rootPackagePresent ? "true" : "false")
+                .Append(",\"rootPackageReadOnly\":true")
+                .Append(",\"rootPackageSize\":").Append(rootPackageSize)
                 .Append(",\"backupDir\":\"").Append(JsonEscape(backupDir)).Append('"')
+                .Append(",\"protectedBackupDir\":\"")
+                    .Append(JsonEscape(FpsProtectedBackupDirectory(profile))).Append('"')
+                .Append(",\"baselinePath\":\"").Append(JsonEscape(baseline)).Append('"')
                 .Append(",\"backupCount\":").Append(backupCount)
                 .Append(",\"transactionBackupCount\":").Append(transactionBackupCount)
                 .Append(",\"baselineReady\":").Append(baselineReady ? "true" : "false")
@@ -1532,14 +1691,16 @@ internal static class LifeAfterPresetLauncher
             if (!state.Writable)
                 throw new InvalidDataException("目标槽位不是已知原版或已审查补丁，拒绝覆盖。");
             string normalizedHash = ComputeFpsNormalizedArchiveHash(stream, record, originalPatch);
-            if (!normalizedHash.Equals(
-                FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("游戏包体版本或非目标区域已变化，拒绝写入。");
-            if (currentHash.Equals(definition.SlotSha256, StringComparison.OrdinalIgnoreCase))
-                return "当前已经是 " + definition.Label + "，无需重复写入。";
-
-            EnsureFpsBackupCapacity(packagePath, 2);
-            EnsureFpsOfficialBaseline(packagePath, stream, record, originalPatch);
+            FpsCompatibilityProfile profile = BuildFpsCompatibilityProfile(normalizedHash);
+            string baseline = FpsOfficialBaselinePath(profile);
+            bool writeNeeded = !currentHash.Equals(
+                definition.SlotSha256, StringComparison.OrdinalIgnoreCase);
+            EnsureFpsBackupCapacity(
+                packagePath, baseline, !File.Exists(baseline), writeNeeded);
+            EnsureFpsOfficialBaseline(packagePath, stream, record, originalPatch, profile);
+            if (!writeNeeded)
+                return "当前已经是 " + definition.Label +
+                    "；当前平台版本的永久还原点已校验，无需重复写入。";
             backupPath = CreateFpsTransactionBackup(state.Id, stream);
 
             try
@@ -1552,7 +1713,7 @@ internal static class LifeAfterPresetLauncher
                 string verifiedNormalized = ComputeFpsNormalizedArchiveHash(
                     stream, record, originalPatch);
                 if (!verifiedNormalized.Equals(
-                    FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase))
+                    profile.NormalizedSha256, StringComparison.OrdinalIgnoreCase))
                     throw new IOException("写入后包体一致性校验失败。");
             }
             catch
@@ -1567,6 +1728,7 @@ internal static class LifeAfterPresetLauncher
 
         string cleanupNotice = AutoPruneFpsTransactionBackups();
         WriteLog("FpsUnlock target=" + target.ToString(CultureInfo.InvariantCulture) +
+                 " platform=" + DetectGamePlatformId(gameRoot) +
                  " backup=" + backupPath + " " + cleanupNotice);
         return "已启用 " + definition.Label + "。游戏内“120 FPS”标签将实际对应 " +
                target.ToString(CultureInfo.InvariantCulture) + " FPS；其他帧率档保持原样。" +
@@ -1593,14 +1755,15 @@ internal static class LifeAfterPresetLauncher
             if (!state.Writable)
                 throw new InvalidDataException("目标槽位不是已知状态，拒绝覆盖。");
             string normalizedHash = ComputeFpsNormalizedArchiveHash(stream, record, originalPatch);
-            if (!normalizedHash.Equals(
-                FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("游戏包体版本或非目标区域已变化，拒绝恢复。");
-            if (currentHash.Equals(FpsOriginalSlotSha256, StringComparison.OrdinalIgnoreCase))
-                return "当前已经是官方原始 120 FPS 状态。";
-
-            EnsureFpsBackupCapacity(packagePath, 2);
-            EnsureFpsOfficialBaseline(packagePath, stream, record, originalPatch);
+            FpsCompatibilityProfile profile = BuildFpsCompatibilityProfile(normalizedHash);
+            string baseline = FpsOfficialBaselinePath(profile);
+            bool writeNeeded = !currentHash.Equals(
+                FpsOriginalSlotSha256, StringComparison.OrdinalIgnoreCase);
+            EnsureFpsBackupCapacity(
+                packagePath, baseline, !File.Exists(baseline), writeNeeded);
+            EnsureFpsOfficialBaseline(packagePath, stream, record, originalPatch, profile);
+            if (!writeNeeded)
+                return "当前已经是官方原始 120 FPS 状态；当前平台版本的永久还原点已校验。";
             backupPath = CreateFpsTransactionBackup(state.Id, stream);
             try
             {
@@ -1610,7 +1773,7 @@ internal static class LifeAfterPresetLauncher
                     throw new IOException("恢复后槽位哈希校验失败。");
                 string fullHash = FpsSha256File(stream);
                 if (!fullHash.Equals(
-                    FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase))
+                    profile.NormalizedSha256, StringComparison.OrdinalIgnoreCase))
                     throw new IOException("恢复后的完整包体哈希不是官方原始值。");
             }
             catch
@@ -1703,16 +1866,17 @@ internal static class LifeAfterPresetLauncher
         string packagePath,
         FileStream source,
         FpsNxpkRecord record,
-        byte[] originalPatch)
+        byte[] originalPatch,
+        FpsCompatibilityProfile profile)
     {
-        string backupDir = FpsBackupDirectory();
+        string backupDir = FpsProtectedBackupDirectory(profile);
         Directory.CreateDirectory(backupDir);
-        string baseline = FpsOfficialBaselinePath();
+        string baseline = FpsOfficialBaselinePath(profile);
         if (File.Exists(baseline))
         {
             if (!FpsSha256File(baseline).Equals(
-                FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("官方原始基线备份已存在但哈希异常，请先人工检查。");
+                profile.NormalizedSha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("当前平台版本的官方原始基线已存在但哈希异常，请先人工检查。");
             return;
         }
 
@@ -1727,8 +1891,8 @@ internal static class LifeAfterPresetLauncher
             {
                 FpsWriteAt(backup, record.DataOffset, originalPatch);
                 if (!FpsSha256File(backup).Equals(
-                    FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("无法重建经哈希验证的官方原始基线备份。");
+                    profile.NormalizedSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("无法重建经哈希验证的平台版本原始基线备份。");
             }
             File.Move(partial, baseline);
         }
@@ -1764,11 +1928,6 @@ internal static class LifeAfterPresetLauncher
             try { if (File.Exists(partial)) File.Delete(partial); } catch { }
             throw;
         }
-    }
-
-    private static string FpsOfficialBaselinePath()
-    {
-        return Path.Combine(FpsBackupDirectory(), FpsOfficialBaselineFileName);
     }
 
     private static FileInfo[] GetFpsTransactionBackups()
@@ -1830,11 +1989,27 @@ internal static class LifeAfterPresetLauncher
         if (!IsValidGameRoot(gameRoot))
             throw new InvalidOperationException("请先选择有效的游戏目录。");
 
-        string baseline = FpsOfficialBaselinePath();
+        string packagePath = FpsPackagePath();
+        if (!File.Exists(packagePath))
+            throw new FileNotFoundException("未找到帧率目标包体。", packagePath);
+        byte[] originalPatch = LoadFpsPatch("patch_original.bin", FpsOriginalSlotSha256);
+        FpsCompatibilityProfile profile;
+        using (FileStream stream = new FileStream(
+            packagePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            FpsNxpkRecord record = ParseFpsNxpk(stream);
+            byte[] current = FpsReadAt(stream, record.DataOffset, record.CompressedSize);
+            if (!IdentifyFpsSlotState(FpsSha256(current)).Writable)
+                throw new InvalidDataException("当前目标槽位未知，拒绝清理事务备份。");
+            profile = BuildFpsCompatibilityProfile(
+                ComputeFpsNormalizedArchiveHash(stream, record, originalPatch));
+        }
+
+        string baseline = FpsOfficialBaselinePath(profile);
         if (!File.Exists(baseline))
-            throw new InvalidOperationException("尚未建立官方初始还原点，拒绝清理事务备份。");
+            throw new InvalidOperationException("当前平台版本尚未建立官方初始还原点，拒绝清理事务备份。");
         if (!FpsSha256File(baseline).Equals(
-            FpsOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase))
+            profile.NormalizedSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("官方初始还原点哈希异常，拒绝清理其他备份。");
 
         int removed = PruneFpsTransactionBackups(0);
@@ -1866,14 +2041,39 @@ internal static class LifeAfterPresetLauncher
         }
     }
 
-    private static void EnsureFpsBackupCapacity(string packagePath, int possibleCopies)
+    private static void EnsureFpsBackupCapacity(
+        string packagePath,
+        string baselinePath,
+        bool baselineMissing,
+        bool transactionNeeded)
     {
         FileInfo info = new FileInfo(packagePath);
-        string root = Path.GetPathRoot(info.FullName);
-        DriveInfo drive = new DriveInfo(root);
-        long required = checked(info.Length * possibleCopies + 128L * 1024L * 1024L);
+        string gameDriveRoot = Path.GetPathRoot(info.FullName);
+        string protectedDriveRoot = Path.GetPathRoot(Path.GetFullPath(baselinePath));
+        long safetyMargin = 128L * 1024L * 1024L;
+        long gameDriveRequired = transactionNeeded
+            ? checked(info.Length + safetyMargin)
+            : 0;
+        if (baselineMissing &&
+            gameDriveRoot.Equals(protectedDriveRoot, StringComparison.OrdinalIgnoreCase))
+            gameDriveRequired = checked(
+                gameDriveRequired + info.Length + (transactionNeeded ? 0 : safetyMargin));
+        if (gameDriveRequired > 0)
+            EnsureFpsFreeSpace(gameDriveRoot, gameDriveRequired, "帧率安全备份");
+
+        if (baselineMissing &&
+            !gameDriveRoot.Equals(protectedDriveRoot, StringComparison.OrdinalIgnoreCase))
+            EnsureFpsFreeSpace(
+                protectedDriveRoot,
+                checked(info.Length + safetyMargin),
+                "永久还原点");
+    }
+
+    private static void EnsureFpsFreeSpace(string driveRoot, long required, string purpose)
+    {
+        DriveInfo drive = new DriveInfo(driveRoot);
         if (drive.AvailableFreeSpace < required)
-            throw new IOException("备份空间不足；至少需要 " +
+            throw new IOException(purpose + "空间不足；" + driveRoot + " 至少需要 " +
                 (required / 1024L / 1024L).ToString(CultureInfo.InvariantCulture) +
                 " MB 可用空间。");
     }

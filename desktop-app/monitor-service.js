@@ -5,6 +5,7 @@ class MonitorService extends EventEmitter {
     super();
     this.capture = options.capture;
     this.historyStore = options.historyStore;
+    this.historyEnabled = options.historyEnabled !== false;
     this.visible = false;
     this.remoteClientCount = 0;
     this.running = false;
@@ -36,6 +37,14 @@ class MonitorService extends EventEmitter {
     const next = Math.max(0, Number(value) || 0);
     if (this.remoteClientCount === next) return;
     this.remoteClientCount = next;
+    if (this.running) this.schedule(0);
+  }
+
+  setHistoryEnabled(value, capturedAt = Date.now()) {
+    const next = Boolean(value);
+    if (this.historyEnabled === next) return;
+    if (!next) this.historyStore?.syncInstances([], capturedAt);
+    this.historyEnabled = next;
     if (this.running) this.schedule(0);
   }
 
@@ -85,7 +94,9 @@ class MonitorService extends EventEmitter {
       data.instances = Array.isArray(data.instances) ? data.instances : [];
       this.snapshot = data;
       this.lastError = '';
-      this.historyStore?.syncInstances(data.instances, data.capturedAt);
+      if (this.historyEnabled) {
+        this.historyStore?.syncInstances(data.instances, data.capturedAt);
+      }
       this.emit('snapshot', this.getSnapshot());
       return { ok: true, data: this.getSnapshot() };
     })();

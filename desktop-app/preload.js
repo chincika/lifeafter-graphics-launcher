@@ -3,7 +3,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('launcher', {
   init: () => ipcRenderer.invoke('launcher:init'),
   chooseGameRoot: () => ipcRenderer.invoke('launcher:choose-root'),
-  applyPreset: (preset, launch) => ipcRenderer.invoke('launcher:apply-preset', { preset, launch }),
+  scanGameRoots: () => ipcRenderer.invoke('launcher:scan-roots'),
+  switchGameRoot: (root) => ipcRenderer.invoke('launcher:switch-root', root),
+  removeGameRoot: (root) => ipcRenderer.invoke('launcher:remove-root', root),
+  applyPreset: (preset, launch, performanceMode = false) =>
+    ipcRenderer.invoke('launcher:apply-preset', { preset, launch, performanceMode }),
+  setPerformanceMode: (enabled) => ipcRenderer.invoke('launcher:set-performance-mode', enabled),
   readSummary: () => ipcRenderer.invoke('launcher:read-summary'),
   getInstances: () => ipcRenderer.invoke('launcher:get-instances'),
   restoreLatest: () => ipcRenderer.invoke('launcher:restore-latest'),
@@ -17,8 +22,14 @@ contextBridge.exposeInMainWorld('launcher', {
   cleanFpsBackups: () => ipcRenderer.invoke('launcher:clean-fps-backups'),
   openBackups: () => ipcRenderer.invoke('launcher:open-backups'),
   openFpsBackups: () => ipcRenderer.invoke('launcher:open-fps-backups'),
+  openFpsProtectedBackups: () => ipcRenderer.invoke('launcher:open-fps-protected-backups'),
   openLog: () => ipcRenderer.invoke('launcher:open-log'),
   getHistory: (range) => ipcRenderer.invoke('launcher:get-history', range),
+  setHistoryEnabled: (enabled) => ipcRenderer.invoke('launcher:set-history-enabled', enabled),
+  getUpdateState: () => ipcRenderer.invoke('launcher:get-update-state'),
+  setUpdateFrequency: (frequency) =>
+    ipcRenderer.invoke('launcher:set-update-frequency', frequency),
+  checkForUpdates: () => ipcRenderer.invoke('launcher:check-for-updates'),
   exportHistory: (range) => ipcRenderer.invoke('launcher:export-history', range),
   openHistoryFolder: () => ipcRenderer.invoke('launcher:open-history-folder'),
   getBackgroundState: () => ipcRenderer.invoke('launcher:get-background-state'),
@@ -38,5 +49,10 @@ contextBridge.exposeInMainWorld('launcher', {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('launcher:background-updated', listener);
     return () => ipcRenderer.removeListener('launcher:background-updated', listener);
+  },
+  onUpdateState: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('launcher:update-state', listener);
+    return () => ipcRenderer.removeListener('launcher:update-state', listener);
   }
 });

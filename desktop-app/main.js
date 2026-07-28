@@ -6,6 +6,7 @@ const {
   ipcMain,
   Menu,
   nativeImage,
+  net,
   shell,
   Tray
 } = require('electron');
@@ -14,22 +15,40 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { promisify } = require('node:util');
+const {
+  GameInstallationsStore,
+  discoverInstallations,
+  inspectInstallation
+} = require('./game-installations-store');
 const { HistoryStore } = require('./history-store');
 const { LanStatusServer } = require('./lan-status-server');
 const { MonitorService } = require('./monitor-service');
 const { SettingsStore } = require('./settings-store');
+const {
+  UpdateService,
+  schedulePortableReplacement,
+  shouldCheckForUpdates
+} = require('./update-service');
 
 const execFileAsync = promisify(execFile);
 const cpuHistory = new Map();
+let gameInstallationsStore = null;
 let historyStore = null;
 let settingsStore = null;
 let monitorService = null;
 let lanServer = null;
+let updateService = null;
+let updateCheckInFlight = null;
+let pendingUpdate = null;
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
 let cachedQrUrl = '';
 let cachedQrDataUrl = '';
+const isRuntimeSmoke = process.argv.includes('--runtime-smoke');
+if (isRuntimeSmoke && process.env.LAUNCHER_SMOKE_USER_DATA) {
+  app.setPath('userData', path.resolve(process.env.LAUNCHER_SMOKE_USER_DATA));
+}
 app.disableHardwareAcceleration();
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -63,6 +82,10 @@ function settingsPath() {
   return path.join(app.getPath('userData'), 'background-settings.json');
 }
 
+function installationsPath() {
+  return path.join(app.getPath('userData'), 'game-installations.json');
+}
+
 function readFpsPreference() {
   try {
     const value = Number(JSON.parse(fs.readFileSync(fpsPreferencePath(), 'utf8')).target);
@@ -81,6 +104,8 @@ function saveFpsPreference(target) {
 }
 
 function readSavedRoot() {
+  const activeRoot = gameInstallationsStore?.data?.activeRoot;
+  if (activeRoot) return activeRoot;
   try {
     const persistent = fs.readFileSync(persistentRootPath(), 'utf8').trim();
     if (persistent) return persistent;
@@ -93,13 +118,188 @@ function readSavedRoot() {
   }
 }
 
+function launchModeState(root = readSavedRoot()) {
+  const gameRoot = String(root || '').trim();
+  const folderName = gameRoot ? path.basename(gameRoot).toLocaleLowerCase('en-US') : '';
+  const fever = Boolean(gameRoot) &&
+    fs.existsSync(path.join(gameRoot, 'mingrizhihou.exe')) &&
+    (
+      folderName === 'mrzh' ||
+      fs.existsSync(path.join(gameRoot, 'FeverGamesLauncher.exe')) ||
+      !fs.existsSync(path.join(gameRoot, 'lifeafter.exe'))
+    );
+  return {
+    standardAvailable: Boolean(gameRoot) && (
+      fs.existsSync(path.join(gameRoot, 'lifeafter.exe')) || fever
+    ),
+    performanceAvailable: Boolean(gameRoot) &&
+      fs.existsSync(path.join(gameRoot, 'Documents', 'bin', 'x64-3', 'lifeafter.exe')),
+    performanceRoute: 'Documents\\bin\\x64-3\\lifeafter.exe',
+    platformId: fever ? 'fever' : 'netease',
+    platformLabel: fever ? '发烧平台包体' : '老PC包体'
+  };
+}
+
+function persistActiveRoot(root, source = 'manual') {
+  const normalized = inspectInstallation(root).root;
+  fs.mkdirSync(path.dirname(persistentRootPath()), { recursive: true });
+  fs.writeFileSync(persistentRootPath(), normalized, 'utf8');
+  gameInstallationsStore?.setActive(normalized, source);
+  return normalized;
+}
+
+function installationSnapshot(scan = null) {
+  return gameInstallationsStore?.snapshot(scan) || {
+    activeRoot: readSavedRoot(),
+    installations: [],
+    scan
+  };
+}
+
+function publicUpdateState() {
+  const settings = settingsStore?.get() || {};
+  return {
+    ...(updateService?.publicState() || {
+      phase: 'idle',
+      currentVersion: app.getVersion(),
+      latestVersion: '',
+      progress: 0,
+      message: '尚未检查更新',
+      releaseUrl: '',
+      downloadedPath: '',
+      error: ''
+    }),
+    frequency: settings.updateFrequency || 'startup',
+    lastCheckedAt: Number(settings.lastUpdateCheckAt) || 0,
+    automaticInstallSupported: Boolean(app.isPackaged && process.env.PORTABLE_EXECUTABLE_FILE)
+  };
+}
+
+function broadcastUpdateState() {
+  broadcast('launcher:update-state', publicUpdateState());
+}
+
+function installPendingUpdate() {
+  if (!pendingUpdate || isRuntimeSmoke) return { ok: false, deferred: true };
+  if (monitorService?.getSnapshot().instances.length) {
+    updateService.updateState({
+      phase: 'ready',
+      progress: 100,
+      message: `v${pendingUpdate.latestVersion} 已下载，将在游戏退出后自动更新`
+    });
+    return { ok: true, deferred: true };
+  }
+  const scheduled = schedulePortableReplacement({
+    downloadedPath: pendingUpdate.downloadedPath,
+    portablePath: process.env.PORTABLE_EXECUTABLE_FILE,
+    currentPid: process.pid,
+    scriptDir: path.join(app.getPath('userData'), 'updates')
+  });
+  if (!scheduled.ok) {
+    updateService.updateState({
+      phase: 'error',
+      message: '无法自动替换当前版本',
+      error: scheduled.error
+    });
+    return scheduled;
+  }
+  updateService.updateState({
+    phase: 'installing',
+    progress: 100,
+    message: `正在安装 v${pendingUpdate.latestVersion}，启动器即将重启…`
+  });
+  pendingUpdate = null;
+  setTimeout(() => {
+    isQuitting = true;
+    app.quit();
+  }, 500);
+  return { ok: true, scheduled: true };
+}
+
+async function checkForUpdates({ manual = false } = {}) {
+  if (updateCheckInFlight) return updateCheckInFlight;
+  updateCheckInFlight = (async () => {
+    const checked = await updateService.check();
+    settingsStore.update({ lastUpdateCheckAt: Date.now() });
+    broadcastUpdateState();
+    if (!checked.ok || !checked.updateAvailable) {
+      return { ...checked, data: publicUpdateState() };
+    }
+    if (!app.isPackaged || !process.env.PORTABLE_EXECUTABLE_FILE) {
+      updateService.updateState({
+        phase: 'available',
+        message: `发现 v${String(checked.release.tag_name).replace(/^v/i, '')}；便携版打包后可自动安装`
+      });
+      return { ok: true, updateAvailable: true, data: publicUpdateState() };
+    }
+    const latestVersion = String(checked.release.tag_name).replace(/^v/i, '');
+    const downloaded = await updateService.download(
+      checked.asset,
+      checked.expectedDigest,
+      latestVersion
+    );
+    if (!downloaded.ok) return { ...downloaded, data: publicUpdateState() };
+    pendingUpdate = {
+      latestVersion,
+      downloadedPath: downloaded.path
+    };
+    const install = installPendingUpdate();
+    return {
+      ok: install.ok,
+      updateAvailable: true,
+      scheduled: install.scheduled === true,
+      deferred: install.deferred === true,
+      error: install.error,
+      data: publicUpdateState()
+    };
+  })();
+  try {
+    return await updateCheckInFlight;
+  } finally {
+    updateCheckInFlight = null;
+  }
+}
+
+async function activateGameRoot(root, source = 'manual') {
+  const info = inspectInstallation(root);
+  if (!info.valid) {
+    return {
+      ok: false,
+      error: '所选目录不是有效的游戏包体。请选择包含游戏程序和 Documents\\configs 的目录。'
+    };
+  }
+  const result = await runBackend(['--set-root', info.root], 10000);
+  if (!result.ok) return result;
+  const normalized = persistActiveRoot(info.root, source);
+  const [summary, fpsStatus] = await Promise.all([
+    runBackend(['--read-summary'], 10000),
+    getFpsStatus()
+  ]);
+  return {
+    ok: true,
+    root: normalized,
+    installation: inspectInstallation(normalized),
+    installations: installationSnapshot(),
+    launchMode: launchModeState(normalized),
+    summary: summary.ok ? summary.text : '',
+    fpsStatus: fpsStatus.ok ? fpsStatus.data : { ok: false, error: fpsStatus.error }
+  };
+}
+
 async function runBackend(args, timeout = 30000) {
   try {
     const { stdout, stderr } = await execFileAsync(backendPath(), args, {
       windowsHide: true,
       timeout,
       encoding: 'utf8',
-      maxBuffer: 1024 * 1024 * 4
+      maxBuffer: 1024 * 1024 * 4,
+      env: {
+        ...process.env,
+        LIFEAFTER_PROTECTED_BACKUP_ROOT: path.join(
+          app.getPath('userData'),
+          'protected-backups'
+        )
+      }
     });
     return { ok: true, text: (stdout || '').trim(), stderr: (stderr || '').trim() };
   } catch (error) {
@@ -415,6 +615,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.once('ready-to-show', () => {
     if (win.isDestroyed()) return;
+    if (isRuntimeSmoke) return;
     win.show();
     monitorService?.setVisible(true);
   });
@@ -441,8 +642,20 @@ function createWindow() {
 
 ipcMain.handle('launcher:init', async () => {
   const persistedRoot = readSavedRoot();
-  if (persistedRoot) {
-    await runBackend(['--set-root', persistedRoot], 10000);
+  const startupScan = discoverInstallations({
+    knownRoots: [persistedRoot],
+    maxDepth: 2
+  });
+  gameInstallationsStore.merge(startupScan.installations);
+  let selectedRoot = persistedRoot;
+  if (!inspectInstallation(selectedRoot).valid) {
+    selectedRoot = gameInstallationsStore.list().find(item => item.valid)?.root || '';
+  }
+  if (selectedRoot) {
+    const selectedRecord = gameInstallationsStore.list()
+      .find(item => item.root.toLocaleLowerCase('en-US') === selectedRoot.toLocaleLowerCase('en-US'));
+    await runBackend(['--set-root', selectedRoot], 10000);
+    persistActiveRoot(selectedRoot, selectedRecord?.source || 'auto');
   }
   const [rootResult, summary, instances, fpsStatus, background] = await Promise.all([
     runBackend(['--get-root'], 10000),
@@ -453,8 +666,7 @@ ipcMain.handle('launcher:init', async () => {
   ]);
   const detectedRoot = rootResult.ok ? rootResult.text : persistedRoot;
   if (detectedRoot) {
-    fs.mkdirSync(path.dirname(persistentRootPath()), { recursive: true });
-    fs.writeFileSync(persistentRootPath(), detectedRoot, 'utf8');
+    persistActiveRoot(detectedRoot, 'auto');
   }
   return {
     ok: true,
@@ -463,29 +675,79 @@ ipcMain.handle('launcher:init', async () => {
     instances: instances.ok ? instances.data : { instances: [] },
     fpsStatus: fpsStatus.ok ? fpsStatus.data : { ok: false, error: fpsStatus.error },
     fpsTargetPreference: readFpsPreference(),
+    performanceMode: settingsStore.get().performanceMode,
+    historyEnabled: settingsStore.get().historyEnabled,
+    launchMode: launchModeState(detectedRoot),
+    installations: installationSnapshot({
+      drives: startupScan.drives,
+      checkedCount: startupScan.checkedCount,
+      foundCount: startupScan.installations.length,
+      completedAt: Date.now()
+    }),
+    update: publicUpdateState(),
     background
   };
 });
 
 ipcMain.handle('launcher:choose-root', async () => {
   const selected = await dialog.showOpenDialog({
-    title: '选择 LifeAfter 游戏安装目录',
+    title: '添加明日之后游戏目录',
     properties: ['openDirectory']
   });
   if (selected.canceled || !selected.filePaths[0]) return { ok: false, canceled: true };
-  const result = await runBackend(['--set-root', selected.filePaths[0]]);
-  if (result.ok) {
-    fs.mkdirSync(path.dirname(persistentRootPath()), { recursive: true });
-    fs.writeFileSync(persistentRootPath(), result.text, 'utf8');
-    return { ok: true, root: result.text };
+  return activateGameRoot(selected.filePaths[0], 'manual');
+});
+
+ipcMain.handle('launcher:scan-roots', async () => {
+  const knownRoots = gameInstallationsStore.list().map(item => item.root);
+  const scan = discoverInstallations({ knownRoots, maxDepth: 3 });
+  gameInstallationsStore.merge(scan.installations);
+  return {
+    ok: true,
+    data: installationSnapshot({
+      drives: scan.drives,
+      checkedCount: scan.checkedCount,
+      foundCount: scan.installations.length,
+      completedAt: Date.now()
+    })
+  };
+});
+
+ipcMain.handle('launcher:switch-root', (_event, root) =>
+  activateGameRoot(root, 'auto'));
+
+ipcMain.handle('launcher:remove-root', (_event, root) => {
+  if (!gameInstallationsStore.remove(root)) {
+    return { ok: false, error: '当前正在使用的包体不能从列表中移除。' };
   }
-  return result;
+  return { ok: true, data: installationSnapshot() };
 });
 
 ipcMain.handle('launcher:apply-preset', async (_event, payload) => {
   const args = ['--apply', String(payload.preset || '')];
-  if (payload.launch) args.push('--launch');
+  if (payload.launch) {
+    args.push('--launch');
+    if (payload.performanceMode === true) {
+      const mode = launchModeState();
+      if (!mode.performanceAvailable) {
+        return {
+          ok: false,
+          error: `性能启动文件不存在：${mode.performanceRoute}。请修复游戏文件或关闭“性能优先”。`
+        };
+      }
+      args.push('--performance');
+    }
+  }
   return runBackend(args, 60000);
+});
+
+ipcMain.handle('launcher:set-performance-mode', (_event, enabled) => {
+  const value = enabled === true;
+  if (value && !launchModeState().performanceAvailable) {
+    return { ok: false, error: '当前游戏包体未检测到 x64-3 性能启动通道' };
+  }
+  settingsStore.update({ performanceMode: value });
+  return { ok: true, value, launchMode: launchModeState() };
 });
 
 ipcMain.handle('launcher:read-summary', () => runBackend(['--read-summary'], 10000));
@@ -558,6 +820,32 @@ ipcMain.handle('launcher:open-history-folder', async () => {
   return error ? { ok: false, error } : { ok: true };
 });
 
+ipcMain.handle('launcher:set-history-enabled', async (_event, enabled) => {
+  const value = enabled === true;
+  settingsStore.update({ historyEnabled: value });
+  monitorService.setHistoryEnabled(value);
+  if (value) await monitorService.refreshNow();
+  return { ok: true, value };
+});
+
+ipcMain.handle('launcher:get-update-state', () => ({
+  ok: true,
+  data: publicUpdateState()
+}));
+
+ipcMain.handle('launcher:set-update-frequency', (_event, frequency) => {
+  const value = String(frequency || '');
+  if (!['startup', 'daily', 'weekly', 'monthly'].includes(value)) {
+    return { ok: false, error: '不支持的更新检查频率。' };
+  }
+  settingsStore.update({ updateFrequency: value });
+  broadcastUpdateState();
+  return { ok: true, data: publicUpdateState() };
+});
+
+ipcMain.handle('launcher:check-for-updates', () =>
+  checkForUpdates({ manual: true }));
+
 ipcMain.handle('launcher:get-background-state', () => backgroundState());
 
 ipcMain.handle('launcher:set-background-option', async (_event, payload) => {
@@ -619,13 +907,29 @@ ipcMain.handle('launcher:open-fps-backups', async () => {
   return error ? { ok: false, error } : { ok: true };
 });
 
+ipcMain.handle('launcher:open-fps-protected-backups', async () => {
+  const target = path.join(app.getPath('userData'), 'protected-backups');
+  fs.mkdirSync(target, { recursive: true });
+  const error = await shell.openPath(target);
+  return error ? { ok: false, error } : { ok: true };
+});
+
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
+  gameInstallationsStore = new GameInstallationsStore(installationsPath());
   settingsStore = new SettingsStore(settingsPath());
+  updateService = new UpdateService({
+    currentVersion: app.getVersion(),
+    repo: 'chincika/lifeafter-graphics-launcher',
+    dataDir: app.getPath('userData'),
+    fetchImpl: (...args) => net.fetch(...args),
+    onStateChanged: broadcastUpdateState
+  });
   historyStore = new HistoryStore(path.join(app.getPath('userData'), 'history'));
   monitorService = new MonitorService({
     capture: captureInstances,
-    historyStore
+    historyStore,
+    historyEnabled: settingsStore.get().historyEnabled
   });
   lanServer = new LanStatusServer({
     settingsStore,
@@ -642,17 +946,37 @@ app.whenReady().then(async () => {
     broadcast('launcher:instances-updated', snapshot);
     lanServer.pushSnapshot(snapshot);
     updateTrayMenu();
+    if (pendingUpdate && !snapshot.instances.length) installPendingUpdate();
   });
   monitorService.start();
-  createTray();
-  applyAutoStart(settingsStore.get().autoStart);
+  if (!isRuntimeSmoke) {
+    createTray();
+    applyAutoStart(settingsStore.get().autoStart);
+  }
 
-  if (settingsStore.get().lanEnabled) {
+  if (!isRuntimeSmoke && settingsStore.get().lanEnabled) {
     const result = await lanServer.start();
     if (!result.ok) settingsStore.update({ lanEnabled: false });
   }
 
-  if (!process.argv.includes('--background')) createWindow();
+  if (!process.argv.includes('--background') || isRuntimeSmoke) createWindow();
+  const updateSettings = settingsStore.get();
+  if (
+    !isRuntimeSmoke &&
+    app.isPackaged &&
+    shouldCheckForUpdates(
+      updateSettings.updateFrequency,
+      updateSettings.lastUpdateCheckAt
+    )
+  ) {
+    setTimeout(() => checkForUpdates({ manual: false }), 1500);
+  }
+  if (isRuntimeSmoke) {
+    setTimeout(() => {
+      isQuitting = true;
+      app.quit();
+    }, 7000);
+  }
   app.on('activate', () => createWindow());
 });
 

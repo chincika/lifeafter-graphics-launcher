@@ -9,6 +9,7 @@ const { SettingsStore } = require('./settings-store');
 async function testMonitorAdaptiveIntervalsAndSingleFlight() {
   let resolves;
   let captureCount = 0;
+  const historySnapshots = [];
   const monitor = new MonitorService({
     capture: () => {
       captureCount += 1;
@@ -19,7 +20,11 @@ async function testMonitorAdaptiveIntervalsAndSingleFlight() {
         });
       });
     },
-    historyStore: { syncInstances() {} }
+    historyStore: {
+      syncInstances(instances) {
+        historySnapshots.push(instances.map(item => item.pid));
+      }
+    }
   });
 
   assert.equal(monitor.intervalMs(), 15000);
@@ -34,6 +39,14 @@ async function testMonitorAdaptiveIntervalsAndSingleFlight() {
   assert.equal(captureCount, 1, 'overlapping refreshes must share one capture');
   resolves();
   await Promise.all([first, second]);
+  assert.deepEqual(historySnapshots.at(-1), [1]);
+  monitor.setHistoryEnabled(false, Date.now());
+  assert.deepEqual(historySnapshots.at(-1), []);
+  resolves = null;
+  const pausedRefresh = monitor.refreshNow();
+  resolves();
+  await pausedRefresh;
+  assert.deepEqual(historySnapshots.at(-1), [], 'paused history must not receive instance snapshots');
   assert.equal(monitor.intervalMs(), 3000);
   monitor.setRemoteClientCount(0);
   assert.equal(monitor.intervalMs(), 5000);
@@ -50,6 +63,25 @@ function testPrivateAddressSelection() {
     Public: [{ family: 'IPv4', internal: false, address: '8.8.8.8' }],
     Lan: [{ family: 'IPv4', internal: false, address: '192.168.50.4' }]
   }), '192.168.50.4');
+}
+
+function testSettingsPersistence() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'la-settings-test-'));
+  try {
+    const filePath = path.join(tempDir, 'settings.json');
+    const settings = new SettingsStore(filePath);
+    assert.equal(settings.get().performanceMode, true);
+    assert.equal(settings.get().historyEnabled, true);
+    assert.equal(settings.get().updateFrequency, 'startup');
+    settings.update({ performanceMode: false });
+    settings.update({ historyEnabled: false, updateFrequency: 'monthly' });
+    const reloaded = new SettingsStore(filePath).get();
+    assert.equal(reloaded.performanceMode, false);
+    assert.equal(reloaded.historyEnabled, false);
+    assert.equal(reloaded.updateFrequency, 'monthly');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 }
 
 async function testPairingAndReadOnlyApi() {
@@ -118,6 +150,7 @@ async function testPairingAndReadOnlyApi() {
 async function main() {
   await testMonitorAdaptiveIntervalsAndSingleFlight();
   testPrivateAddressSelection();
+  testSettingsPersistence();
   await testPairingAndReadOnlyApi();
   console.log('background service tests passed');
 }

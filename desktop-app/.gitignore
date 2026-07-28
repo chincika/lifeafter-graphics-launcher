@@ -1,5 +1,9 @@
 node_modules/
 release/
 ui-smoke-fps.png
+ui-smoke-performance.png
+ui-smoke-packages.png
+ui-smoke-support.png
+ui-smoke-history.png
 ui-smoke-remote.png
 ui-smoke-remote-web.png

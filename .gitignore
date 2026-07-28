@@ -6,3 +6,9 @@ backups/
 *.bak
 launcher_data/
 profile_backups/
+
+# Private development inputs that must stay local
+current-npk-fps-analysis/
+wm-optimizer-v2.3.1-analysis/
+wm-optimizer-v2.3.1-analysis.zip
+*.npk

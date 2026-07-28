@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>关于与支持预览</title>
+<style>
+:root{--bg:#07151d;--bar:#05111a;--side:#071923;--panel:#162833;--line:rgba(157,194,207,.15);--line2:rgba(157,194,207,.24);--text:#eef6f8;--soft:#b8c9ce;--muted:#76919a;--cyan:#50d1e3;--green:#55dda4;--amber:#e1aa36}
+*{box-sizing:border-box}body{margin:0;width:1920px;height:1080px;overflow:hidden;color:var(--text);background:var(--bg);font-family:"Segoe UI Variable","Microsoft YaHei UI",sans-serif}
+.app{height:100%;display:grid;grid-template-rows:58px 1fr;background:radial-gradient(circle at 54% -15%,rgba(46,152,178,.12),transparent 35%),var(--bg)}
+.top{display:flex;align-items:center;padding:0 23px;border-bottom:1px solid rgba(255,255,255,.075);background:var(--bar)}.mark{width:27px;height:31px;display:grid;place-items:center;margin-right:14px;color:var(--cyan);font-size:11px;font-weight:800;clip-path:polygon(50% 0,100% 14%,100% 86%,50% 100%,0 86%,0 14%);background:#0d2b3a}.brand{font-size:17px;font-weight:700}.brand span{margin-left:13px;color:#7694a0;font-size:9px;font-weight:500;letter-spacing:1.5px}.ready{margin-left:auto;display:flex;align-items:center;gap:8px;color:#b9e9d2;font-size:12px}.ready i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green)}
+.body{display:grid;grid-template-columns:130px 1fr}.side{position:relative;border-right:1px solid rgba(255,255,255,.08);background:var(--side);padding:27px 13px}.nav{height:92px;display:grid;place-items:center;margin-bottom:5px;border-radius:15px;color:#a9bec5}.nav.active{color:#f2fbfd;border:1px solid rgba(99,188,212,.22);background:linear-gradient(135deg,rgba(74,156,180,.19),rgba(32,74,90,.18));box-shadow:inset 3px 0 0 var(--cyan)}.nav svg{width:25px;height:25px;display:block;margin:0 auto 7px;stroke:currentColor;fill:none;stroke-width:1.6}.nav small{font-size:14px}.version{position:absolute;bottom:18px;width:104px;text-align:center;color:#68a6b5;font-size:9px}
+.main{position:relative;padding:16px 20px 70px;overflow:hidden}.hero{position:relative;height:155px;overflow:hidden;border:1px solid var(--line);border-radius:16px;background:url("../desktop-app/renderer/assets/cover.png") center 53%/cover no-repeat;box-shadow:0 16px 38px rgba(0,0,0,.22)}.hero:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(4,15,22,.95),rgba(7,18,25,.62) 48%,rgba(7,15,21,.14))}.copy{position:absolute;z-index:2;left:34px;top:28px}.copy small,.kicker{color:#69d7e6;font-size:9px;font-weight:750;letter-spacing:1.45px}.copy h1{margin:10px 0 4px;font-size:27px}.copy p{margin:0;color:#c5d2d6;font-size:12px}.root{position:absolute;z-index:3;right:22px;bottom:18px;width:390px;height:58px;display:flex;align-items:center;gap:12px;padding:0 15px;border:1px solid rgba(255,255,255,.16);border-radius:12px;background:rgba(8,24,32,.82);backdrop-filter:blur(18px)}.root svg{width:22px;stroke:var(--cyan);fill:none;stroke-width:1.5}.root small{display:block;color:#78939c;font-size:9px}.root b{display:block;margin-top:3px;font:10px Consolas,monospace}
+.tools{display:grid;grid-template-columns:minmax(700px,1fr) 390px;gap:14px;margin-top:14px}.card{border:1px solid var(--line);border-radius:16px;background:var(--panel);box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}.main-card{min-height:650px;padding:22px}.head h2{margin:7px 0 4px;font-size:21px}.head p{margin:0;color:#78939c;font-size:10px}.tool-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:23px}.tile{height:142px;padding:17px;border:1px solid rgba(255,255,255,.075);border-radius:12px;background:rgba(255,255,255,.022)}.tile svg{width:25px;height:25px;stroke:#78cbd8;fill:none;stroke-width:1.5}.tile b{display:block;margin-top:18px;font-size:13px}.tile span{display:block;margin-top:6px;color:#78939c;font-size:9px}.tile:hover{border-color:rgba(73,207,228,.28)}
+.about{min-height:650px;display:flex;flex-direction:column;padding:24px 24px 20px;text-align:center}.about-top{padding:2px 8px 16px}.about-icon{width:51px;height:56px;display:grid;place-items:center;margin:0 auto 10px;color:#7de0ec;font-size:16px;font-weight:800;clip-path:polygon(50% 0,92% 15%,92% 78%,50% 100%,8% 78%,8% 15%);background:rgba(73,207,228,.11)}.about h2{margin:6px 0 6px;font-size:19px}.about-top p{margin:0;color:#9ab0b6;font-size:10px;line-height:1.55}.facts{margin-top:13px;border-top:1px solid var(--line)}.fact{display:flex;justify-content:space-between;padding:8px 1px;border-bottom:1px solid rgba(255,255,255,.05);font-size:9px}.fact span{color:#78939c}.fact b{font-weight:550}
+.support{position:relative;flex:1;margin-top:13px;padding:15px 17px 13px;overflow:hidden;border:1px solid rgba(225,170,54,.23);border-radius:14px;background:linear-gradient(145deg,rgba(147,99,21,.1),rgba(10,29,37,.36))}.support:before{content:"";position:absolute;width:180px;height:180px;right:-75px;top:-85px;border:1px solid rgba(225,170,54,.12);border-radius:50%;box-shadow:0 0 0 22px rgba(225,170,54,.025),0 0 0 45px rgba(225,170,54,.018)}.coffee-head{position:relative;display:flex;align-items:center;text-align:left;gap:11px}.cup{width:38px;height:38px;display:grid;place-items:center;border-radius:10px;color:#e8bc5f;background:rgba(225,170,54,.12)}.cup svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.5}.coffee-head small{display:block;color:#c9a65d;font-size:8px;letter-spacing:1px}.coffee-head b{display:block;margin-top:3px;font-size:13px}
+.qr-frame{position:relative;width:214px;height:226px;margin:12px auto 12px;overflow:hidden;border:7px solid #fff;border-radius:13px;background:#fff;box-shadow:0 10px 26px rgba(0,0,0,.28)}.qr-frame img{position:absolute;width:495px;height:495px;max-width:none;left:-144px;top:-76px}.support-copy{margin:0;color:#c8d2d4;font-size:9px;line-height:1.55}.voluntary{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:5px 8px;border-radius:99px;color:#a6b7bc;background:rgba(255,255,255,.035);font-size:8px}.voluntary i{width:6px;height:6px;border-radius:50%;background:#e7b84f}
+.activity{position:absolute;left:20px;right:20px;bottom:15px;height:52px;display:flex;align-items:center;padding:0 15px;border:1px solid var(--line);border-radius:13px;background:#11222c;box-shadow:0 10px 30px rgba(0,0,0,.24)}.activity i{width:30px;height:30px;display:grid;place-items:center;margin-right:12px;border-radius:8px;color:var(--green);background:rgba(67,208,138,.12);font-style:normal}.activity small{color:#79949d}.activity b{display:block;margin-top:2px;font-size:10px;font-weight:500}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top"><div class="mark">LA</div><div class="brand">明日之后画质启动器 <span>CONTROL CENTER</span></div><div class="ready"><i></i>游戏已就绪</div></header>
+  <div class="body">
+    <aside class="side">
+      <div class="nav"><div><svg viewBox="0 0 24 24"><path d="M8 5l10 7-10 7z"/></svg><small>启动</small></div></div>
+      <div class="nav"><div><svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4-8 4zM4 12l8 4 8-4M4 16l8 4 8-4"/></svg><small>多开</small></div></div>
+      <div class="nav"><div><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v6l4 2"/></svg><small>记录</small></div></div>
+      <div class="nav"><div><svg viewBox="0 0 24 24"><path d="M5 17a8 8 0 0114 0M8 17h8M12 8v5"/></svg><small>帧率解锁</small></div></div>
+      <div class="nav active"><div><svg viewBox="0 0 24 24"><path d="M14 5l5 5-9 9-5-5zM15 4l2-2 5 5-2 2M4 20l4-1-3-3z"/></svg><small>工具</small></div></div>
+      <div class="version">v2.2</div>
+    </aside>
+    <main class="main">
+      <section class="hero"><div class="copy"><small>LIFEAFTER · GRAPHICS</small><h1>画质与实例，一处掌控</h1><p>安全切换预设、稳定多开、实时观察每个窗口。</p></div><div class="root"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"/></svg><div><small>当前游戏包体 · 老PC包体</small><b>D:\Program Files (x86)\LifeAfter</b></div></div></section>
+      <div class="tools">
+        <section class="card main-card">
+          <div class="head"><span class="kicker">MAINTENANCE</span><h2>安全与工具</h2><p>配置恢复、备份管理与本地诊断。</p></div>
+          <div class="tool-grid">
+            <div class="tile"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 101.7-4.9M4 4v5h5"/></svg><b>恢复最近备份</b><span>回到上一次配置状态</span></div>
+            <div class="tile"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-5"/></svg><b>恢复默认 2K120</b><span>使用内置安全恢复点</span></div>
+            <div class="tile"><svg viewBox="0 0 24 24"><path d="M5 7h14M7 7l1 13h8l1-13M9 4h6"/></svg><b>清理普通备份</b><span>保留默认恢复点</span></div>
+            <div class="tile"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"/></svg><b>打开备份目录</b><span>查看所有配置备份</span></div>
+            <div class="tile"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7v.2"/></svg><b>打开运行日志</b><span>诊断启动与写入记录</span></div>
+            <div class="tile"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M7 14v6"/></svg><b>跳字缩放</b><span>建议范围 0.5–1.8</span></div>
+          </div>
+        </section>
+        <aside class="card about">
+          <div class="about-top"><div class="about-icon">LA</div><span class="kicker">ABOUT & SUPPORT</span><h2>本地、离线、可扩展</h2><p>所有配置与实例数据只在本机处理。<br>局域网副屏只提供经过授权的只读状态。</p>
+            <div class="facts"><div class="fact"><span>界面引擎</span><b>Electron · Fluent UI</b></div><div class="fact"><span>本地后台</span><b>C# · .NET Framework</b></div><div class="fact"><span>版本</span><b>v2.2.0</b></div></div>
+          </div>
+          <section class="support">
+            <div class="coffee-head"><span class="cup"><svg viewBox="0 0 24 24"><path d="M5 8h12v6a5 5 0 01-5 5h-2a5 5 0 01-5-5z"/><path d="M17 10h2a3 3 0 010 6h-2M8 4c0 1 1 1 1 2M12 3c0 1 1 1 1 2"/></svg></span><div><small>SUPPORT THE PROJECT</small><b>请我喝杯咖啡</b></div></div>
+            <div class="qr-frame"><img src="../../../Desktop/IMG_20260728_125328.png" alt="个人赞赏码"></div>
+            <p class="support-copy">如果这个工具帮你省下一些折腾时间，<br>有余力的话，可以支持一杯咖啡。</p>
+            <span class="voluntary"><i></i>完全自愿 · 不影响任何功能</span>
+          </section>
+        </aside>
+      </div>
+      <div class="activity"><i>✓</i><div><small>12:22:51</small><b>游戏环境检测通过，可以启动</b></div></div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

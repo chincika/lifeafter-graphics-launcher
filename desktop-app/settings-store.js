@@ -2,12 +2,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const DEFAULT_SETTINGS = Object.freeze({
+  performanceMode: true,
+  historyEnabled: true,
   minimizeToTray: true,
   autoStart: false,
   trayTipShown: false,
   lanEnabled: false,
   lanPort: 17666,
-  trustedDevices: []
+  trustedDevices: [],
+  updateFrequency: 'startup',
+  lastUpdateCheckAt: 0
 });
 
 class SettingsStore {
@@ -30,6 +34,8 @@ class SettingsStore {
 
   normalize(value) {
     return {
+      performanceMode: value.performanceMode !== false,
+      historyEnabled: value.historyEnabled !== false,
       minimizeToTray: value.minimizeToTray !== false,
       autoStart: value.autoStart === true,
       trayTipShown: value.trayTipShown === true,
@@ -39,6 +45,10 @@ class SettingsStore {
         Number(value.lanPort) <= 65535
         ? Number(value.lanPort)
         : DEFAULT_SETTINGS.lanPort,
+      updateFrequency: ['startup', 'daily', 'weekly', 'monthly'].includes(value.updateFrequency)
+        ? value.updateFrequency
+        : DEFAULT_SETTINGS.updateFrequency,
+      lastUpdateCheckAt: Math.max(0, Number(value.lastUpdateCheckAt) || 0),
       trustedDevices: Array.isArray(value.trustedDevices)
         ? value.trustedDevices
           .filter(item => item && item.id && item.tokenHash)
