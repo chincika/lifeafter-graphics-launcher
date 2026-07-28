@@ -27,6 +27,8 @@
       "settings-store.js",
       "game-installations-store.js",
       "update-service.js",
+      "update-public-key.pem",
+      "frame-core-integrity.json",
       "renderer/**/*"
     ],
     "extraResources": [
@@ -35,10 +37,19 @@
         "to": "backend/LifeAfterBackend.exe"
       },
       {
-        "from": "backend/fps-patches",
-        "to": "backend/fps-patches"
+        "from": "backend/LifeAfterFrameCore.exe",
+        "to": "backend/LifeAfterFrameCore.exe"
       }
     ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "grantFileProtocolExtraPrivileges": true
+    },
     "win": {
       "icon": "renderer/assets/app-icon.png",
       "artifactName": "LifeAfter-Graphics-Launcher-${version}.${ext}",

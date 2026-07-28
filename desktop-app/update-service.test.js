@@ -9,6 +9,7 @@ const {
   isNewerVersion,
   selectPortableAsset,
   shouldCheckForUpdates,
+  verifyReleaseManifest,
   versionParts
 } = require('./update-service');
 
@@ -38,6 +39,45 @@ assert.equal(
   ),
   'A'.repeat(64)
 );
+
+const signingKeys = crypto.generateKeyPairSync('ed25519');
+const signedAsset = {
+  name: 'LifeAfter-Graphics-Launcher-2.3.0.exe',
+  size: 123
+};
+const signedRelease = { tag_name: 'v2.3.0' };
+const manifestText = JSON.stringify({
+  schema: 1,
+  tag: 'v2.3.0',
+  version: '2.3.0',
+  asset: {
+    name: signedAsset.name,
+    size: signedAsset.size,
+    sha256: 'B'.repeat(64)
+  }
+});
+const manifestSignature = crypto.sign(
+  null,
+  Buffer.from(manifestText, 'utf8'),
+  signingKeys.privateKey
+).toString('base64');
+assert.equal(
+  verifyReleaseManifest({
+    manifestText,
+    signatureText: manifestSignature,
+    publicKey: signingKeys.publicKey,
+    release: signedRelease,
+    asset: signedAsset
+  }).digest,
+  'B'.repeat(64)
+);
+assert.throws(() => verifyReleaseManifest({
+  manifestText: manifestText.replace('2.3.0', '9.9.9'),
+  signatureText: manifestSignature,
+  publicKey: signingKeys.publicKey,
+  release: signedRelease,
+  asset: signedAsset
+}), /签名校验失败/);
 
 (async () => {
   const payload = Buffer.from('verified portable update payload', 'utf8');

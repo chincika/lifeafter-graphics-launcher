@@ -12,3 +12,4 @@ current-npk-fps-analysis/
 wm-optimizer-v2.3.1-analysis/
 wm-optimizer-v2.3.1-analysis.zip
 *.npk
+private-core/fpscore/build/

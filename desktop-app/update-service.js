@@ -5,6 +5,11 @@ const { spawn } = require('node:child_process');
 const { Readable } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 
+const UPDATE_PUBLIC_KEY = fs.readFileSync(
+  path.join(__dirname, 'update-public-key.pem'),
+  'utf8'
+);
+
 const UPDATE_INTERVALS = Object.freeze({
   startup: 0,
   daily: 24 * 60 * 60 * 1000,
@@ -51,12 +56,61 @@ function digestFromText(text, assetName) {
   return '';
 }
 
+function selectSignedManifestAssets(release) {
+  const assets = Array.isArray(release?.assets) ? release.assets : [];
+  return {
+    manifest: assets.find(asset => asset?.name === 'release-manifest.json'),
+    signature: assets.find(asset => asset?.name === 'release-manifest.sig')
+  };
+}
+
+function verifyReleaseManifest({
+  manifestText,
+  signatureText,
+  publicKey,
+  release,
+  asset
+}) {
+  const normalizedSignature = String(signatureText || '').trim();
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalizedSignature)) {
+    throw new Error('Release 签名格式无效');
+  }
+  const signature = Buffer.from(normalizedSignature, 'base64');
+  const manifestBytes = Buffer.from(String(manifestText || ''), 'utf8');
+  if (signature.length !== 64 ||
+      !crypto.verify(null, manifestBytes, publicKey, signature)) {
+    throw new Error('Release Ed25519 签名校验失败，已拒绝更新');
+  }
+  let manifest;
+  try {
+    manifest = JSON.parse(manifestBytes.toString('utf8'));
+  } catch {
+    throw new Error('Release 签名清单不是有效 JSON');
+  }
+  const releaseVersion = String(release?.tag_name || '').replace(/^v/i, '');
+  const digest = String(manifest?.asset?.sha256 || '').toUpperCase();
+  if (
+    manifest?.schema !== 1 ||
+    manifest?.tag !== String(release?.tag_name || '') ||
+    manifest?.version !== releaseVersion ||
+    manifest?.asset?.name !== asset?.name ||
+    !/^[A-F0-9]{64}$/.test(digest) ||
+    !Number.isSafeInteger(manifest?.asset?.size) ||
+    manifest.asset.size <= 0 ||
+    (Number(asset?.size) > 0 && manifest.asset.size !== Number(asset.size))
+  ) {
+    throw new Error('Release 签名清单与 GitHub 发布内容不一致');
+  }
+  return { manifest, digest };
+}
+
 class UpdateService {
   constructor(options) {
     this.currentVersion = String(options.currentVersion || '0.0.0');
     this.repo = String(options.repo);
     this.dataDir = options.dataDir;
     this.fetch = options.fetchImpl || globalThis.fetch;
+    this.publicKey = options.publicKey || UPDATE_PUBLIC_KEY;
     this.onStateChanged = options.onStateChanged || (() => {});
     this.state = {
       phase: 'idle',
@@ -108,6 +162,25 @@ class UpdateService {
     return digestFromText(text, asset.name);
   }
 
+  async signedManifest(release, asset) {
+    const selected = selectSignedManifestAssets(release);
+    if (!selected.manifest?.browser_download_url ||
+        !selected.signature?.browser_download_url) {
+      throw new Error('最新 Release 缺少 Ed25519 签名清单，已拒绝自动更新');
+    }
+    const [manifestText, signatureText] = await Promise.all([
+      this.request(selected.manifest.browser_download_url, 'text'),
+      this.request(selected.signature.browser_download_url, 'text')
+    ]);
+    return verifyReleaseManifest({
+      manifestText,
+      signatureText,
+      publicKey: this.publicKey,
+      release,
+      asset
+    });
+  }
+
   async check() {
     this.updateState({
       phase: 'checking',
@@ -140,7 +213,8 @@ class UpdateService {
       if (!asset?.browser_download_url) {
         throw new Error('最新 Release 中没有找到 Windows 便携版 EXE。');
       }
-      const expectedDigest = await this.expectedDigest(release, asset);
+      const signed = await this.signedManifest(release, asset);
+      const expectedDigest = signed.digest;
       if (!expectedDigest) {
         throw new Error('最新 Release 缺少 SHA-256 校验信息，已拒绝自动下载。');
       }
@@ -239,6 +313,7 @@ class UpdateService {
 
 function schedulePortableReplacement({
   downloadedPath,
+  expectedDigest,
   portablePath,
   currentPid,
   scriptDir
@@ -246,7 +321,8 @@ function schedulePortableReplacement({
   if (process.platform !== 'win32') {
     return { ok: false, error: '自动替换目前只支持 Windows 便携版。' };
   }
-  if (!downloadedPath || !portablePath) {
+  if (!downloadedPath || !portablePath ||
+      !/^[A-F0-9]{64}$/i.test(String(expectedDigest || ''))) {
     return { ok: false, error: '当前不是可自动替换的 Windows 便携版。' };
   }
   const source = path.resolve(downloadedPath);
@@ -263,12 +339,14 @@ function schedulePortableReplacement({
   fs.mkdirSync(scriptDir, { recursive: true });
   const scriptPath = path.join(scriptDir, `apply-update-${Date.now()}.ps1`);
   const script = [
-    'param([int]$ProcessId,[string]$Source,[string]$Target)',
+    'param([int]$ProcessId,[string]$Source,[string]$Target,[string]$ExpectedDigest)',
     '$ErrorActionPreference = "Stop"',
     'try { Wait-Process -Id $ProcessId -Timeout 60 -ErrorAction SilentlyContinue } catch {}',
+    'if ((Get-FileHash -LiteralPath $Source -Algorithm SHA256).Hash -ne $ExpectedDigest) { throw "Downloaded update digest changed before installation." }',
     '$newFile = "$Target.update-new"',
     '$backup = "$Target.previous"',
     'Copy-Item -LiteralPath $Source -Destination $newFile -Force',
+    'if ((Get-FileHash -LiteralPath $newFile -Algorithm SHA256).Hash -ne $ExpectedDigest) { throw "Copied update digest verification failed." }',
     'if (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Force }',
     'Move-Item -LiteralPath $Target -Destination $backup -Force',
     'try {',
@@ -294,7 +372,8 @@ function schedulePortableReplacement({
     '-File', scriptPath,
     '-ProcessId', String(currentPid),
     '-Source', source,
-    '-Target', target
+    '-Target', target,
+    '-ExpectedDigest', String(expectedDigest).toUpperCase()
   ], {
     detached: true,
     windowsHide: true,
@@ -311,6 +390,8 @@ module.exports = {
   isNewerVersion,
   schedulePortableReplacement,
   selectPortableAsset,
+  selectSignedManifestAssets,
   shouldCheckForUpdates,
+  verifyReleaseManifest,
   versionParts
 };

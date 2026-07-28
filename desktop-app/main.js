@@ -11,6 +11,7 @@ const {
   Tray
 } = require('electron');
 const { execFile } = require('node:child_process');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -64,6 +65,23 @@ function backendDir() {
 
 function backendPath() {
   return path.join(backendDir(), 'LifeAfterBackend.exe');
+}
+
+function fpsCorePath() {
+  return path.join(backendDir(), 'LifeAfterFrameCore.exe');
+}
+
+function verifyFpsCoreIntegrity() {
+  const expected = require('./frame-core-integrity.json').sha256;
+  const actual = crypto.createHash('sha256')
+    .update(fs.readFileSync(fpsCorePath()))
+    .digest('hex')
+    .toUpperCase();
+  const left = Buffer.from(String(expected || '').toUpperCase(), 'utf8');
+  const right = Buffer.from(actual, 'utf8');
+  if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) {
+    throw new Error('帧率核心完整性校验失败，请从官方发布页重新下载启动器');
+  }
 }
 
 function savedRootPath() {
@@ -191,6 +209,7 @@ function installPendingUpdate() {
   }
   const scheduled = schedulePortableReplacement({
     downloadedPath: pendingUpdate.downloadedPath,
+    expectedDigest: pendingUpdate.expectedDigest,
     portablePath: process.env.PORTABLE_EXECUTABLE_FILE,
     currentPid: process.pid,
     scriptDir: path.join(app.getPath('userData'), 'updates')
@@ -241,7 +260,8 @@ async function checkForUpdates({ manual = false } = {}) {
     if (!downloaded.ok) return { ...downloaded, data: publicUpdateState() };
     pendingUpdate = {
       latestVersion,
-      downloadedPath: downloaded.path
+      downloadedPath: downloaded.path,
+      expectedDigest: downloaded.digest
     };
     const install = installPendingUpdate();
     return {
@@ -309,6 +329,39 @@ async function runBackend(args, timeout = 30000) {
       error.message
     ].filter(Boolean).join('\n').trim();
     return { ok: false, error: detail || '后台操作失败' };
+  }
+}
+
+async function runFpsCore(command, options = [], timeout = 300000) {
+  const root = readSavedRoot();
+  if (!root) return { ok: false, error: '请先选择游戏目录' };
+  try {
+    verifyFpsCoreIntegrity();
+    const { stdout, stderr } = await execFileAsync(
+      fpsCorePath(),
+      [command, '--root', root, ...options],
+      {
+        windowsHide: true,
+        timeout,
+        encoding: 'utf8',
+        maxBuffer: 1024 * 1024 * 4,
+        env: {
+          ...process.env,
+          LIFEAFTER_PROTECTED_BACKUP_ROOT: path.join(
+            app.getPath('userData'),
+            'protected-backups'
+          )
+        }
+      }
+    );
+    return { ok: true, text: (stdout || '').trim(), stderr: (stderr || '').trim() };
+  } catch (error) {
+    const detail = [
+      error.stdout,
+      error.stderr,
+      error.message
+    ].filter(Boolean).join('\n').trim();
+    return { ok: false, error: detail || '帧率核心操作失败' };
   }
 }
 
@@ -386,7 +439,7 @@ function publicHistory(range) {
 }
 
 async function getFpsStatus() {
-  const result = await runBackend(['--fps-status'], 120000);
+  const result = await runFpsCore('status', [], 120000);
   if (!result.ok) return result;
   try {
     const data = JSON.parse(result.text);
@@ -764,17 +817,17 @@ ipcMain.handle('launcher:save-fps-target', (_event, target) => ({
 ipcMain.handle('launcher:apply-fps', async (_event, target) => {
   const value = Number(target);
   if (![180, 240, 300].includes(value)) return { ok: false, error: '不支持的帧率目标' };
-  const result = await runBackend(['--fps-apply', String(value)], 300000);
+  const result = await runFpsCore('apply', ['--target', String(value)], 300000);
   if (result.ok) saveFpsPreference(value);
   return result;
 });
 ipcMain.handle('launcher:restore-fps', async () => {
-  const result = await runBackend(['--fps-restore'], 300000);
+  const result = await runFpsCore('restore', [], 300000);
   if (result.ok) saveFpsPreference(120);
   return result;
 });
 ipcMain.handle('launcher:clean-fps-backups', () =>
-  runBackend(['--fps-clean-backups'], 300000));
+  runFpsCore('clean', [], 300000));
 
 ipcMain.handle('launcher:open-backups', async () => {
   const root = readSavedRoot();
