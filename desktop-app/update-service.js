@@ -51,6 +51,51 @@ function digestFromText(text, assetName) {
   return '';
 }
 
+function sha256File(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const input = fs.createReadStream(filePath);
+    input.on('error', reject);
+    input.on('data', chunk => hash.update(chunk));
+    input.on('end', () => resolve(hash.digest('hex').toUpperCase()));
+  });
+}
+
+function cleanupUpdateCache(dataDir, currentVersion, now = Date.now()) {
+  const updatesDir = path.join(dataDir, 'updates');
+  const removed = [];
+  let entries = [];
+  try {
+    entries = fs.readdirSync(updatesDir, { withFileTypes: true });
+  } catch {
+    return { removed };
+  }
+  for (const entry of entries) {
+    const target = path.join(updatesDir, entry.name);
+    try {
+      if (entry.isDirectory()) {
+        const match = entry.name.match(/^v(\d+\.\d+\.\d+)$/i);
+        if (match && !isNewerVersion(match[1], currentVersion)) {
+          fs.rmSync(target, { recursive: true, force: true });
+          removed.push(target);
+        }
+        continue;
+      }
+      const stat = fs.statSync(target);
+      const staleScript = /^apply-update-\d+\.ps1$/i.test(entry.name) &&
+        now - stat.mtimeMs >= 5 * 60 * 1000;
+      const stalePartial = /\.partial$/i.test(entry.name) &&
+        now - stat.mtimeMs >= 24 * 60 * 60 * 1000;
+      if (staleScript || stalePartial) {
+        fs.unlinkSync(target);
+        removed.push(target);
+      }
+    } catch {
+    }
+  }
+  return { removed };
+}
+
 class UpdateService {
   constructor(options) {
     this.currentVersion = String(options.currentVersion || '0.0.0');
@@ -169,6 +214,27 @@ class UpdateService {
     fs.mkdirSync(updateDir, { recursive: true });
     const partialPath = path.join(updateDir, `${path.basename(asset.name)}.partial`);
     const finalPath = path.join(updateDir, path.basename(asset.name));
+    const normalizedDigest = String(expectedDigest || '').toUpperCase();
+    try {
+      const existing = fs.statSync(finalPath);
+      const expectedSize = Math.max(0, Number(asset.size) || 0);
+      if ((!expectedSize || existing.size === expectedSize) &&
+          await sha256File(finalPath) === normalizedDigest) {
+        return {
+          ok: true,
+          path: finalPath,
+          digest: normalizedDigest,
+          reused: true,
+          state: this.updateState({
+            phase: 'downloaded',
+            progress: 100,
+            downloadedPath: finalPath,
+            message: `v${latestVersion} 已下载并通过校验，直接继续安装`
+          })
+        };
+      }
+    } catch {
+    }
     this.updateState({
       phase: 'downloading',
       progress: 0,
@@ -203,7 +269,7 @@ class UpdateService {
         throw new Error(`更新文件大小不完整：应为 ${total} 字节，实际 ${received} 字节。`);
       }
       const actualDigest = hash.digest('hex').toUpperCase();
-      if (actualDigest !== String(expectedDigest).toUpperCase()) {
+      if (actualDigest !== normalizedDigest) {
         throw new Error('更新文件 SHA-256 校验失败，已拒绝安装。');
       }
       if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
@@ -242,7 +308,8 @@ function schedulePortableReplacement({
   expectedDigest,
   portablePath,
   currentPid,
-  scriptDir
+  scriptDir,
+  spawnImpl = spawn
 }) {
   if (process.platform !== 'win32') {
     return { ok: false, error: '自动替换目前只支持 Windows 便携版。' };
@@ -264,34 +331,70 @@ function schedulePortableReplacement({
   }
   fs.mkdirSync(scriptDir, { recursive: true });
   const scriptPath = path.join(scriptDir, `apply-update-${Date.now()}.ps1`);
+  const resultPath = path.join(scriptDir, 'last-update-result.json');
+  const logPath = path.join(scriptDir, 'update-install.log');
   const script = [
-    'param([int]$ProcessId,[string]$Source,[string]$Target,[string]$ExpectedDigest)',
+    'param([int]$ProcessId,[string]$Source,[string]$Target,[string]$ExpectedDigest,[string]$ResultPath,[string]$LogPath)',
     '$ErrorActionPreference = "Stop"',
-    'try { Wait-Process -Id $ProcessId -Timeout 60 -ErrorAction SilentlyContinue } catch {}',
-    'if ((Get-FileHash -LiteralPath $Source -Algorithm SHA256).Hash -ne $ExpectedDigest) { throw "Downloaded update digest changed before installation." }',
     '$newFile = "$Target.update-new"',
     '$backup = "$Target.previous"',
-    'Copy-Item -LiteralPath $Source -Destination $newFile -Force',
-    'if ((Get-FileHash -LiteralPath $newFile -Algorithm SHA256).Hash -ne $ExpectedDigest) { throw "Copied update digest verification failed." }',
-    'if (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Force }',
-    'Move-Item -LiteralPath $Target -Destination $backup -Force',
+    '$replaced = $false',
+    '$succeeded = $false',
+    'function Write-InstallResult([bool]$Success,[string]$Message) {',
+    '  $json = @{ success = $Success; message = $Message; timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() } | ConvertTo-Json -Compress',
+    '  [System.IO.File]::WriteAllText($ResultPath,$json,[System.Text.UTF8Encoding]::new($false))',
+    '}',
+    'function Write-InstallLog([string]$Message) {',
+    '  Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ("[{0:O}] {1}" -f [DateTime]::UtcNow,$Message)',
+    '}',
     'try {',
+    '  try { Wait-Process -Id $ProcessId -Timeout 90 -ErrorAction SilentlyContinue } catch {}',
+    '  if ((Get-FileHash -LiteralPath $Source -Algorithm SHA256).Hash -ne $ExpectedDigest) { throw "Downloaded update digest changed before installation." }',
+    '  Copy-Item -LiteralPath $Source -Destination $newFile -Force',
+    '  if ((Get-FileHash -LiteralPath $newFile -Algorithm SHA256).Hash -ne $ExpectedDigest) { throw "Copied update digest verification failed." }',
+    '  $deadline = [DateTime]::UtcNow.AddSeconds(120)',
+    '  while ($true) {',
+    '    try {',
+    '      if (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Force }',
+    '      Move-Item -LiteralPath $Target -Destination $backup -Force',
+    '      break',
+    '    } catch {',
+    '      if ([DateTime]::UtcNow -ge $deadline) { throw }',
+    '      Start-Sleep -Milliseconds 500',
+    '    }',
+    '  }',
     '  Move-Item -LiteralPath $newFile -Destination $Target -Force',
+    '  $replaced = $true',
     '  $newProcess = Start-Process -FilePath $Target -PassThru',
     '  Start-Sleep -Seconds 5',
     '  if ($newProcess.HasExited -and $newProcess.ExitCode -ne 0) { throw "Updated launcher exited with code $($newProcess.ExitCode)." }',
     '  Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue',
+    '  $succeeded = $true',
+    '  Write-InstallResult $true "Update installed successfully."',
+    '  Write-InstallLog "Update installed successfully: $Target"',
     '} catch {',
-    '  if (Test-Path -LiteralPath $backup) { Move-Item -LiteralPath $backup -Destination $Target -Force }',
-    '  throw',
+    '  $message = $_.Exception.Message',
+    '  if ($replaced -and (Test-Path -LiteralPath $backup)) {',
+    '    Remove-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue',
+    '    Move-Item -LiteralPath $backup -Destination $Target -Force',
+    '  } elseif (-not (Test-Path -LiteralPath $Target) -and (Test-Path -LiteralPath $backup)) {',
+    '    Move-Item -LiteralPath $backup -Destination $Target -Force',
+    '  }',
+    '  Write-InstallResult $false $message',
+    '  Write-InstallLog "Update failed: $message"',
+    '  exit 1',
     '} finally {',
     '  Remove-Item -LiteralPath $newFile -Force -ErrorAction SilentlyContinue',
-    '  Remove-Item -LiteralPath $Source -Force -ErrorAction SilentlyContinue',
+    '  if ($succeeded) {',
+    '    Remove-Item -LiteralPath $Source -Force -ErrorAction SilentlyContinue',
+    '    Get-ChildItem -LiteralPath (Split-Path -Parent $PSCommandPath) -Filter "apply-update-*.ps1" -File -ErrorAction SilentlyContinue |',
+    '      Remove-Item -Force -ErrorAction SilentlyContinue',
+    '  }',
     '  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue',
     '}'
   ].join('\r\n');
   fs.writeFileSync(scriptPath, script, 'utf8');
-  const child = spawn('powershell.exe', [
+  const child = spawnImpl('powershell.exe', [
     '-NoProfile',
     '-NonInteractive',
     '-ExecutionPolicy', 'Bypass',
@@ -299,23 +402,27 @@ function schedulePortableReplacement({
     '-ProcessId', String(currentPid),
     '-Source', source,
     '-Target', target,
-    '-ExpectedDigest', String(expectedDigest).toUpperCase()
+    '-ExpectedDigest', String(expectedDigest).toUpperCase(),
+    '-ResultPath', resultPath,
+    '-LogPath', logPath
   ], {
     detached: true,
     windowsHide: true,
     stdio: 'ignore'
   });
   child.unref();
-  return { ok: true, scriptPath, target };
+  return { ok: true, scriptPath, resultPath, logPath, target };
 }
 
 module.exports = {
   UPDATE_INTERVALS,
   UpdateService,
+  cleanupUpdateCache,
   digestFromText,
   isNewerVersion,
   schedulePortableReplacement,
   selectPortableAsset,
+  sha256File,
   shouldCheckForUpdates,
   versionParts
 };

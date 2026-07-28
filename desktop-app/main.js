@@ -27,6 +27,7 @@ const { MonitorService } = require('./monitor-service');
 const { SettingsStore } = require('./settings-store');
 const {
   UpdateService,
+  cleanupUpdateCache,
   schedulePortableReplacement,
   shouldCheckForUpdates
 } = require('./update-service');
@@ -229,8 +230,10 @@ function installPendingUpdate() {
   });
   pendingUpdate = null;
   setTimeout(() => {
-    isQuitting = true;
-    app.quit();
+    quitApplication().catch(() => {
+      isQuitting = true;
+      app.quit();
+    });
   }, 500);
   return { ok: true, scheduled: true };
 }
@@ -971,6 +974,7 @@ app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
   gameInstallationsStore = new GameInstallationsStore(installationsPath());
   settingsStore = new SettingsStore(settingsPath());
+  cleanupUpdateCache(app.getPath('userData'), app.getVersion());
   updateService = new UpdateService({
     currentVersion: app.getVersion(),
     repo: 'chincika/lifeafter-graphics-launcher',
