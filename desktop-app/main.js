@@ -47,7 +47,8 @@ let tray = null;
 let isQuitting = false;
 let cachedQrUrl = '';
 let cachedQrDataUrl = '';
-const isRuntimeSmoke = process.argv.includes('--runtime-smoke');
+const isTraySmoke = process.argv.includes('--tray-smoke');
+const isRuntimeSmoke = process.argv.includes('--runtime-smoke') || isTraySmoke;
 if (isRuntimeSmoke && process.env.LAUNCHER_SMOKE_USER_DATA) {
   app.setPath('userData', path.resolve(process.env.LAUNCHER_SMOKE_USER_DATA));
 }
@@ -597,9 +598,10 @@ function createTray() {
 function hideWindowToTray() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const win = mainWindow;
-  mainWindow = null;
+  if (!tray || tray.isDestroyed()) createTray();
+  win.setSkipTaskbar(true);
+  win.hide();
   monitorService?.setVisible(false);
-  win.destroy();
   const settings = settingsStore.get();
   if (!settings.trayTipShown && tray && !tray.isDestroyed()) {
     tray.displayBalloon?.({
@@ -637,6 +639,7 @@ async function quitApplication() {
 
 function createWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setSkipTaskbar(false);
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
     mainWindow.focus();
@@ -671,9 +674,10 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.once('ready-to-show', () => {
     if (win.isDestroyed()) return;
-    if (isRuntimeSmoke) return;
+    if (isRuntimeSmoke && !isTraySmoke) return;
     win.show();
     monitorService?.setVisible(true);
+    if (isTraySmoke) setTimeout(() => win.minimize(), 250);
   });
   win.on('minimize', event => {
     event.preventDefault();
@@ -1006,8 +1010,10 @@ app.whenReady().then(async () => {
     if (pendingUpdate && !snapshot.instances.length) installPendingUpdate();
   });
   monitorService.start();
-  if (!isRuntimeSmoke) {
+  if (!isRuntimeSmoke || isTraySmoke) {
     createTray();
+  }
+  if (!isRuntimeSmoke) {
     applyAutoStart(settingsStore.get().autoStart);
   }
 
@@ -1030,9 +1036,21 @@ app.whenReady().then(async () => {
   }
   if (isRuntimeSmoke) {
     setTimeout(() => {
+      if (isTraySmoke) {
+        const trayHealthy = Boolean(tray && !tray.isDestroyed());
+        const windowHidden = Boolean(
+          mainWindow &&
+          !mainWindow.isDestroyed() &&
+          !mainWindow.isVisible()
+        );
+        if (!trayHealthy || !windowHidden) {
+          app.exit(2);
+          return;
+        }
+      }
       isQuitting = true;
       app.quit();
-    }, 7000);
+    }, isTraySmoke ? 3000 : 7000);
   }
   app.on('activate', () => createWindow());
 });
