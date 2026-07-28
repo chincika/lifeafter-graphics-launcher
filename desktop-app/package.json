@@ -1,6 +1,6 @@
 {
   "name": "lifeafter-graphics-launcher",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "Windows 11 Fluent desktop launcher for LifeAfter graphics profiles",
   "main": "main.js",
   "author": "不与世俗纷争",
@@ -27,7 +27,6 @@
       "settings-store.js",
       "game-installations-store.js",
       "update-service.js",
-      "update-public-key.pem",
       "frame-core-integrity.json",
       "renderer/**/*"
     ],

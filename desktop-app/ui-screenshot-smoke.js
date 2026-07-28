@@ -56,12 +56,13 @@ let lastPresetPayload = null;
 let savedPerformanceMode = true;
 let historyEnabled = true;
 let updateFrequency = 'startup';
+let mockGameRunning = false;
 const updateState = {
   phase: 'current',
-    currentVersion: '2.3.0',
-    latestVersion: '2.3.0',
+    currentVersion: '2.3.1',
+    latestVersion: '2.3.1',
   progress: 100,
-    message: '当前已是最新版本 v2.3.0',
+    message: '当前已是最新版本 v2.3.1',
   releaseUrl: 'https://github.com/chincika/lifeafter-graphics-launcher/releases/tag/v2.2.0',
   downloadedPath: '',
   error: '',
@@ -172,7 +173,14 @@ ipcMain.handle('launcher:get-instances', async () => ({
   ok: true,
   data: { capturedAt: Date.now(), instances: [] }
 }));
-ipcMain.handle('launcher:get-fps-status', async () => ({ ok: true, data: fpsStatus }));
+ipcMain.handle('launcher:get-fps-status', async () => ({
+  ok: true,
+  data: {
+    ...fpsStatus,
+    gameRunning: mockGameRunning,
+    writable: !mockGameRunning
+  }
+}));
 ipcMain.handle('launcher:save-fps-target', async () => ({ ok: true }));
 ipcMain.handle('launcher:apply-fps', async () => {
   throw new Error('UI smoke simulated IPC failure');
@@ -264,6 +272,36 @@ app.whenReady().then(async () => {
   }))()`);
   if (initial.applyDisabled || initial.restoreDisabled || initial.cleanDisabled) {
     throw new Error(`FPS actions did not start enabled: ${JSON.stringify(initial)}`);
+  }
+
+  mockGameRunning = true;
+  win.webContents.send('launcher:instances-updated', {
+    capturedAt: Date.now(),
+    instances: [{ pid: 1001, name: 'smoke-instance' }]
+  });
+  await new Promise(resolve => setTimeout(resolve, 250));
+  const locked = await win.webContents.executeJavaScript(`(() => ({
+    applyDisabled: document.querySelector('#applyFpsUnlock').disabled,
+    restoreDisabled: document.querySelector('#restoreFpsUnlock').disabled,
+    hintHidden: document.querySelector('#fpsActionLock').hidden
+  }))()`);
+  if (!locked.applyDisabled || !locked.restoreDisabled || locked.hintHidden) {
+    throw new Error(`FPS game-running lock mismatch: ${JSON.stringify(locked)}`);
+  }
+
+  mockGameRunning = false;
+  win.webContents.send('launcher:instances-updated', {
+    capturedAt: Date.now(),
+    instances: []
+  });
+  await new Promise(resolve => setTimeout(resolve, 250));
+  const unlocked = await win.webContents.executeJavaScript(`(() => ({
+    applyDisabled: document.querySelector('#applyFpsUnlock').disabled,
+    restoreDisabled: document.querySelector('#restoreFpsUnlock').disabled,
+    hintHidden: document.querySelector('#fpsActionLock').hidden
+  }))()`);
+  if (unlocked.applyDisabled || unlocked.restoreDisabled || !unlocked.hintHidden) {
+    throw new Error(`FPS exit auto-unlock mismatch: ${JSON.stringify(unlocked)}`);
   }
 
   const recovered = await win.webContents.executeJavaScript(`(async () => {

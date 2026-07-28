@@ -24,29 +24,18 @@ Electron fuses disable RunAsNode, `NODE_OPTIONS`, CLI inspection and loading
 outside the packaged ASAR. Embedded ASAR integrity validation is enabled.
 Renderer sandboxing and context isolation remain enabled.
 
-## Update authenticity
+## Update integrity
 
-Release updates require `release-manifest.json` and
-`release-manifest.sig`. The signature uses Ed25519 and is verified against
-`desktop-app/update-public-key.pem` before any download is accepted. SHA-256
-is checked during download, before replacement, and after the update copy.
-
-The private key is intentionally outside every repository:
-
-`C:\Users\Admin\Documents\lifeafter-private-signing\release-ed25519-private.pem`
-
-Set `LIFEAFTER_RELEASE_PRIVATE_KEY` to that path and run:
-
-```powershell
-node release-tools\sign-release.js <portable-exe> <version> <output-directory>
-```
-
-Never commit, upload, print or copy the private key into a release directory.
+Updates use the SHA-256 digest returned by GitHub Release assets, with
+`SHA256SUMS.txt` as a fallback. The digest is checked during download, before
+replacement, and after the update copy. v2.3.1 intentionally removes the
+earlier Ed25519 public/private-key mechanism.
 
 ## Security boundary
 
 This hardening raises reverse-engineering and tampering cost; it cannot make a
 client-side executable impossible to analyze. There is intentionally no paid
 Microsoft Authenticode certificate, so Windows can still display an unknown
-publisher warning. Ed25519 protects this application's update channel but is
-not a substitute for Authenticode reputation.
+publisher warning. SHA-256 detects corruption or replacement against the
+digest published by GitHub, but does not provide an independent trust root if
+the GitHub account itself is compromised.
