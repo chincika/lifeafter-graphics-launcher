@@ -21,6 +21,43 @@ const historyOutput = path.resolve(
   process.env.LAUNCHER_HISTORY_UI_SCREENSHOT ||
     path.join(__dirname, 'ui-smoke-history.png')
 );
+const schedulingOutput = path.resolve(
+  process.env.LAUNCHER_SCHEDULING_UI_SCREENSHOT ||
+    path.join(__dirname, 'ui-smoke-scheduling.png')
+);
+
+const processScheduling = {
+  topology: {
+    ok: true,
+    model: '13th Gen Intel(R) Core(TM) i7-13700HX',
+    physicalCoreCount: 16,
+    logicalProcessorCount: 24,
+    processorGroupCount: 1,
+    heterogeneous: true,
+    cpuSets: Array.from({ length: 24 }, (_, logicalProcessorIndex) => ({
+      id: 256 + logicalProcessorIndex,
+      group: 0,
+      logicalProcessorIndex,
+      coreIndex: logicalProcessorIndex < 16
+        ? Math.floor(logicalProcessorIndex / 2) * 2
+        : logicalProcessorIndex,
+      efficiencyClass: logicalProcessorIndex < 16 ? 1 : 0,
+      schedulingClass: logicalProcessorIndex < 16 ? 1 : 0,
+      parked: false,
+      coreType: logicalProcessorIndex < 16 ? 'performance' : 'efficiency'
+    }))
+  },
+  policies: {
+    '2K 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [] },
+    '1080p 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [] },
+    '1080p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
+    '900p 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [] },
+    '900p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
+    '720p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
+    '540p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
+    '540p 25': { priority: 'idle', cpuMode: 'efficiency', cpuSetIds: [] }
+  }
+};
 
 const fpsStatus = {
   ok: true,
@@ -58,10 +95,10 @@ let historyEnabled = true;
 let updateFrequency = 'startup';
 const updateState = {
   phase: 'current',
-    currentVersion: '2.3.8',
-    latestVersion: '2.3.8',
+    currentVersion: '2.4.0',
+    latestVersion: '2.4.0',
   progress: 100,
-    message: '当前已是最新版本 v2.3.8',
+    message: '当前已是最新版本 v2.4.0',
   releaseUrl: 'https://github.com/chincika/lifeafter-graphics-launcher/releases/tag/v2.2.0',
   downloadedPath: '',
   error: '',
@@ -122,7 +159,8 @@ ipcMain.handle('launcher:init', async () => ({
   fpsStatus,
   installations,
   historyEnabled,
-  update: updateState
+  update: updateState,
+  processScheduling
 }));
 ipcMain.handle('launcher:choose-root', async () => ({ ok: false, canceled: true }));
 ipcMain.handle('launcher:scan-roots', async () => ({ ok: true, data: installations }));
@@ -167,6 +205,14 @@ ipcMain.handle('launcher:apply-preset', async (_event, payload) => {
 ipcMain.handle('launcher:set-performance-mode', async (_event, enabled) => {
   savedPerformanceMode = enabled === true;
   return { ok: true, value: savedPerformanceMode };
+});
+ipcMain.handle('launcher:get-process-scheduling', async () => ({
+  ok: true,
+  data: processScheduling
+}));
+ipcMain.handle('launcher:save-process-policy', async (_event, payload) => {
+  processScheduling.policies[payload.preset] = payload.policy;
+  return { ok: true, preset: payload.preset, policy: payload.policy };
 });
 ipcMain.handle('launcher:get-instances', async () => ({
   ok: true,
@@ -219,6 +265,58 @@ app.whenReady().then(async () => {
   await new Promise(resolve => setTimeout(resolve, 500));
   const performanceImage = await win.webContents.capturePage();
   fs.writeFileSync(performanceOutput, performanceImage.toPNG());
+
+  const highFrameSchedulingVisual = await win.webContents.executeJavaScript(`(() => {
+    updatePreset('2K 120');
+    openProcessScheduling();
+    return {
+      entry: document.querySelector('#schedulingSummary').textContent,
+      selectedPriority: document.querySelector('#priorityOptions .active')?.dataset.priority,
+      selectedMode: document.querySelector('#cpuModeOptions .active')?.dataset.cpuMode
+    };
+  })()`);
+  if (
+    !highFrameSchedulingVisual.entry.includes('全核心') ||
+    highFrameSchedulingVisual.selectedPriority !== 'high' ||
+    highFrameSchedulingVisual.selectedMode !== 'all'
+  ) {
+    throw new Error(`High frame scheduling UI mismatch: ${JSON.stringify(highFrameSchedulingVisual)}`);
+  }
+
+  const schedulingVisual = await win.webContents.executeJavaScript(`(() => {
+    updatePreset('540p 25');
+    openProcessScheduling();
+    const drawer = document.querySelector('#processSchedulingDrawer');
+    const entry = document.querySelector('#schedulingSummary');
+    return {
+      drawerVisible: !drawer.hidden,
+      instancesHidden: document.querySelector('#instancesPanel').hidden,
+      entry: entry.textContent,
+      cpu: document.querySelector('#cpuModel').textContent,
+      summary: document.querySelector('#cpuTopologySummary').textContent,
+      selectedPriority: document.querySelector('#priorityOptions .active')?.dataset.priority,
+      selectedMode: document.querySelector('#cpuModeOptions .active')?.dataset.cpuMode,
+      topologyGroups: document.querySelectorAll('.topology-group').length
+    };
+  })()`);
+  if (
+    !schedulingVisual.drawerVisible ||
+    !schedulingVisual.instancesHidden ||
+    !schedulingVisual.entry.includes('低') ||
+    schedulingVisual.selectedPriority !== 'idle' ||
+    schedulingVisual.selectedMode !== 'efficiency' ||
+    schedulingVisual.topologyGroups !== 2
+  ) {
+    throw new Error(`Process scheduling UI mismatch: ${JSON.stringify(schedulingVisual)}`);
+  }
+  win.hide();
+  win.setPosition(-32000, -32000);
+  win.showInactive();
+  win.webContents.invalidate();
+  await new Promise(resolve => setTimeout(resolve, 700));
+  const schedulingImage = await win.webContents.capturePage();
+  fs.writeFileSync(schedulingOutput, schedulingImage.toPNG());
+  await win.webContents.executeJavaScript('closeProcessScheduling()');
 
   const performance = await win.webContents.executeJavaScript(`(async () => {
     const checkbox = document.querySelector('#performanceMode');
@@ -404,6 +502,7 @@ app.whenReady().then(async () => {
 
   process.stdout.write(`${JSON.stringify({
     performance,
+    schedulingVisual,
     lastPresetPayload,
     initial,
     recovered,
@@ -413,6 +512,7 @@ app.whenReady().then(async () => {
     supportVisual,
     historyVisual,
     performanceOutput,
+    schedulingOutput,
     output,
     packageOutput,
     supportOutput,

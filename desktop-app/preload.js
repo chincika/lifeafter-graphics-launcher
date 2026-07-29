@@ -9,6 +9,9 @@ contextBridge.exposeInMainWorld('launcher', {
   applyPreset: (preset, launch, performanceMode = false) =>
     ipcRenderer.invoke('launcher:apply-preset', { preset, launch, performanceMode }),
   setPerformanceMode: (enabled) => ipcRenderer.invoke('launcher:set-performance-mode', enabled),
+  getProcessScheduling: () => ipcRenderer.invoke('launcher:get-process-scheduling'),
+  saveProcessPolicy: (preset, policy) =>
+    ipcRenderer.invoke('launcher:save-process-policy', { preset, policy }),
   readSummary: () => ipcRenderer.invoke('launcher:read-summary'),
   getInstances: () => ipcRenderer.invoke('launcher:get-instances'),
   restoreLatest: () => ipcRenderer.invoke('launcher:restore-latest'),

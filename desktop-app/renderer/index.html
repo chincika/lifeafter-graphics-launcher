@@ -135,6 +135,11 @@
                       <span></span>性能优先
                     </label>
                     <small id="performanceModeStatus" data-state="checking">正在检测性能通道…</small>
+                    <button class="scheduling-entry" id="openProcessScheduling" type="button">
+                      <svg><use href="#i-cpu"/></svg>
+                      <span id="schedulingSummary">调度：高 · 性能核心</span>
+                      <svg><use href="#i-chevron"/></svg>
+                    </button>
                   </div>
                   <div class="preset-select-wrap">
                     <select id="presetSelect" aria-label="画质预设">
@@ -195,12 +200,86 @@
           </div>
 
           <aside class="glass-card monitor-card">
-            <div class="section-header compact">
-              <div><span class="section-kicker">LIVE INSTANCES</span><h2>实例运行详情</h2></div>
-              <span class="live-badge"><i></i><b id="runningCount">0</b> 运行中</span>
+            <div class="monitor-pane" id="instancesPanel">
+              <div class="section-header compact">
+                <div><span class="section-kicker">LIVE INSTANCES</span><h2>实例运行详情</h2></div>
+                <span class="live-badge"><i></i><b id="runningCount">0</b> 运行中</span>
+              </div>
+              <div id="instanceList" class="instance-list"></div>
+              <button class="refresh-button" id="refreshInstances"><svg><use href="#i-refresh"/></svg>刷新状态</button>
             </div>
-            <div id="instanceList" class="instance-list"></div>
-            <button class="refresh-button" id="refreshInstances"><svg><use href="#i-refresh"/></svg>刷新状态</button>
+
+            <section class="scheduling-drawer" id="processSchedulingDrawer" hidden>
+              <header class="scheduling-drawer-head">
+                <button class="drawer-back" id="closeProcessScheduling" type="button" aria-label="返回实例列表">
+                  <svg><use href="#i-chevron"/></svg>
+                </button>
+                <div>
+                  <span class="section-kicker">PROCESS SCHEDULING</span>
+                  <h2>进程调度高级配置</h2>
+                </div>
+              </header>
+
+              <div class="scheduling-scroll">
+                <article class="cpu-summary">
+                  <span><svg><use href="#i-cpu"/></svg></span>
+                  <div>
+                    <small>CPU 信息</small>
+                    <strong id="cpuModel">正在识别处理器…</strong>
+                    <p id="cpuTopologySummary">等待 Windows CPU Set 拓扑</p>
+                  </div>
+                </article>
+
+                <fieldset class="scheduling-fieldset">
+                  <legend>进程优先级</legend>
+                  <div class="priority-options" id="priorityOptions">
+                    <button type="button" data-priority="idle">低</button>
+                    <button type="button" data-priority="belowNormal">低于正常</button>
+                    <button type="button" data-priority="normal">正常</button>
+                    <button type="button" data-priority="aboveNormal">高于正常</button>
+                    <button type="button" data-priority="high">高</button>
+                  </div>
+                </fieldset>
+
+                <fieldset class="scheduling-fieldset">
+                  <legend>核心策略</legend>
+                  <div class="cpu-mode-options" id="cpuModeOptions">
+                    <button type="button" data-cpu-mode="system">
+                      <svg><use href="#i-sliders"/></svg><b>系统管理</b><small>由 Windows 分配</small>
+                    </button>
+                    <button type="button" data-cpu-mode="all">
+                      <svg><use href="#i-layers"/></svg><b>全部核心</b><small>主力高帧推荐</small>
+                    </button>
+                    <button type="button" data-cpu-mode="performance">
+                      <svg><use href="#i-cpu"/></svg><b>性能核心</b><small>优先主力实例</small>
+                    </button>
+                    <button type="button" data-cpu-mode="efficiency">
+                      <svg><use href="#i-leaf"/></svg><b>能效核心</b><small>适合挂机实例</small>
+                    </button>
+                    <button type="button" data-cpu-mode="custom">
+                      <svg><use href="#i-wrench"/></svg><b>自定义</b><small>自由选择核心</small>
+                    </button>
+                  </div>
+                </fieldset>
+
+                <fieldset class="scheduling-fieldset topology-fieldset">
+                  <legend>核心拓扑</legend>
+                  <div class="topology-groups" id="topologyGroups"></div>
+                  <button class="topology-detail-toggle" id="toggleTopologyDetails" type="button">
+                    <span>查看逻辑处理器明细</span><svg><use href="#i-chevron"/></svg>
+                  </button>
+                  <div class="logical-processor-grid" id="logicalProcessorGrid" hidden></div>
+                </fieldset>
+              </div>
+
+              <footer class="scheduling-actions">
+                <p>仅保存到当前画质预设，不与其他预设共用</p>
+                <div>
+                  <button class="button secondary" id="resetProcessPolicy" type="button">恢复推荐</button>
+                  <button class="button primary" id="saveProcessPolicy" type="button">保存到当前预设</button>
+                </div>
+              </footer>
+            </section>
           </aside>
         </div>
       </section>
@@ -575,7 +654,7 @@
               <p>所有配置与实例数据都只在本机处理。局域网副屏仅提供经过设备配对的只读状态。</p>
               <div class="about-line"><span>界面引擎</span><b>Electron · Fluent UI</b></div>
               <div class="about-line"><span>本地后台</span><b>C# · .NET Framework</b></div>
-              <div class="about-line"><span>版本</span><b id="aboutVersion">v2.3.8 回归稳定版</b></div>
+              <div class="about-line"><span>版本</span><b id="aboutVersion">v2.4.0 智能进程调度版</b></div>
             </div>
             <section class="support-card">
               <div class="support-head">

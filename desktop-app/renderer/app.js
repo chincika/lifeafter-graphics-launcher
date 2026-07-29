@@ -34,6 +34,37 @@ let packageScanLoading = false;
 let unsubscribeInstances = null;
 let unsubscribeBackground = null;
 let unsubscribeUpdate = null;
+let processSchedulingState = { topology: null, policies: {} };
+let processSchedulingDraft = null;
+let schedulingPreset = '';
+let topologyDetailsOpen = false;
+
+const processPriorityLabels = {
+  idle: '低',
+  belowNormal: '低于正常',
+  normal: '正常',
+  aboveNormal: '高于正常',
+  high: '高'
+};
+
+const cpuModeLabels = {
+  system: '系统管理',
+  all: '全部核心',
+  performance: '性能核心',
+  efficiency: '能效核心',
+  custom: '自定义'
+};
+
+const recommendedProcessPolicies = {
+  '2K 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [] },
+  '1080p 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [] },
+  '1080p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
+  '900p 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [] },
+  '900p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
+  '720p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
+  '540p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
+  '540p 25': { priority: 'idle', cpuMode: 'efficiency', cpuSetIds: [] }
+};
 
 function icon(name) {
   return `<svg aria-hidden="true"><use href="#i-${name}"></use></svg>`;
@@ -46,6 +77,189 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function cloneProcessPolicy(policy) {
+  const source = policy || recommendedProcessPolicies['540p 60'];
+  return {
+    priority: source.priority,
+    cpuMode: source.cpuMode,
+    cpuSetIds: [...(source.cpuSetIds || [])]
+  };
+}
+
+function processPolicyForPreset(preset) {
+  const policy = processSchedulingState.policies?.[preset] ||
+    recommendedProcessPolicies[preset] ||
+    recommendedProcessPolicies['540p 60'];
+  if (
+    processSchedulingState.topology &&
+    !processSchedulingState.topology.heterogeneous &&
+    (policy.cpuMode === 'performance' || policy.cpuMode === 'efficiency')
+  ) {
+    return { ...policy, cpuMode: 'system' };
+  }
+  return policy;
+}
+
+function compactCpuModeLabel(mode) {
+  if (mode === 'performance') return '性能核';
+  if (mode === 'efficiency') return '能效核';
+  if (mode === 'all') return '全核心';
+  return cpuModeLabels[mode] || '系统管理';
+}
+
+function processPolicySummary(policy) {
+  return `${processPriorityLabels[policy.priority] || '正常'} · ${compactCpuModeLabel(policy.cpuMode)}`;
+}
+
+function renderProcessSchedulingSummary() {
+  const preset = $('#presetSelect')?.value || '2K 120';
+  const summary = $('#schedulingSummary');
+  if (summary) summary.textContent = `调度：${processPolicySummary(processPolicyForPreset(preset))}`;
+}
+
+function cpuSetsByType(type) {
+  return (processSchedulingState.topology?.cpuSets || [])
+    .filter(item => item.coreType === type);
+}
+
+function selectedCpuSetIds() {
+  if (!processSchedulingDraft) return new Set();
+  if (processSchedulingDraft.cpuMode === 'performance') {
+    return new Set(cpuSetsByType('performance').map(item => Number(item.id)));
+  }
+  if (processSchedulingDraft.cpuMode === 'efficiency') {
+    return new Set(cpuSetsByType('efficiency').map(item => Number(item.id)));
+  }
+  if (processSchedulingDraft.cpuMode === 'all') {
+    return new Set((processSchedulingState.topology?.cpuSets || []).map(item => Number(item.id)));
+  }
+  if (processSchedulingDraft.cpuMode === 'custom') {
+    return new Set((processSchedulingDraft.cpuSetIds || []).map(Number));
+  }
+  return new Set();
+}
+
+function coreCount(items) {
+  return new Set(items.map(item => `${item.group}:${item.coreIndex}`)).size;
+}
+
+function logicalRange(items) {
+  const values = items.map(item => Number(item.logicalProcessorIndex)).sort((a, b) => a - b);
+  if (!values.length) return '无';
+  const contiguous = values.every((value, index) => index === 0 || value === values[index - 1] + 1);
+  return contiguous ? `CPU ${values[0]}–${values.at(-1)}` : `CPU ${values.join('、')}`;
+}
+
+function renderTopologyGroups() {
+  const topology = processSchedulingState.topology;
+  const container = $('#topologyGroups');
+  const grid = $('#logicalProcessorGrid');
+  if (!container || !grid) return;
+  const cpuSets = topology?.cpuSets || [];
+  const selected = selectedCpuSetIds();
+  const groups = topology?.heterogeneous
+    ? [
+        { type: 'performance', label: '性能核心', code: 'P' },
+        { type: 'efficiency', label: '能效核心', code: 'E' }
+      ]
+    : [{ type: 'uniform', label: '同构核心', code: 'C' }];
+
+  container.innerHTML = groups.map(group => {
+    const items = cpuSetsByType(group.type);
+    if (!items.length) return '';
+    const isSelected = items.some(item => selected.has(Number(item.id)));
+    return `<div class="topology-group ${isSelected ? 'selected' : ''}">
+      <i>${isSelected ? '✓' : ''}</i>
+      <span><b>${group.label}</b><small>${group.code}0–${group.code}${Math.max(0, coreCount(items) - 1)} · ${logicalRange(items)}</small></span>
+      <em>${coreCount(items)} 核心 · ${items.length} 线程</em>
+    </div>`;
+  }).join('');
+
+  grid.hidden = !topologyDetailsOpen;
+  grid.innerHTML = cpuSets.map(item => {
+    const checked = selected.has(Number(item.id));
+    const custom = processSchedulingDraft?.cpuMode === 'custom';
+    return `<label class="logical-processor ${custom ? 'custom' : ''} ${checked ? 'selected' : ''}">
+      ${custom ? `<input type="checkbox" data-cpu-set-id="${item.id}" ${checked ? 'checked' : ''}>` : ''}
+      <span>G${item.group} · CPU ${item.logicalProcessorIndex}</span>
+    </label>`;
+  }).join('');
+
+  $$('[data-cpu-set-id]', grid).forEach(input => {
+    input.addEventListener('change', () => {
+      const chosen = new Set(processSchedulingDraft.cpuSetIds.map(Number));
+      const id = Number(input.dataset.cpuSetId);
+      input.checked ? chosen.add(id) : chosen.delete(id);
+      processSchedulingDraft.cpuSetIds = [...chosen].sort((a, b) => a - b);
+      renderTopologyGroups();
+    });
+  });
+}
+
+function renderProcessSchedulingDrawer() {
+  const topology = processSchedulingState.topology || {};
+  const draft = processSchedulingDraft;
+  if (!draft) return;
+  $('#cpuModel').textContent = topology.model || '未能读取 CPU 型号';
+  $('#cpuTopologySummary').textContent = topology.ok === false
+    ? topology.error || 'CPU 拓扑识别失败'
+    : `${topology.physicalCoreCount || 0} 核心 · ${topology.logicalProcessorCount || 0} 逻辑处理器 · ${topology.heterogeneous ? '混合架构' : '同构架构'}`;
+  $$('#priorityOptions button').forEach(button => {
+    button.classList.toggle('active', button.dataset.priority === draft.priority);
+  });
+  $$('#cpuModeOptions button').forEach(button => {
+    const mode = button.dataset.cpuMode;
+    button.classList.toggle('active', mode === draft.cpuMode);
+    button.disabled = (mode === 'performance' || mode === 'efficiency') &&
+      (!topology.heterogeneous || !cpuSetsByType(mode).length);
+  });
+  $('#saveProcessPolicy').textContent = `保存到 ${schedulingPreset}`;
+  $('#resetProcessPolicy').textContent = schedulingPreset === '540p 25'
+    ? '恢复挂机推荐'
+    : '恢复推荐';
+  renderTopologyGroups();
+}
+
+function openProcessScheduling() {
+  schedulingPreset = $('#presetSelect').value;
+  processSchedulingDraft = cloneProcessPolicy(processPolicyForPreset(schedulingPreset));
+  topologyDetailsOpen = false;
+  $('#instancesPanel').hidden = true;
+  $('#processSchedulingDrawer').hidden = false;
+  $('#toggleTopologyDetails').classList.remove('open');
+  renderProcessSchedulingDrawer();
+}
+
+function closeProcessScheduling() {
+  $('#processSchedulingDrawer').hidden = true;
+  $('#instancesPanel').hidden = false;
+  processSchedulingDraft = null;
+}
+
+async function saveProcessPolicy() {
+  if (!processSchedulingDraft || !schedulingPreset) return;
+  if (processSchedulingDraft.cpuMode === 'custom' && !processSchedulingDraft.cpuSetIds.length) {
+    setActivity('请至少选择一个逻辑处理器', '自定义核心列表不能为空', 'error');
+    return;
+  }
+  const button = $('#saveProcessPolicy');
+  button.disabled = true;
+  const result = await window.launcher.saveProcessPolicy(
+    schedulingPreset,
+    processSchedulingDraft
+  );
+  button.disabled = false;
+  if (!result.ok) {
+    setActivity('进程调度保存失败', result.error, 'error');
+    return;
+  }
+  processSchedulingState.policies[schedulingPreset] = cloneProcessPolicy(result.policy);
+  renderProcessSchedulingSummary();
+  renderPlanRows();
+  closeProcessScheduling();
+  setActivity(`${schedulingPreset} 的进程调度已保存`, processPolicySummary(result.policy));
 }
 
 function setActivity(message, detail = '', kind = 'success') {
@@ -102,7 +316,7 @@ function renderUpdateState(state) {
   const busyPhases = new Set(['checking', 'downloading', 'installing']);
   const button = $('#checkForUpdates');
   const frequency = $('#updateFrequency');
-  $('#aboutVersion').textContent = `v${state.currentVersion || '2.3.8'}`;
+  $('#aboutVersion').textContent = `v${state.currentVersion || '2.4.0'}`;
   $('#updateStatus').textContent = state.message || '尚未检查更新';
   $('#updateProgress').style.width = `${Math.max(0, Math.min(100, Number(state.progress) || 0))}%`;
   frequency.value = state.frequency || 'startup';
@@ -439,6 +653,12 @@ function updatePreset(value) {
   $$('.quality-tabs button').forEach(button => {
     button.classList.toggle('active', button.dataset.preset === value);
   });
+  renderProcessSchedulingSummary();
+  if (!$('#processSchedulingDrawer')?.hidden) {
+    schedulingPreset = value;
+    processSchedulingDraft = cloneProcessPolicy(processPolicyForPreset(value));
+    renderProcessSchedulingDrawer();
+  }
 }
 
 function presetForResolution(width, height, index) {
@@ -461,9 +681,10 @@ function renderPlanRows() {
   }
   $('#planRows').innerHTML = rows.map((row, index) => {
     const info = presets[row.preset];
+    const scheduling = processPolicySummary(processPolicyForPreset(row.preset));
     return `<div class="plan-row">
       <span class="row-icon">${icon('monitor')}</span>
-      <span class="plan-name"><b>${row.name}</b><small>${escapeHtml(row.preset)} · ${info.tone}</small></span>
+      <span class="plan-name"><b>${row.name}</b><small>${escapeHtml(row.preset)} · ${info.tone} · ${escapeHtml(scheduling)}</small></span>
       <span class="plan-meta">${info.resolution}</span>
       <span class="plan-meta">${escapeHtml(fpsPresentation(info).detail)}</span>
       <button class="row-run" data-run-index="${index}" aria-label="启动${row.name}">${icon('play')}</button>
@@ -592,8 +813,14 @@ function renderInstances(payload) {
     const memoryRatio = Math.max(2, Math.min(100, memoryGb / 8 * 100));
     const profile = presetForResolution(item.width, item.height, index);
     const resolution = item.width && item.height ? `${item.width} × ${item.height}` : '等待窗口';
+    const scheduling = item.scheduling;
+    const schedulingBadge = scheduling
+      ? `<span class="instance-scheduling" title="${escapeHtml(scheduling.error || '')}">${escapeHtml(
+          scheduling.ok === false ? '调度失败' : processPolicySummary(scheduling)
+        )}</span>`
+      : '';
     return `<article class="instance-card">
-      <div class="instance-head"><i></i><b>${escapeHtml(name)}</b><span>运行中</span><code>PID ${item.pid}</code></div>
+      <div class="instance-head"><i></i><b>${escapeHtml(name)}</b><span>运行中</span>${schedulingBadge}<code>PID ${item.pid}</code></div>
       <div class="instance-metrics">
         <div class="instance-metric"><small>窗口</small><strong>${resolution} · ${escapeHtml(fpsPresentation(profile).detail)}</strong></div>
         <div class="instance-metric"><small>CPU</small><strong>${cpu.toFixed(0)}%</strong><div class="usage"><i style="width:${Math.max(2,cpu)}%"></i></div></div>
@@ -1141,6 +1368,9 @@ async function initialize() {
     setActivity('本地后台连接失败', result.error, 'error');
     return;
   }
+  processSchedulingState = result.processScheduling || processSchedulingState;
+  renderProcessSchedulingSummary();
+  renderPlanRows();
   $('#gameRoot').textContent = result.root || '点击选择游戏目录';
   renderGameInstallations(result.installations);
   $('#topStatus').textContent = result.root ? '游戏已就绪' : '等待配置';
@@ -1178,6 +1408,40 @@ async function initialize() {
 $$('.nav-item').forEach(item => item.addEventListener('click', () => switchView(item.dataset.view)));
 $('#presetSelect').addEventListener('change', event => updatePreset(event.target.value));
 $$('.quality-tabs button').forEach(button => button.addEventListener('click', () => updatePreset(button.dataset.preset)));
+$('#openProcessScheduling').addEventListener('click', openProcessScheduling);
+$('#closeProcessScheduling').addEventListener('click', closeProcessScheduling);
+$('#saveProcessPolicy').addEventListener('click', saveProcessPolicy);
+$('#resetProcessPolicy').addEventListener('click', () => {
+  processSchedulingDraft = cloneProcessPolicy(
+    recommendedProcessPolicies[schedulingPreset] || recommendedProcessPolicies['540p 60']
+  );
+  renderProcessSchedulingDrawer();
+});
+$$('#priorityOptions button').forEach(button => {
+  button.addEventListener('click', () => {
+    if (!processSchedulingDraft) return;
+    processSchedulingDraft.priority = button.dataset.priority;
+    renderProcessSchedulingDrawer();
+  });
+});
+$$('#cpuModeOptions button').forEach(button => {
+  button.addEventListener('click', () => {
+    if (!processSchedulingDraft || button.disabled) return;
+    const previouslySelected = [...selectedCpuSetIds()];
+    processSchedulingDraft.cpuMode = button.dataset.cpuMode;
+    if (processSchedulingDraft.cpuMode === 'custom' && !processSchedulingDraft.cpuSetIds.length) {
+      processSchedulingDraft.cpuSetIds = previouslySelected.length
+        ? previouslySelected
+        : (processSchedulingState.topology?.cpuSets || []).map(item => Number(item.id));
+    }
+    renderProcessSchedulingDrawer();
+  });
+});
+$('#toggleTopologyDetails').addEventListener('click', event => {
+  topologyDetailsOpen = !topologyDetailsOpen;
+  event.currentTarget.classList.toggle('open', topologyDetailsOpen);
+  renderTopologyGroups();
+});
 $('#mainPreset').addEventListener('change', renderPlanRows);
 $('#idlePreset').addEventListener('change', renderPlanRows);
 $('#idleCount').addEventListener('change', renderPlanRows);
@@ -1193,6 +1457,9 @@ $('#addGameRoot').addEventListener('click', addGameInstallation);
 $('#scanGameRoots').addEventListener('click', scanGameInstallations);
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && packageMenuOpen) setPackageMenuOpen(false);
+  if (event.key === 'Escape' && !$('#processSchedulingDrawer').hidden) {
+    closeProcessScheduling();
+  }
 });
 
 $('#applyButton').addEventListener('click', event => applyPreset($('#presetSelect').value, false, event.currentTarget));

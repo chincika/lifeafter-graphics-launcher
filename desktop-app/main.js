@@ -23,6 +23,7 @@ const {
 const { HistoryStore } = require('./history-store');
 const { LanStatusServer } = require('./lan-status-server');
 const { MonitorService } = require('./monitor-service');
+const { ProcessSchedulingService } = require('./process-scheduling');
 const { SettingsStore } = require('./settings-store');
 const { ensureRuntimeAssets } = require('./runtime-assets');
 const {
@@ -38,6 +39,7 @@ let gameInstallationsStore = null;
 let historyStore = null;
 let settingsStore = null;
 let monitorService = null;
+let processSchedulingService = null;
 let lanServer = null;
 let updateService = null;
 let updateCheckInFlight = null;
@@ -384,7 +386,11 @@ async function captureInstances() {
 }
 
 function publicSnapshot(snapshot = monitorService?.getSnapshot()) {
-  const source = snapshot || { capturedAt: Date.now(), instances: [] };
+  const source = processSchedulingService
+    ? processSchedulingService.decorateSnapshot(
+        snapshot || { capturedAt: Date.now(), instances: [] }
+      )
+    : snapshot || { capturedAt: Date.now(), instances: [] };
   return {
     appVersion: app.getVersion(),
     generatedAt: Date.now(),
@@ -397,7 +403,15 @@ function publicSnapshot(snapshot = monitorService?.getSnapshot()) {
       height: Number(item.height) || 0,
       cpuPercent: Math.max(0, Number(item.cpuPercent) || 0),
       workingSetBytes: Math.max(0, Number(item.workingSetBytes) || 0),
-      runningSeconds: Math.max(0, Number(item.runningSeconds) || 0)
+      runningSeconds: Math.max(0, Number(item.runningSeconds) || 0),
+      scheduling: item.scheduling ? {
+        ok: item.scheduling.ok !== false,
+        preset: String(item.scheduling.preset || ''),
+        priority: String(item.scheduling.priority || ''),
+        priorityLabel: String(item.scheduling.priorityLabel || ''),
+        cpuMode: String(item.scheduling.cpuMode || ''),
+        cpuModeLabel: String(item.scheduling.cpuModeLabel || '')
+      } : null
     }))
   };
 }
@@ -693,12 +707,13 @@ ipcMain.handle('launcher:init', async () => {
     await runBackend(['--set-root', selectedRoot], 10000);
     persistActiveRoot(selectedRoot, selectedRecord?.source || 'auto');
   }
-  const [rootResult, summary, instances, fpsStatus, background] = await Promise.all([
+  const [rootResult, summary, instances, fpsStatus, background, processScheduling] = await Promise.all([
     runBackend(['--get-root'], 10000),
     runBackend(['--read-summary'], 10000),
     monitorService.refreshNow(),
     getFpsStatus(),
-    backgroundState()
+    backgroundState(),
+    processSchedulingService.getState()
   ]);
   const detectedRoot = rootResult.ok ? rootResult.text : persistedRoot;
   if (detectedRoot) {
@@ -721,7 +736,8 @@ ipcMain.handle('launcher:init', async () => {
       completedAt: Date.now()
     }),
     update: publicUpdateState(),
-    background
+    background,
+    processScheduling
   };
 });
 
@@ -760,7 +776,11 @@ ipcMain.handle('launcher:remove-root', (_event, root) => {
 });
 
 ipcMain.handle('launcher:apply-preset', async (_event, payload) => {
-  const args = ['--apply', String(payload.preset || '')];
+  const preset = String(payload.preset || '');
+  const args = ['--apply', preset];
+  const existingPids = payload.launch
+    ? monitorService.getSnapshot().instances.map(item => Number(item.pid))
+    : [];
   if (payload.launch) {
     args.push('--launch');
     if (payload.performanceMode === true) {
@@ -774,7 +794,15 @@ ipcMain.handle('launcher:apply-preset', async (_event, payload) => {
       args.push('--performance');
     }
   }
-  return runBackend(args, 60000);
+  const result = await runBackend(args, 60000);
+  if (result.ok && payload.launch) {
+    processSchedulingService.queueLaunch(preset, existingPids);
+    for (const delay of [500, 1800, 4000, 8000]) {
+      const timer = setTimeout(() => monitorService.refreshNow(), delay);
+      timer.unref?.();
+    }
+  }
+  return result;
 });
 
 ipcMain.handle('launcher:set-performance-mode', (_event, enabled) => {
@@ -785,6 +813,17 @@ ipcMain.handle('launcher:set-performance-mode', (_event, enabled) => {
   settingsStore.update({ performanceMode: value });
   return { ok: true, value, launchMode: launchModeState() };
 });
+
+ipcMain.handle('launcher:get-process-scheduling', async () => ({
+  ok: true,
+  data: await processSchedulingService.getState()
+}));
+
+ipcMain.handle('launcher:save-process-policy', (_event, payload) =>
+  processSchedulingService.savePolicy(
+    String(payload?.preset || ''),
+    payload?.policy
+  ));
 
 ipcMain.handle('launcher:read-summary', () => runBackend(['--read-summary'], 10000));
 ipcMain.handle('launcher:get-instances', () => monitorService.refreshNow());
@@ -978,6 +1017,10 @@ app.whenReady().then(async () => {
     historyStore,
     historyEnabled: settingsStore.get().historyEnabled
   });
+  processSchedulingService = new ProcessSchedulingService({
+    runBackend,
+    settingsStore
+  });
   lanServer = new LanStatusServer({
     settingsStore,
     staticDir: path.join(__dirname, 'renderer', 'remote'),
@@ -990,10 +1033,19 @@ app.whenReady().then(async () => {
     }
   });
   monitorService.on('snapshot', snapshot => {
-    broadcast('launcher:instances-updated', snapshot);
-    lanServer.pushSnapshot(snapshot);
+    const decorated = processSchedulingService.decorateSnapshot(snapshot);
+    broadcast('launcher:instances-updated', decorated);
+    lanServer.pushSnapshot(decorated);
     updateTrayMenu();
     if (pendingUpdate && !snapshot.instances.length) installPendingUpdate();
+    processSchedulingService.handleSnapshot(snapshot).then(changed => {
+      if (!changed) return;
+      const updated = processSchedulingService.decorateSnapshot(
+        monitorService.getSnapshot()
+      );
+      broadcast('launcher:instances-updated', updated);
+      lanServer.pushSnapshot(updated);
+    }).catch(() => {});
   });
   monitorService.start();
   if (!isRuntimeSmoke || isTraySmoke) {

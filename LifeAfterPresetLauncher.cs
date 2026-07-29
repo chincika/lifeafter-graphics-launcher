@@ -12,6 +12,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 internal static class LifeAfterPresetLauncher
 {
@@ -44,6 +45,20 @@ internal static class LifeAfterPresetLauncher
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref DwmMargins margins);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetSystemCpuSetInformation(
+        IntPtr information,
+        uint bufferLength,
+        out uint returnedLength,
+        IntPtr process,
+        uint flags);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetProcessDefaultCpuSets(
+        IntPtr process,
+        uint[] cpuSetIds,
+        uint cpuSetIdCount);
 
     private struct NativeRect
     {
@@ -100,6 +115,18 @@ internal static class LifeAfterPresetLauncher
         public string ModeLabel;
         public string ProfileId;
         public bool KnownProfile;
+    }
+
+    private sealed class CpuSetSnapshot
+    {
+        public uint Id;
+        public ushort Group;
+        public byte LogicalProcessorIndex;
+        public byte CoreIndex;
+        public byte EfficiencyClass;
+        public byte SchedulingClass;
+        public bool Parked;
+        public string CoreType;
     }
 
     private const int FpsSlotSize = 110791;
@@ -185,6 +212,40 @@ internal static class LifeAfterPresetLauncher
     {
         try { Console.OutputEncoding = new UTF8Encoding(false); } catch { }
         SetGameRoot(FindGameRoot());
+
+        if (args.Length >= 1 && args[0].Equals("--cpu-topology-json", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                Console.WriteLine(CaptureCpuTopologyJson());
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.GetType().Name + "：" + ex.Message);
+                Environment.ExitCode = 1;
+            }
+            return;
+        }
+
+        if (args.Length >= 4 && args[0].Equals("--apply-process-policy", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                int processId;
+                if (!Int32.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out processId) ||
+                    processId <= 0)
+                {
+                    throw new InvalidOperationException("\u8fdb\u7a0b PID \u65e0\u6548\u3002");
+                }
+                Console.WriteLine(ApplyProcessPolicyJson(processId, args[2], args[3]));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.GetType().Name + "：" + ex.Message);
+                Environment.ExitCode = 1;
+            }
+            return;
+        }
 
         if (args.Length >= 2 && args[0].Equals("--apply", StringComparison.OrdinalIgnoreCase))
         {
@@ -2261,6 +2322,298 @@ internal static class LifeAfterPresetLauncher
         foreach (byte value in data)
             result.Append(value.ToString("X2", CultureInfo.InvariantCulture));
         return result.ToString();
+    }
+
+    private static List<CpuSetSnapshot> CaptureCpuSets()
+    {
+        uint requiredLength;
+        GetSystemCpuSetInformation(IntPtr.Zero, 0, out requiredLength, IntPtr.Zero, 0);
+        if (requiredLength == 0)
+        {
+            throw new InvalidOperationException("\u5f53\u524d Windows \u672a\u8fd4\u56de CPU Set \u62d3\u6251\u4fe1\u606f\u3002");
+        }
+
+        IntPtr buffer = Marshal.AllocHGlobal((int)requiredLength);
+        try
+        {
+            uint returnedLength;
+            if (!GetSystemCpuSetInformation(
+                buffer,
+                requiredLength,
+                out returnedLength,
+                IntPtr.Zero,
+                0))
+            {
+                throw new InvalidOperationException(
+                    "\u8bfb\u53d6 CPU Set \u62d3\u6251\u5931\u8d25\uff0cWin32=" +
+                    Marshal.GetLastWin32Error().ToString(CultureInfo.InvariantCulture));
+            }
+
+            List<CpuSetSnapshot> result = new List<CpuSetSnapshot>();
+            int offset = 0;
+            while (offset < returnedLength)
+            {
+                IntPtr item = IntPtr.Add(buffer, offset);
+                int size = Marshal.ReadInt32(item, 0);
+                int type = Marshal.ReadInt32(item, 4);
+                if (size <= 0 || offset + size > returnedLength) break;
+                if (type == 0 && size >= 24)
+                {
+                    result.Add(new CpuSetSnapshot
+                    {
+                        Id = unchecked((uint)Marshal.ReadInt32(item, 8)),
+                        Group = unchecked((ushort)Marshal.ReadInt16(item, 12)),
+                        LogicalProcessorIndex = Marshal.ReadByte(item, 14),
+                        CoreIndex = Marshal.ReadByte(item, 15),
+                        EfficiencyClass = Marshal.ReadByte(item, 18),
+                        Parked = (Marshal.ReadByte(item, 19) & 1) != 0,
+                        SchedulingClass = Marshal.ReadByte(item, 20)
+                    });
+                }
+                offset += size;
+            }
+            if (result.Count == 0)
+            {
+                throw new InvalidOperationException("\u6ca1\u6709\u68c0\u6d4b\u5230\u53ef\u7528\u7684 CPU Set\u3002");
+            }
+
+            SortedSet<byte> efficiencyClasses = new SortedSet<byte>();
+            foreach (CpuSetSnapshot item in result) efficiencyClasses.Add(item.EfficiencyClass);
+            bool heterogeneous = efficiencyClasses.Count > 1;
+            byte minimumClass = Byte.MaxValue;
+            byte maximumClass = Byte.MinValue;
+            foreach (byte value in efficiencyClasses)
+            {
+                if (value < minimumClass) minimumClass = value;
+                if (value > maximumClass) maximumClass = value;
+            }
+            foreach (CpuSetSnapshot item in result)
+            {
+                if (!heterogeneous) item.CoreType = "uniform";
+                else if (item.EfficiencyClass == maximumClass) item.CoreType = "performance";
+                else if (item.EfficiencyClass == minimumClass) item.CoreType = "efficiency";
+                else item.CoreType = "balanced";
+            }
+            return result;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            throw new InvalidOperationException(
+                "\u5f53\u524d Windows \u7248\u672c\u4e0d\u652f\u6301 CPU Set \u62d3\u6251\u8bc6\u522b\u3002");
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    private static string ReadCpuModel()
+    {
+        try
+        {
+            using (RegistryKey key = Registry.LocalMachine.OpenSubKey(
+                @"HARDWARE\DESCRIPTION\System\CentralProcessor\0"))
+            {
+                object value = key == null ? null : key.GetValue("ProcessorNameString");
+                if (value != null) return Convert.ToString(value, CultureInfo.InvariantCulture).Trim();
+            }
+        }
+        catch
+        {
+        }
+        return Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER") ?? "\u672a\u77e5 CPU";
+    }
+
+    private static string CaptureCpuTopologyJson()
+    {
+        List<CpuSetSnapshot> cpuSets = CaptureCpuSets();
+        HashSet<string> physicalCores = new HashSet<string>(StringComparer.Ordinal);
+        HashSet<ushort> groups = new HashSet<ushort>();
+        HashSet<byte> efficiencyClasses = new HashSet<byte>();
+        foreach (CpuSetSnapshot item in cpuSets)
+        {
+            physicalCores.Add(
+                item.Group.ToString(CultureInfo.InvariantCulture) + ":" +
+                item.CoreIndex.ToString(CultureInfo.InvariantCulture));
+            groups.Add(item.Group);
+            efficiencyClasses.Add(item.EfficiencyClass);
+        }
+
+        StringBuilder json = new StringBuilder();
+        json.Append("{\"ok\":true,\"model\":\"")
+            .Append(JsonEscape(ReadCpuModel()))
+            .Append("\",\"physicalCoreCount\":").Append(physicalCores.Count)
+            .Append(",\"logicalProcessorCount\":").Append(cpuSets.Count)
+            .Append(",\"processorGroupCount\":").Append(groups.Count)
+            .Append(",\"heterogeneous\":").Append(efficiencyClasses.Count > 1 ? "true" : "false")
+            .Append(",\"cpuSets\":[");
+        for (int index = 0; index < cpuSets.Count; index++)
+        {
+            if (index > 0) json.Append(',');
+            CpuSetSnapshot item = cpuSets[index];
+            json.Append("{\"id\":").Append(item.Id)
+                .Append(",\"group\":").Append(item.Group)
+                .Append(",\"logicalProcessorIndex\":").Append(item.LogicalProcessorIndex)
+                .Append(",\"coreIndex\":").Append(item.CoreIndex)
+                .Append(",\"efficiencyClass\":").Append(item.EfficiencyClass)
+                .Append(",\"schedulingClass\":").Append(item.SchedulingClass)
+                .Append(",\"parked\":").Append(item.Parked ? "true" : "false")
+                .Append(",\"coreType\":\"").Append(item.CoreType).Append("\"}");
+        }
+        json.Append("]}");
+        return json.ToString();
+    }
+
+    private static ProcessPriorityClass ParseProcessPriority(string value)
+    {
+        switch ((value ?? "").Trim().ToLowerInvariant())
+        {
+            case "idle": return ProcessPriorityClass.Idle;
+            case "belownormal": return ProcessPriorityClass.BelowNormal;
+            case "normal": return ProcessPriorityClass.Normal;
+            case "abovenormal": return ProcessPriorityClass.AboveNormal;
+            case "high": return ProcessPriorityClass.High;
+            default:
+                throw new InvalidOperationException("\u4e0d\u652f\u6301\u7684\u8fdb\u7a0b\u4f18\u5148\u7ea7\u3002");
+        }
+    }
+
+    private static uint[] ParseCpuSetIds(string value, List<CpuSetSnapshot> available)
+    {
+        if (String.IsNullOrWhiteSpace(value) || value == "-") return new uint[0];
+        HashSet<uint> valid = new HashSet<uint>();
+        foreach (CpuSetSnapshot item in available) valid.Add(item.Id);
+        List<uint> result = new List<uint>();
+        HashSet<uint> seen = new HashSet<uint>();
+        foreach (string part in value.Split(','))
+        {
+            uint id;
+            if (!UInt32.TryParse(part.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out id) ||
+                !valid.Contains(id))
+            {
+                throw new InvalidOperationException("\u5305\u542b\u65e0\u6548\u7684 CPU Set ID\u3002");
+            }
+            if (seen.Add(id)) result.Add(id);
+        }
+        if (result.Count == 0)
+        {
+            throw new InvalidOperationException("\u81ea\u5b9a\u4e49\u6838\u5fc3\u5217\u8868\u4e0d\u80fd\u4e3a\u7a7a\u3002");
+        }
+        return result.ToArray();
+    }
+
+    private static bool TryBuildGroupZeroAffinityMask(
+        uint[] selectedIds,
+        List<CpuSetSnapshot> available,
+        out IntPtr affinity,
+        out ulong affinityValue)
+    {
+        affinity = IntPtr.Zero;
+        affinityValue = 0;
+        HashSet<uint> selected = new HashSet<uint>(selectedIds);
+        bool selectAll = selectedIds.Length == 0;
+        int bitCount = IntPtr.Size * 8;
+        foreach (CpuSetSnapshot item in available)
+        {
+            if (!selectAll && !selected.Contains(item.Id)) continue;
+            if (item.Group != 0 || item.LogicalProcessorIndex >= bitCount)
+            {
+                affinityValue = 0;
+                return false;
+            }
+            affinityValue |= 1UL << item.LogicalProcessorIndex;
+        }
+        if (affinityValue == 0) return false;
+        affinity = IntPtr.Size == 8
+            ? new IntPtr(unchecked((long)affinityValue))
+            : new IntPtr(unchecked((int)affinityValue));
+        return true;
+    }
+
+    private static bool IsTrustedGameProcess(Process process)
+    {
+        if (process == null || !IsGameProcessName(process.ProcessName)) return false;
+        string executable;
+        try { executable = Path.GetFullPath(process.MainModule.FileName); }
+        catch { return false; }
+        if (String.IsNullOrWhiteSpace(executable) || !IsValidGameRoot(gameRoot)) return false;
+        string root = Path.GetFullPath(gameRoot).TrimEnd(Path.DirectorySeparatorChar) +
+                      Path.DirectorySeparatorChar;
+        return executable.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ApplyProcessPolicyJson(int processId, string priorityName, string cpuSetArgument)
+    {
+        ProcessPriorityClass priority = ParseProcessPriority(priorityName);
+        List<CpuSetSnapshot> available = CaptureCpuSets();
+        uint[] cpuSetIds = ParseCpuSetIds(cpuSetArgument, available);
+        using (Process process = Process.GetProcessById(processId))
+        {
+            if (!IsTrustedGameProcess(process))
+            {
+                throw new InvalidOperationException(
+                    "\u62d2\u7edd\u8c03\u6574\uff1a\u76ee\u6807\u4e0d\u662f\u5f53\u524d\u6e38\u620f\u76ee\u5f55\u4e2d\u7684 LifeAfter \u8fdb\u7a0b\u3002");
+            }
+
+            ProcessPriorityClass originalPriority = process.PriorityClass;
+            IntPtr originalAffinity = process.ProcessorAffinity;
+            IntPtr requestedAffinity;
+            ulong requestedAffinityValue;
+            bool hardAffinityAvailable = TryBuildGroupZeroAffinityMask(
+                cpuSetIds,
+                available,
+                out requestedAffinity,
+                out requestedAffinityValue);
+            bool hardAffinityApplied = false;
+            try
+            {
+                if (!SetProcessDefaultCpuSets(
+                    process.Handle,
+                    cpuSetIds.Length == 0 ? null : cpuSetIds,
+                    (uint)cpuSetIds.Length))
+                {
+                    throw new InvalidOperationException(
+                        "CPU Set \u5e94\u7528\u5931\u8d25\uff0cWin32=" +
+                        Marshal.GetLastWin32Error().ToString(CultureInfo.InvariantCulture));
+                }
+                if (hardAffinityAvailable)
+                {
+                    process.ProcessorAffinity = requestedAffinity;
+                    hardAffinityApplied = true;
+                }
+                process.PriorityClass = priority;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                throw new InvalidOperationException(
+                    "\u5f53\u524d Windows \u7248\u672c\u4e0d\u652f\u6301 CPU Set \u8c03\u5ea6\u3002");
+            }
+            catch
+            {
+                try { SetProcessDefaultCpuSets(process.Handle, null, 0); } catch { }
+                try { process.ProcessorAffinity = originalAffinity; } catch { }
+                try { process.PriorityClass = originalPriority; } catch { }
+                throw;
+            }
+
+            StringBuilder json = new StringBuilder();
+            json.Append("{\"ok\":true,\"pid\":").Append(processId)
+                .Append(",\"priority\":\"").Append(JsonEscape(priorityName)).Append("\"")
+                .Append(",\"hardAffinityApplied\":").Append(hardAffinityApplied ? "true" : "false")
+                .Append(",\"affinityMask\":\"")
+                .Append(hardAffinityApplied
+                    ? "0x" + requestedAffinityValue.ToString("X", CultureInfo.InvariantCulture)
+                    : "")
+                .Append("\"")
+                .Append(",\"cpuSetIds\":[");
+            for (int index = 0; index < cpuSetIds.Length; index++)
+            {
+                if (index > 0) json.Append(',');
+                json.Append(cpuSetIds[index]);
+            }
+            json.Append("]}");
+            return json.ToString();
+        }
     }
 
     private static string CaptureInstancesJson()

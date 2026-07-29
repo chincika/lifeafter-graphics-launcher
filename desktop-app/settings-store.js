@@ -1,5 +1,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const {
+  DEFAULT_PROCESS_POLICIES,
+  normalizeProcessPolicies
+} = require('./process-scheduling');
 
 const DEFAULT_SETTINGS = Object.freeze({
   performanceMode: true,
@@ -11,7 +15,8 @@ const DEFAULT_SETTINGS = Object.freeze({
   lanPort: 17666,
   trustedDevices: [],
   updateFrequency: 'startup',
-  lastUpdateCheckAt: 0
+  lastUpdateCheckAt: 0,
+  processPolicies: DEFAULT_PROCESS_POLICIES
 });
 
 class SettingsStore {
@@ -49,6 +54,7 @@ class SettingsStore {
         ? value.updateFrequency
         : DEFAULT_SETTINGS.updateFrequency,
       lastUpdateCheckAt: Math.max(0, Number(value.lastUpdateCheckAt) || 0),
+      processPolicies: normalizeProcessPolicies(value.processPolicies),
       trustedDevices: Array.isArray(value.trustedDevices)
         ? value.trustedDevices
           .filter(item => item && item.id && item.tokenHash)
@@ -68,6 +74,7 @@ class SettingsStore {
   get() {
     return {
       ...this.data,
+      processPolicies: normalizeProcessPolicies(this.data.processPolicies),
       trustedDevices: this.data.trustedDevices.map(item => ({ ...item }))
     };
   }
