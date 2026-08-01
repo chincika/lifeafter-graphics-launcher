@@ -58,14 +58,14 @@ const cpuModeLabels = {
 };
 
 const recommendedProcessPolicies = {
-  '2K 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [] },
-  '1080p 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [] },
-  '1080p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
-  '900p 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [] },
-  '900p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
-  '720p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
-  '540p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
-  '540p 25': { priority: 'idle', cpuMode: 'efficiency', cpuSetIds: [] }
+  '2K 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [], excludeCpu0: false },
+  '1080p 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [], excludeCpu0: false },
+  '1080p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [], excludeCpu0: false },
+  '900p 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [], excludeCpu0: false },
+  '900p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [], excludeCpu0: false },
+  '720p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [], excludeCpu0: false },
+  '540p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [], excludeCpu0: false },
+  '540p 25': { priority: 'idle', cpuMode: 'efficiency', cpuSetIds: [], excludeCpu0: false }
 };
 
 function icon(name) {
@@ -86,7 +86,9 @@ function cloneProcessPolicy(policy) {
   return {
     priority: source.priority,
     cpuMode: source.cpuMode,
-    cpuSetIds: [...(source.cpuSetIds || [])]
+    cpuSetIds: [...(source.cpuSetIds || [])],
+    excludeCpu0: source.excludeCpu0 === true &&
+      (source.cpuMode === 'all' || source.cpuMode === 'custom')
   };
 }
 
@@ -112,7 +114,11 @@ function compactCpuModeLabel(mode) {
 }
 
 function processPolicySummary(policy) {
-  return `${processPriorityLabels[policy.priority] || '正常'} · ${compactCpuModeLabel(policy.cpuMode)}`;
+  const cpu0Suffix = policy.excludeCpu0 &&
+    (policy.cpuMode === 'all' || policy.cpuMode === 'custom')
+    ? ' − CPU0'
+    : '';
+  return `${processPriorityLabels[policy.priority] || '正常'} · ${compactCpuModeLabel(policy.cpuMode)}${cpu0Suffix}`;
 }
 
 function renderProcessSchedulingSummary() {
@@ -126,6 +132,17 @@ function cpuSetsByType(type) {
     .filter(item => item.coreType === type);
 }
 
+function cpu0SetIds() {
+  return new Set((processSchedulingState.topology?.cpuSets || [])
+    .filter(item => Number(item.group || 0) === 0 && Number(item.logicalProcessorIndex) === 0)
+    .map(item => Number(item.id)));
+}
+
+function withoutCpu0(ids) {
+  const excluded = cpu0SetIds();
+  return [...ids].filter(id => !excluded.has(Number(id)));
+}
+
 function selectedCpuSetIds() {
   if (!processSchedulingDraft) return new Set();
   if (processSchedulingDraft.cpuMode === 'performance') {
@@ -135,10 +152,12 @@ function selectedCpuSetIds() {
     return new Set(cpuSetsByType('efficiency').map(item => Number(item.id)));
   }
   if (processSchedulingDraft.cpuMode === 'all') {
-    return new Set((processSchedulingState.topology?.cpuSets || []).map(item => Number(item.id)));
+    const ids = (processSchedulingState.topology?.cpuSets || []).map(item => Number(item.id));
+    return new Set(processSchedulingDraft.excludeCpu0 ? withoutCpu0(ids) : ids);
   }
   if (processSchedulingDraft.cpuMode === 'custom') {
-    return new Set((processSchedulingDraft.cpuSetIds || []).map(Number));
+    const ids = (processSchedulingDraft.cpuSetIds || []).map(Number);
+    return new Set(processSchedulingDraft.excludeCpu0 ? withoutCpu0(ids) : ids);
   }
   return new Set();
 }
@@ -183,8 +202,10 @@ function renderTopologyGroups() {
   grid.innerHTML = cpuSets.map(item => {
     const checked = selected.has(Number(item.id));
     const custom = processSchedulingDraft?.cpuMode === 'custom';
-    return `<label class="logical-processor ${custom ? 'custom' : ''} ${checked ? 'selected' : ''}">
-      ${custom ? `<input type="checkbox" data-cpu-set-id="${item.id}" ${checked ? 'checked' : ''}>` : ''}
+    const cpu0Excluded = processSchedulingDraft?.excludeCpu0 === true &&
+      Number(item.group || 0) === 0 && Number(item.logicalProcessorIndex) === 0;
+    return `<label class="logical-processor ${custom ? 'custom' : ''} ${checked ? 'selected' : ''} ${cpu0Excluded ? 'cpu0-excluded' : ''}">
+      ${custom ? `<input type="checkbox" data-cpu-set-id="${item.id}" ${checked ? 'checked' : ''} ${cpu0Excluded ? 'disabled' : ''}>` : ''}
       <span>G${item.group} · CPU ${item.logicalProcessorIndex}</span>
     </label>`;
   }).join('');
@@ -220,6 +241,21 @@ function renderProcessSchedulingDrawer() {
       (!topology.heterogeneous || !cpuSetsByType(mode).length)
     );
   });
+  const cpu0Reservation = $('#cpu0Reservation');
+  const excludeCpu0 = $('#excludeCpu0');
+  const cpu0Eligible = draft.cpuMode === 'all' || draft.cpuMode === 'custom';
+  const hasCpu0 = cpu0SetIds().size > 0;
+  const canExcludeCpu0 = hasCpu0 &&
+    (topology.cpuSets || []).length > cpu0SetIds().size;
+  cpu0Reservation.hidden = !cpu0Eligible;
+  cpu0Reservation.classList.toggle('active', cpu0Eligible && draft.excludeCpu0 === true);
+  excludeCpu0.checked = draft.excludeCpu0 === true;
+  excludeCpu0.disabled = processSchedulingSaving || !canExcludeCpu0;
+  $('#cpu0ReservationDetail').textContent = !canExcludeCpu0
+    ? '当前拓扑无法安全排除逻辑处理器 CPU 0'
+    : draft.cpuMode === 'custom'
+      ? '开启后从自定义列表排除 CPU 0，其余选择保持不变'
+      : `游戏使用其余 ${Math.max(0, Number(topology.logicalProcessorCount || 0) - 1)} 个逻辑处理器`;
   $('#saveProcessPolicy').disabled = processSchedulingSaving;
   $('#resetProcessPolicy').disabled = processSchedulingSaving;
   $('#saveProcessPolicy').textContent = processSchedulingSaving
@@ -350,7 +386,7 @@ function renderUpdateState(state) {
   const busyPhases = new Set(['checking', 'downloading', 'installing']);
   const button = $('#checkForUpdates');
   const frequency = $('#updateFrequency');
-  const currentVersion = state.currentVersion || '2.4.1';
+  const currentVersion = state.currentVersion || '2.5.0';
   $('#aboutVersion').textContent = `v${currentVersion}`;
   $('#sidebarVersion').textContent = `v${currentVersion}`;
   $('#updateStatus').textContent = state.message || '尚未检查更新';
@@ -746,11 +782,8 @@ function formatDuration(totalSeconds) {
 
 function formatHistoryDuration(durationMs, compact = false) {
   const totalMinutes = Math.max(0, Math.floor((Number(durationMs) || 0) / 60000));
-  const days = Math.floor(totalMinutes / 1440);
-  const hours = Math.floor(totalMinutes % 1440 / 60);
+  const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  if (compact && days) return `${days}天 ${hours}小时`;
-  if (days) return `${days}天${hours}小时${minutes}分`;
   if (hours) return `${hours}小时${minutes}分`;
   if (minutes) return `${minutes}分钟`;
   return '不足1分钟';
@@ -1486,6 +1519,23 @@ $$('#cpuModeOptions button').forEach(button => {
       await persistProcessPolicy({ closeDrawer: false });
     }
   });
+});
+$('#excludeCpu0').addEventListener('change', async event => {
+  if (!processSchedulingDraft || processSchedulingSaving) return;
+  const enabled = event.currentTarget.checked;
+  if (enabled && processSchedulingDraft.cpuMode === 'custom') {
+    const remaining = withoutCpu0(processSchedulingDraft.cpuSetIds || []);
+    if (!remaining.length) {
+      event.currentTarget.checked = false;
+      setActivity('无法排除 CPU 0', '自定义核心列表至少需要保留一个其他逻辑处理器', 'error');
+      renderProcessSchedulingDrawer();
+      return;
+    }
+    processSchedulingDraft.cpuSetIds = remaining;
+  }
+  processSchedulingDraft.excludeCpu0 = enabled;
+  renderProcessSchedulingDrawer();
+  await persistProcessPolicy({ closeDrawer: false });
 });
 $('#toggleTopologyDetails').addEventListener('click', event => {
   topologyDetailsOpen = !topologyDetailsOpen;

@@ -48,14 +48,14 @@ const processScheduling = {
     }))
   },
   policies: {
-    '2K 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [] },
-    '1080p 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [] },
-    '1080p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
-    '900p 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [] },
-    '900p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
-    '720p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
-    '540p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [] },
-    '540p 25': { priority: 'idle', cpuMode: 'efficiency', cpuSetIds: [] }
+    '2K 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [], excludeCpu0: false },
+    '1080p 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [], excludeCpu0: false },
+    '1080p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [], excludeCpu0: false },
+    '900p 120': { priority: 'high', cpuMode: 'all', cpuSetIds: [], excludeCpu0: false },
+    '900p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [], excludeCpu0: false },
+    '720p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [], excludeCpu0: false },
+    '540p 60': { priority: 'normal', cpuMode: 'system', cpuSetIds: [], excludeCpu0: false },
+    '540p 25': { priority: 'idle', cpuMode: 'efficiency', cpuSetIds: [], excludeCpu0: false }
   }
 };
 const savedProcessPolicies = [];
@@ -96,10 +96,10 @@ let historyEnabled = true;
 let updateFrequency = 'startup';
 const updateState = {
   phase: 'current',
-    currentVersion: '2.4.1',
-    latestVersion: '2.4.1',
+    currentVersion: '2.5.0',
+    latestVersion: '2.5.0',
   progress: 100,
-    message: '当前已是最新版本 v2.4.1',
+    message: '当前已是最新版本 v2.5.0',
   releaseUrl: 'https://github.com/chincika/lifeafter-graphics-launcher/releases/tag/v2.2.0',
   downloadedPath: '',
   error: '',
@@ -188,15 +188,19 @@ ipcMain.handle('launcher:get-history', async (_event, range) => ({
   ok: true,
   data: {
     range,
-    totalDurationMs: 0,
-    launchCount: 0,
-    averageDurationMs: 0,
-    mostUsedAccount: '暂无',
-    mostUsedShare: 0,
-    durationDeltaMs: 0,
-    launchDelta: 0,
-    accounts: [],
-    recent: []
+    totalDurationMs: (35 * 60 + 42) * 60 * 1000,
+    launchCount: 2,
+    averageDurationMs: (17 * 60 + 51) * 60 * 1000,
+    mostUsedAccount: '白月光',
+    mostUsedShare: 0.95,
+    durationDeltaMs: (29 * 60 + 15) * 60 * 1000,
+    launchDelta: 1,
+    accounts: [
+      { account: '白月光', durationMs: (34 * 60 + 10) * 60 * 1000, launches: 2 }
+    ],
+    recent: [
+      { account: '白月光', startedAt: Date.now() - 90 * 60 * 1000, endedAt: Date.now(), durationMs: 90 * 60 * 1000 }
+    ]
   }
 }));
 ipcMain.handle('launcher:apply-preset', async (_event, payload) => {
@@ -285,6 +289,58 @@ app.whenReady().then(async () => {
     throw new Error(`High frame scheduling UI mismatch: ${JSON.stringify(highFrameSchedulingVisual)}`);
   }
 
+  const cpu0ExclusionVisual = await win.webContents.executeJavaScript(`(async () => {
+    const toggle = document.querySelector('#excludeCpu0');
+    const initiallyVisible = !document.querySelector('#cpu0Reservation').hidden;
+    toggle.click();
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline && processSchedulingState.policies['2K 120'].excludeCpu0 !== true) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    return {
+      initiallyVisible,
+      checked: toggle.checked,
+      summary: document.querySelector('#schedulingSummary').textContent,
+      saved: processSchedulingState.policies['2K 120'].excludeCpu0,
+      selectedLogicalProcessors: selectedCpuSetIds().size
+    };
+  })()`);
+  if (
+    !cpu0ExclusionVisual.initiallyVisible ||
+    !cpu0ExclusionVisual.checked ||
+    !cpu0ExclusionVisual.summary.includes('CPU0') ||
+    !cpu0ExclusionVisual.saved ||
+    cpu0ExclusionVisual.selectedLogicalProcessors !== 23
+  ) {
+    throw new Error(`CPU 0 exclusion UI mismatch: ${JSON.stringify(cpu0ExclusionVisual)}`);
+  }
+
+  const customCpu0Visual = await win.webContents.executeJavaScript(`(async () => {
+    updatePreset('1080p 60');
+    openProcessScheduling();
+    document.querySelector('#cpuModeOptions [data-cpu-mode="custom"]').click();
+    document.querySelector('#excludeCpu0').click();
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline && processSchedulingState.policies['1080p 60'].excludeCpu0 !== true) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    const policy = processSchedulingState.policies['1080p 60'];
+    return {
+      mode: policy.cpuMode,
+      excludeCpu0: policy.excludeCpu0,
+      containsCpu0: policy.cpuSetIds.includes(256),
+      summary: document.querySelector('#schedulingSummary').textContent
+    };
+  })()`);
+  if (
+    customCpu0Visual.mode !== 'custom' ||
+    !customCpu0Visual.excludeCpu0 ||
+    customCpu0Visual.containsCpu0 ||
+    !customCpu0Visual.summary.includes('CPU0')
+  ) {
+    throw new Error(`Custom CPU 0 exclusion UI mismatch: ${JSON.stringify(customCpu0Visual)}`);
+  }
+
   const schedulingVisual = await win.webContents.executeJavaScript(`(() => {
     updatePreset('540p 25');
     openProcessScheduling();
@@ -334,6 +390,18 @@ app.whenReady().then(async () => {
       systemManagedVisual,
       savedProcessPolicies
     })}`);
+  }
+  const finalCpu0Visual = await win.webContents.executeJavaScript(`(() => {
+    updatePreset('2K 120');
+    openProcessScheduling();
+    return {
+      rowVisible: !document.querySelector('#cpu0Reservation').hidden,
+      active: document.querySelector('#cpu0Reservation').classList.contains('active'),
+      summary: document.querySelector('#schedulingSummary').textContent
+    };
+  })()`);
+  if (!finalCpu0Visual.rowVisible || !finalCpu0Visual.active || !finalCpu0Visual.summary.includes('CPU0')) {
+    throw new Error(`Final CPU 0 visual mismatch: ${JSON.stringify(finalCpu0Visual)}`);
   }
   win.hide();
   win.setPosition(-32000, -32000);
@@ -512,14 +580,20 @@ app.whenReady().then(async () => {
       controlLeft: Math.round(control.left),
       checked: toggle.checked,
       label: document.querySelector('#historyEnabledLabel').textContent,
-      badge: document.querySelector('#historyRecordingBadge').textContent
+      badge: document.querySelector('#historyRecordingBadge').textContent,
+      total: document.querySelector('#historyTotal').textContent,
+      ranking: document.querySelector('.ranking-time')?.textContent,
+      delta: document.querySelector('#historyDurationDelta').textContent
     };
   })()`);
   if (
     historyVisual.controlLeft <= historyVisual.titleRight ||
     historyVisual.checked ||
     !historyVisual.label.includes('暂停') ||
-    !historyVisual.badge.includes('暂停')
+    !historyVisual.badge.includes('暂停') ||
+    historyVisual.total !== '35小时42分' ||
+    historyVisual.ranking !== '34小时10分' ||
+    historyVisual.delta.includes('天')
   ) {
     throw new Error(`History toggle UI mismatch: ${JSON.stringify(historyVisual)}`);
   }
@@ -530,6 +604,9 @@ app.whenReady().then(async () => {
     performance,
     schedulingVisual,
     systemManagedVisual,
+    cpu0ExclusionVisual,
+    customCpu0Visual,
+    finalCpu0Visual,
     lastPresetPayload,
     initial,
     recovered,

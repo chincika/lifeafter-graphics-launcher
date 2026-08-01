@@ -40,7 +40,7 @@ function history(range) {
   return {
     range,
     generatedAt: Date.now(),
-    totalDurationMs: 3 * 60 * 60 * 1000 + 58 * 60 * 1000,
+    totalDurationMs: 35 * 60 * 60 * 1000 + 42 * 60 * 1000,
     launchCount: 4,
     averageDurationMs: 59 * 60 * 1000,
     mostUsedAccount: '不与世俗纷争',
@@ -104,7 +104,7 @@ app.whenReady().then(async () => {
     !state.pairHidden ||
     state.dashboardHidden ||
     state.instanceCount !== '2' ||
-    state.totalDuration !== '3小时58分'
+    state.totalDuration !== '35小时42分'
   ) {
     throw new Error(`Remote dashboard mismatch: ${JSON.stringify(state)}`);
   }

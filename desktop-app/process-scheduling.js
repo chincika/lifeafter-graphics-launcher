@@ -13,14 +13,14 @@ const PRIORITIES = Object.freeze(['idle', 'belowNormal', 'normal', 'aboveNormal'
 const CPU_MODES = Object.freeze(['system', 'all', 'performance', 'efficiency', 'custom']);
 
 const DEFAULT_PROCESS_POLICIES = Object.freeze({
-  '2K 120': Object.freeze({ priority: 'high', cpuMode: 'all', cpuSetIds: [] }),
-  '1080p 120': Object.freeze({ priority: 'high', cpuMode: 'all', cpuSetIds: [] }),
-  '1080p 60': Object.freeze({ priority: 'normal', cpuMode: 'system', cpuSetIds: [] }),
-  '900p 120': Object.freeze({ priority: 'high', cpuMode: 'all', cpuSetIds: [] }),
-  '900p 60': Object.freeze({ priority: 'normal', cpuMode: 'system', cpuSetIds: [] }),
-  '720p 60': Object.freeze({ priority: 'normal', cpuMode: 'system', cpuSetIds: [] }),
-  '540p 60': Object.freeze({ priority: 'normal', cpuMode: 'system', cpuSetIds: [] }),
-  '540p 25': Object.freeze({ priority: 'idle', cpuMode: 'efficiency', cpuSetIds: [] })
+  '2K 120': Object.freeze({ priority: 'high', cpuMode: 'all', cpuSetIds: [], excludeCpu0: false }),
+  '1080p 120': Object.freeze({ priority: 'high', cpuMode: 'all', cpuSetIds: [], excludeCpu0: false }),
+  '1080p 60': Object.freeze({ priority: 'normal', cpuMode: 'system', cpuSetIds: [], excludeCpu0: false }),
+  '900p 120': Object.freeze({ priority: 'high', cpuMode: 'all', cpuSetIds: [], excludeCpu0: false }),
+  '900p 60': Object.freeze({ priority: 'normal', cpuMode: 'system', cpuSetIds: [], excludeCpu0: false }),
+  '720p 60': Object.freeze({ priority: 'normal', cpuMode: 'system', cpuSetIds: [], excludeCpu0: false }),
+  '540p 60': Object.freeze({ priority: 'normal', cpuMode: 'system', cpuSetIds: [], excludeCpu0: false }),
+  '540p 25': Object.freeze({ priority: 'idle', cpuMode: 'efficiency', cpuSetIds: [], excludeCpu0: false })
 });
 
 const PRIORITY_LABELS = Object.freeze({
@@ -50,10 +50,12 @@ function normalizeCpuSetIds(value) {
 
 function normalizeProcessPolicy(value, fallback = DEFAULT_PROCESS_POLICIES['540p 60']) {
   const source = value && typeof value === 'object' ? value : {};
+  const cpuMode = CPU_MODES.includes(source.cpuMode) ? source.cpuMode : fallback.cpuMode;
   return {
     priority: PRIORITIES.includes(source.priority) ? source.priority : fallback.priority,
-    cpuMode: CPU_MODES.includes(source.cpuMode) ? source.cpuMode : fallback.cpuMode,
-    cpuSetIds: normalizeCpuSetIds(source.cpuSetIds)
+    cpuMode,
+    cpuSetIds: normalizeCpuSetIds(source.cpuSetIds),
+    excludeCpu0: source.excludeCpu0 === true && (cpuMode === 'all' || cpuMode === 'custom')
   };
 }
 
@@ -154,14 +156,22 @@ class ProcessSchedulingService {
   resolveCpuSetIds(policy) {
     const available = this.topology?.cpuSets || [];
     if (policy.cpuMode === 'system') return [];
+    const cpu0Ids = new Set(available
+      .filter(item => Number(item.group || 0) === 0 && Number(item.logicalProcessorIndex) === 0)
+      .map(item => Number(item.id)));
+    const applyCpu0Exclusion = ids => policy.excludeCpu0
+      ? ids.filter(id => !cpu0Ids.has(Number(id)))
+      : ids;
     if (policy.cpuMode === 'all') {
-      return available
+      return applyCpu0Exclusion(available
         .map(item => Number(item.id))
-        .filter(Number.isInteger);
+        .filter(Number.isInteger));
     }
     if (policy.cpuMode === 'custom') {
       const valid = new Set(available.map(item => Number(item.id)));
-      return normalizeCpuSetIds(policy.cpuSetIds).filter(id => valid.has(id));
+      return applyCpu0Exclusion(
+        normalizeCpuSetIds(policy.cpuSetIds).filter(id => valid.has(id))
+      );
     }
     return available
       .filter(item => item.coreType === policy.cpuMode)
@@ -171,10 +181,10 @@ class ProcessSchedulingService {
 
   effectivePolicy(policy) {
     if (
-      (policy.cpuMode === 'performance' || policy.cpuMode === 'efficiency') &&
+      policy.cpuMode !== 'system' &&
       !this.resolveCpuSetIds(policy).length
     ) {
-      return { ...policy, cpuMode: 'system', cpuSetIds: [] };
+      return { ...policy, cpuMode: 'system', cpuSetIds: [], excludeCpu0: false };
     }
     return policy;
   }

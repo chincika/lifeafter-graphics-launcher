@@ -606,6 +606,26 @@ option { background: #14222b; }
 .cpu-mode-options b { font-size:9px; font-weight:570; }
 .cpu-mode-options small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; font-size:7px; }
 .topology-groups { display:grid; gap:6px; }
+.cpu0-reservation {
+  min-height:52px; display:grid; grid-template-columns:auto 1fr auto; align-items:center;
+  gap:10px; margin-bottom:8px; padding:8px 10px; border:1px solid rgba(233,181,99,.2);
+  border-radius:9px; background:linear-gradient(135deg,rgba(233,181,99,.08),rgba(255,255,255,.015));
+}
+.cpu0-reservation[hidden] { display:none; }
+.cpu0-reservation.active {
+  border-color:rgba(233,181,99,.42); box-shadow:inset 0 1px rgba(255,255,255,.04);
+}
+.cpu0-chip {
+  min-width:42px; height:25px; display:grid; place-items:center; border:1px solid rgba(233,181,99,.36);
+  border-radius:7px; color:#f3c978; background:rgba(233,181,99,.1); font:600 8px "Cascadia Mono",monospace;
+}
+.cpu0-reservation b { display:flex; align-items:center; gap:6px; color:var(--text-soft); font-size:9px; font-weight:600; }
+.cpu0-reservation b em {
+  padding:2px 5px; border-radius:999px; color:#e9b563; background:rgba(233,181,99,.1);
+  font-size:6px; font-style:normal; font-weight:600;
+}
+.cpu0-reservation small { display:block; margin-top:3px; color:var(--text-muted); font-size:7px; }
+.cpu0-reservation .toggle { justify-self:end; }
 .topology-group {
   min-height:42px; display:grid; grid-template-columns:21px 1fr auto; align-items:center;
   gap:8px; padding:7px 9px; border:1px solid var(--border); border-radius:9px;
@@ -643,6 +663,10 @@ option { background: #14222b; }
 .logical-processor.selected {
   color:#baf7fb; border-color:rgba(73,207,228,.42); background:rgba(35,139,157,.15);
 }
+.logical-processor.cpu0-excluded {
+  color:#d8b46d; border-color:rgba(233,181,99,.32); background:rgba(233,181,99,.07);
+}
+.logical-processor.cpu0-excluded span::after { content:" · 系统保留"; }
 .logical-processor input { width:10px; height:10px; accent-color:var(--cyan); }
 .scheduling-actions {
   flex:none; padding:8px 14px 13px; border-top:1px solid var(--border);

@@ -68,7 +68,7 @@
       </nav>
       <div class="sidebar-foot">
         <button class="icon-button" id="aboutButton" aria-label="关于"><svg><use href="#i-info"/></svg></button>
-        <span id="sidebarVersion">v2.4.1</span>
+        <span id="sidebarVersion">v2.5.0</span>
       </div>
     </aside>
 
@@ -264,6 +264,17 @@
 
                 <fieldset class="scheduling-fieldset topology-fieldset">
                   <legend>核心拓扑</legend>
+                  <div class="cpu0-reservation" id="cpu0Reservation" hidden>
+                    <span class="cpu0-chip">CPU 0</span>
+                    <div>
+                      <b>为系统保留 CPU 0 <em>实验性</em></b>
+                      <small id="cpu0ReservationDetail">从游戏核心绑定中排除逻辑处理器 CPU 0</small>
+                    </div>
+                    <label class="toggle" title="从游戏核心绑定中排除逻辑处理器 CPU 0">
+                      <input id="excludeCpu0" type="checkbox">
+                      <span></span>
+                    </label>
+                  </div>
                   <div class="topology-groups" id="topologyGroups"></div>
                   <button class="topology-detail-toggle" id="toggleTopologyDetails" type="button">
                     <span>查看逻辑处理器明细</span><svg><use href="#i-chevron"/></svg>
@@ -654,7 +665,7 @@
               <p>所有配置与实例数据都只在本机处理。局域网副屏仅提供经过设备配对的只读状态。</p>
               <div class="about-line"><span>界面引擎</span><b>Electron · Fluent UI</b></div>
               <div class="about-line"><span>本地后台</span><b>C# · .NET Framework</b></div>
-              <div class="about-line"><span>版本</span><b id="aboutVersion">v2.4.1 进程调度修正版</b></div>
+              <div class="about-line"><span>版本</span><b id="aboutVersion">v2.5.0 CPU 0 保留策略版</b></div>
             </div>
             <section class="support-card">
               <div class="support-head">

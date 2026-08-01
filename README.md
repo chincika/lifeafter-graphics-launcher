@@ -18,6 +18,7 @@ GitHub 地址：https://github.com/chincika/lifeafter-graphics-launcher
 - 一键切换常用画质预设：2K 120、1080p 120、1080p 60、900p 120、900p 60、720p 60、540p 60、540p 25。
 - 每个画质预设可独立记忆进程优先级与 CPU 核心策略；高帧主力默认使用高优先级和全部核心，540p 25 挂机档默认使用低优先级和能效核心。
 - 通过 Windows CPU Set 自动识别混合架构处理器的性能核、能效核和逻辑处理器编号，也支持用户在二级配置中自由选择。
+- 全部核心和自定义模式可选为系统保留逻辑处理器 CPU 0；开启后摘要与实例状态会明确显示“− CPU0”。
 - 支持“主力 + 挂机”多开：默认分步确认，也提供实验性的自动倒计时模式，默认间隔 20 秒。
 - 最多监控 4 个游戏实例，实时显示游戏 ID、分辨率、帧率、CPU、内存与运行时长。
 - 按游戏 ID 自动记录账号运行时长，提供日、周、月、总览统计、账号排行、最近会话与 CSV 导出。
@@ -69,7 +70,7 @@ npm install
 npm run portable
 ```
 
-便携版输出到 `desktop-app/release/LifeAfter-Graphics-Launcher-2.4.1.exe`。
+便携版输出到 `desktop-app/release/LifeAfter-Graphics-Launcher-2.5.0.exe`。
 
 ## 编译经典版
 
@@ -83,9 +84,9 @@ if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framewo
 
 ## 版本
 
-当前版本：v2.4.1
+当前版本：v2.5.0
 
-- 现代便携版：v2.4.1
+- 现代便携版：v2.5.0
 - 经典单文件版：v1.8.0
 
 完整更新内容见 [CHANGELOG.md](CHANGELOG.md)。

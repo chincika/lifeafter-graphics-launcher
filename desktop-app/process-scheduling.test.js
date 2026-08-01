@@ -11,8 +11,10 @@ const { SettingsStore } = require('./settings-store');
 const defaults = normalizeProcessPolicies({});
 assert.equal(defaults['540p 25'].priority, 'idle');
 assert.equal(defaults['540p 25'].cpuMode, 'efficiency');
+assert.equal(defaults['540p 25'].excludeCpu0, false);
 assert.equal(defaults['2K 120'].priority, 'high');
 assert.equal(defaults['2K 120'].cpuMode, 'all');
+assert.equal(defaults['2K 120'].excludeCpu0, false);
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'lifeafter-process-scheduling-'));
 const store = new SettingsStore(path.join(temp, 'settings.json'));
@@ -61,7 +63,8 @@ const runBackend = async args => {
   assert.deepEqual(store.get().processPolicies['1080p 60'], {
     priority: 'aboveNormal',
     cpuMode: 'custom',
-    cpuSetIds: [101, 102]
+    cpuSetIds: [101, 102],
+    excludeCpu0: false
   });
   assert.equal(store.get().processPolicies['540p 25'].priority, 'idle');
 
@@ -89,13 +92,56 @@ const runBackend = async args => {
   const highFrameApplyCall = calls.filter(args => args[0] === '--apply-process-policy').at(-1);
   assert.deepEqual(highFrameApplyCall, ['--apply-process-policy', '30', 'high', '100,101,102']);
 
+  const allWithoutCpu0 = service.savePolicy('2K 120', {
+    priority: 'high',
+    cpuMode: 'all',
+    cpuSetIds: [],
+    excludeCpu0: true
+  });
+  assert.equal(allWithoutCpu0.policy.excludeCpu0, true);
+  service.queueLaunch('2K 120', [20, 30]);
+  const allWithoutCpu0Changed = await service.handleSnapshot({
+    capturedAt: Date.now(),
+    instances: [
+      { pid: 20, runningSeconds: 600 },
+      { pid: 30, runningSeconds: 300 },
+      { pid: 35, runningSeconds: 2 }
+    ]
+  });
+  assert.equal(allWithoutCpu0Changed, true);
+  const allWithoutCpu0Call = calls.filter(args => args[0] === '--apply-process-policy').at(-1);
+  assert.deepEqual(allWithoutCpu0Call, ['--apply-process-policy', '35', 'high', '101,102']);
+
+  const customWithoutCpu0 = service.savePolicy('1080p 60', {
+    priority: 'aboveNormal',
+    cpuMode: 'custom',
+    cpuSetIds: [100, 102],
+    excludeCpu0: true
+  });
+  assert.equal(customWithoutCpu0.policy.excludeCpu0, true);
+  service.queueLaunch('1080p 60', [20, 30, 35]);
+  const customWithoutCpu0Changed = await service.handleSnapshot({
+    capturedAt: Date.now(),
+    instances: [
+      { pid: 20, runningSeconds: 900 },
+      { pid: 30, runningSeconds: 600 },
+      { pid: 35, runningSeconds: 300 },
+      { pid: 36, runningSeconds: 2 }
+    ]
+  });
+  assert.equal(customWithoutCpu0Changed, true);
+  const customWithoutCpu0Call = calls.filter(args => args[0] === '--apply-process-policy').at(-1);
+  assert.deepEqual(customWithoutCpu0Call, ['--apply-process-policy', '36', 'aboveNormal', '102']);
+
   const systemManaged = service.savePolicy('540p 25', {
     priority: 'idle',
     cpuMode: 'system',
-    cpuSetIds: [102]
+    cpuSetIds: [102],
+    excludeCpu0: true
   });
   assert.equal(systemManaged.ok, true);
   assert.equal(systemManaged.policy.cpuMode, 'system');
+  assert.equal(systemManaged.policy.excludeCpu0, false);
   service.queueLaunch('540p 25', [20, 30]);
   const systemManagedChanged = await service.handleSnapshot({
     capturedAt: Date.now(),

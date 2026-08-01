@@ -26,10 +26,8 @@ function formatRuntime(totalSeconds) {
 
 function formatHistoryDuration(durationMs) {
   const totalMinutes = Math.max(0, Math.floor((Number(durationMs) || 0) / 60000));
-  const days = Math.floor(totalMinutes / 1440);
-  const hours = Math.floor(totalMinutes % 1440 / 60);
+  const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  if (days) return `${days}天${hours}小时`;
   if (hours) return `${hours}小时${minutes}分`;
   return `${minutes}分钟`;
 }
