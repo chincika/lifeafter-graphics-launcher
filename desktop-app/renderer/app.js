@@ -38,6 +38,8 @@ let processSchedulingState = { topology: null, policies: {} };
 let processSchedulingDraft = null;
 let schedulingPreset = '';
 let topologyDetailsOpen = false;
+let processSchedulingSaving = false;
+let processSchedulingSavePromise = null;
 
 const processPriorityLabels = {
   idle: '低',
@@ -208,14 +210,21 @@ function renderProcessSchedulingDrawer() {
     : `${topology.physicalCoreCount || 0} 核心 · ${topology.logicalProcessorCount || 0} 逻辑处理器 · ${topology.heterogeneous ? '混合架构' : '同构架构'}`;
   $$('#priorityOptions button').forEach(button => {
     button.classList.toggle('active', button.dataset.priority === draft.priority);
+    button.disabled = processSchedulingSaving;
   });
   $$('#cpuModeOptions button').forEach(button => {
     const mode = button.dataset.cpuMode;
     button.classList.toggle('active', mode === draft.cpuMode);
-    button.disabled = (mode === 'performance' || mode === 'efficiency') &&
-      (!topology.heterogeneous || !cpuSetsByType(mode).length);
+    button.disabled = processSchedulingSaving || (
+      (mode === 'performance' || mode === 'efficiency') &&
+      (!topology.heterogeneous || !cpuSetsByType(mode).length)
+    );
   });
-  $('#saveProcessPolicy').textContent = `保存到 ${schedulingPreset}`;
+  $('#saveProcessPolicy').disabled = processSchedulingSaving;
+  $('#resetProcessPolicy').disabled = processSchedulingSaving;
+  $('#saveProcessPolicy').textContent = processSchedulingSaving
+    ? '正在保存…'
+    : `保存到 ${schedulingPreset}`;
   $('#resetProcessPolicy').textContent = schedulingPreset === '540p 25'
     ? '恢复挂机推荐'
     : '恢复推荐';
@@ -238,28 +247,53 @@ function closeProcessScheduling() {
   processSchedulingDraft = null;
 }
 
-async function saveProcessPolicy() {
-  if (!processSchedulingDraft || !schedulingPreset) return;
+async function persistProcessPolicy({ closeDrawer = true, announce = true } = {}) {
+  if (processSchedulingSaving) return processSchedulingSavePromise || false;
+  if (!processSchedulingDraft || !schedulingPreset) return false;
   if (processSchedulingDraft.cpuMode === 'custom' && !processSchedulingDraft.cpuSetIds.length) {
     setActivity('请至少选择一个逻辑处理器', '自定义核心列表不能为空', 'error');
-    return;
+    return false;
   }
-  const button = $('#saveProcessPolicy');
-  button.disabled = true;
-  const result = await window.launcher.saveProcessPolicy(
-    schedulingPreset,
-    processSchedulingDraft
-  );
-  button.disabled = false;
-  if (!result.ok) {
-    setActivity('进程调度保存失败', result.error, 'error');
-    return;
+  const preset = schedulingPreset;
+  const policy = cloneProcessPolicy(processSchedulingDraft);
+  processSchedulingSaving = true;
+  let resolvePendingSave;
+  let saved = false;
+  processSchedulingSavePromise = new Promise(resolve => { resolvePendingSave = resolve; });
+  renderProcessSchedulingDrawer();
+  try {
+    const result = await window.launcher.saveProcessPolicy(preset, policy);
+    if (!result.ok) {
+      setActivity('进程调度保存失败', result.error, 'error');
+      return false;
+    }
+    processSchedulingState.policies[preset] = cloneProcessPolicy(result.policy);
+    if (schedulingPreset === preset) {
+      processSchedulingDraft = cloneProcessPolicy(result.policy);
+    }
+    renderProcessSchedulingSummary();
+    renderPlanRows();
+    if (closeDrawer) closeProcessScheduling();
+    if (announce) {
+      setActivity(`${preset} 的进程调度已保存`, processPolicySummary(result.policy));
+    }
+    saved = true;
+    return true;
+  } catch (error) {
+    setActivity('进程调度保存失败', error?.message || String(error), 'error');
+    return false;
+  } finally {
+    processSchedulingSaving = false;
+    resolvePendingSave(saved);
+    processSchedulingSavePromise = null;
+    if (!$('#processSchedulingDrawer').hidden && processSchedulingDraft) {
+      renderProcessSchedulingDrawer();
+    }
   }
-  processSchedulingState.policies[schedulingPreset] = cloneProcessPolicy(result.policy);
-  renderProcessSchedulingSummary();
-  renderPlanRows();
-  closeProcessScheduling();
-  setActivity(`${schedulingPreset} 的进程调度已保存`, processPolicySummary(result.policy));
+}
+
+async function saveProcessPolicy() {
+  return persistProcessPolicy();
 }
 
 function setActivity(message, detail = '', kind = 'success') {
@@ -316,7 +350,9 @@ function renderUpdateState(state) {
   const busyPhases = new Set(['checking', 'downloading', 'installing']);
   const button = $('#checkForUpdates');
   const frequency = $('#updateFrequency');
-  $('#aboutVersion').textContent = `v${state.currentVersion || '2.4.0'}`;
+  const currentVersion = state.currentVersion || '2.4.1';
+  $('#aboutVersion').textContent = `v${currentVersion}`;
+  $('#sidebarVersion').textContent = `v${currentVersion}`;
   $('#updateStatus').textContent = state.message || '尚未检查更新';
   $('#updateProgress').style.width = `${Math.max(0, Math.min(100, Number(state.progress) || 0))}%`;
   frequency.value = state.frequency || 'startup';
@@ -961,6 +997,15 @@ async function updateBackgroundOption(key, value, label) {
 
 async function applyPreset(preset, launch, button) {
   if (busy) return false;
+  if (
+    launch &&
+    processSchedulingDraft &&
+    schedulingPreset === preset &&
+    !$('#processSchedulingDrawer')?.hidden
+  ) {
+    const saved = await persistProcessPolicy({ closeDrawer: false, announce: false });
+    if (!saved) return false;
+  }
   setBusy(true, button);
   const performanceMode = launch && isPerformanceModeActive();
   setActivity(
@@ -1411,21 +1456,23 @@ $$('.quality-tabs button').forEach(button => button.addEventListener('click', ()
 $('#openProcessScheduling').addEventListener('click', openProcessScheduling);
 $('#closeProcessScheduling').addEventListener('click', closeProcessScheduling);
 $('#saveProcessPolicy').addEventListener('click', saveProcessPolicy);
-$('#resetProcessPolicy').addEventListener('click', () => {
+$('#resetProcessPolicy').addEventListener('click', async () => {
   processSchedulingDraft = cloneProcessPolicy(
     recommendedProcessPolicies[schedulingPreset] || recommendedProcessPolicies['540p 60']
   );
   renderProcessSchedulingDrawer();
+  await persistProcessPolicy({ closeDrawer: false });
 });
 $$('#priorityOptions button').forEach(button => {
-  button.addEventListener('click', () => {
+  button.addEventListener('click', async () => {
     if (!processSchedulingDraft) return;
     processSchedulingDraft.priority = button.dataset.priority;
     renderProcessSchedulingDrawer();
+    await persistProcessPolicy({ closeDrawer: false });
   });
 });
 $$('#cpuModeOptions button').forEach(button => {
-  button.addEventListener('click', () => {
+  button.addEventListener('click', async () => {
     if (!processSchedulingDraft || button.disabled) return;
     const previouslySelected = [...selectedCpuSetIds()];
     processSchedulingDraft.cpuMode = button.dataset.cpuMode;
@@ -1435,6 +1482,9 @@ $$('#cpuModeOptions button').forEach(button => {
         : (processSchedulingState.topology?.cpuSets || []).map(item => Number(item.id));
     }
     renderProcessSchedulingDrawer();
+    if (processSchedulingDraft.cpuMode !== 'custom') {
+      await persistProcessPolicy({ closeDrawer: false });
+    }
   });
 });
 $('#toggleTopologyDetails').addEventListener('click', event => {

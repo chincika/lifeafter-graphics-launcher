@@ -58,6 +58,7 @@ const processScheduling = {
     '540p 25': { priority: 'idle', cpuMode: 'efficiency', cpuSetIds: [] }
   }
 };
+const savedProcessPolicies = [];
 
 const fpsStatus = {
   ok: true,
@@ -95,10 +96,10 @@ let historyEnabled = true;
 let updateFrequency = 'startup';
 const updateState = {
   phase: 'current',
-    currentVersion: '2.4.0',
-    latestVersion: '2.4.0',
+    currentVersion: '2.4.1',
+    latestVersion: '2.4.1',
   progress: 100,
-    message: '当前已是最新版本 v2.4.0',
+    message: '当前已是最新版本 v2.4.1',
   releaseUrl: 'https://github.com/chincika/lifeafter-graphics-launcher/releases/tag/v2.2.0',
   downloadedPath: '',
   error: '',
@@ -212,6 +213,7 @@ ipcMain.handle('launcher:get-process-scheduling', async () => ({
 }));
 ipcMain.handle('launcher:save-process-policy', async (_event, payload) => {
   processScheduling.policies[payload.preset] = payload.policy;
+  savedProcessPolicies.push(JSON.parse(JSON.stringify(payload)));
   return { ok: true, preset: payload.preset, policy: payload.policy };
 });
 ipcMain.handle('launcher:get-instances', async () => ({
@@ -308,6 +310,30 @@ app.whenReady().then(async () => {
     schedulingVisual.topologyGroups !== 2
   ) {
     throw new Error(`Process scheduling UI mismatch: ${JSON.stringify(schedulingVisual)}`);
+  }
+
+  const systemManagedVisual = await win.webContents.executeJavaScript(`(async () => {
+    document.querySelector('#cpuModeOptions [data-cpu-mode="system"]').click();
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline && processSchedulingState.policies['540p 25'].cpuMode !== 'system') {
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    return {
+      entry: document.querySelector('#schedulingSummary').textContent,
+      selectedMode: document.querySelector('#cpuModeOptions .active')?.dataset.cpuMode,
+      savedMode: processSchedulingState.policies['540p 25'].cpuMode
+    };
+  })()`);
+  if (
+    !systemManagedVisual.entry.includes('系统管理') ||
+    systemManagedVisual.selectedMode !== 'system' ||
+    systemManagedVisual.savedMode !== 'system' ||
+    savedProcessPolicies.at(-1)?.policy?.cpuMode !== 'system'
+  ) {
+    throw new Error(`System managed scheduling save mismatch: ${JSON.stringify({
+      systemManagedVisual,
+      savedProcessPolicies
+    })}`);
   }
   win.hide();
   win.setPosition(-32000, -32000);
@@ -503,6 +529,7 @@ app.whenReady().then(async () => {
   process.stdout.write(`${JSON.stringify({
     performance,
     schedulingVisual,
+    systemManagedVisual,
     lastPresetPayload,
     initial,
     recovered,

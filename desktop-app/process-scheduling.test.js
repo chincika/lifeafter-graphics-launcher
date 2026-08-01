@@ -89,6 +89,31 @@ const runBackend = async args => {
   const highFrameApplyCall = calls.filter(args => args[0] === '--apply-process-policy').at(-1);
   assert.deepEqual(highFrameApplyCall, ['--apply-process-policy', '30', 'high', '100,101,102']);
 
+  const systemManaged = service.savePolicy('540p 25', {
+    priority: 'idle',
+    cpuMode: 'system',
+    cpuSetIds: [102]
+  });
+  assert.equal(systemManaged.ok, true);
+  assert.equal(systemManaged.policy.cpuMode, 'system');
+  service.queueLaunch('540p 25', [20, 30]);
+  const systemManagedChanged = await service.handleSnapshot({
+    capturedAt: Date.now(),
+    instances: [
+      { pid: 20, runningSeconds: 600 },
+      { pid: 30, runningSeconds: 300 },
+      { pid: 40, runningSeconds: 2 }
+    ]
+  });
+  assert.equal(systemManagedChanged, true);
+  const systemManagedApplyCall = calls.filter(args => args[0] === '--apply-process-policy').at(-1);
+  assert.deepEqual(systemManagedApplyCall, ['--apply-process-policy', '40', 'idle', '-']);
+  const systemManagedSnapshot = service.decorateSnapshot({
+    capturedAt: Date.now(),
+    instances: [{ pid: 40 }]
+  });
+  assert.equal(systemManagedSnapshot.instances[0].scheduling.cpuModeLabel, '系统管理');
+
   const decorated = service.decorateSnapshot({
     capturedAt: Date.now(),
     instances: [{ pid: 20 }]
