@@ -70,23 +70,21 @@ npm install
 npm run portable
 ```
 
-便携版输出到 `desktop-app/release/LifeAfter-Graphics-Launcher-2.5.0.exe`。
+便携版输出到 `desktop-app/release/LifeAfter-Graphics-Launcher-2.5.1.exe`。
 
 ## 编译经典版
 
 使用系统自带的 .NET Framework C# 编译器：
 
 ```powershell
-$csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe' }
-& $csc /nologo /target:winexe /platform:anycpu /out:'明日之后画质启动器.exe' /win32icon:'assets\app.ico' /resource:'assets\cover.png,cover.png' /reference:System.Windows.Forms.dll /reference:System.Drawing.dll LifeAfterPresetLauncher.cs
+.\build-classic.ps1
 ```
 
 ## 版本
 
-当前版本：v2.5.0
+当前版本：v2.5.1
 
-- 现代便携版：v2.5.0
-- 经典单文件版：v1.8.0
+- 现代便携版：v2.5.1
+- 经典单文件版：v1.8.1
 
 完整更新内容见 [CHANGELOG.md](CHANGELOG.md)。

@@ -12,7 +12,16 @@ if (-not (Test-Path -LiteralPath $csc)) {
 $patchSource = Join-Path $root 'fps-unlock-integration\patches'
 $patchTarget = Join-Path $PSScriptRoot 'backend\fps-patches'
 New-Item -ItemType Directory -Force -Path $patchTarget | Out-Null
-foreach ($name in @('patch_original.bin', 'patch_180.bin', 'patch_240.bin', 'patch_300.bin')) {
+foreach ($name in @(
+    'patch_original.bin',
+    'patch_180.bin',
+    'patch_240.bin',
+    'patch_300.bin',
+    'patch_20260806_original.bin',
+    'patch_20260806_180.bin',
+    'patch_20260806_240.bin',
+    'patch_20260806_300.bin'
+)) {
     $source = Join-Path $patchSource $name
     if (-not (Test-Path -LiteralPath $source)) {
         throw "Missing patch resource: $source"

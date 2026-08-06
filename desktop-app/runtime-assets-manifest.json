@@ -2,7 +2,7 @@
   "assets": [
     {
       "name": "LifeAfterBackend.exe",
-      "sha256": "FD8FF8AC969C5CC39EAB0774CC212DD1E4BD6858C76F8A9193E69090500BA14E"
+      "sha256": "EAE94CE2AD13CAF840D0286319B9B8508E828AF4FD31FF0AFD41178161D8853C"
     },
     {
       "name": "fps-patches/patch_180.bin",
@@ -19,6 +19,22 @@
     {
       "name": "fps-patches/patch_original.bin",
       "sha256": "6F9165B65B8E32391E32FBC5174B8CC680E90C33C5887B46999D087ACE8FE050"
+    },
+    {
+      "name": "fps-patches/patch_20260806_180.bin",
+      "sha256": "2D01B9D6287AE02298F0D97F290B35C35EF09846E5D43479041011B955EC66AF"
+    },
+    {
+      "name": "fps-patches/patch_20260806_240.bin",
+      "sha256": "1D9A26F2924221406EF3793ECE7B2CCFC38EFB9781378586237D99DEEBF361E2"
+    },
+    {
+      "name": "fps-patches/patch_20260806_300.bin",
+      "sha256": "F8CE122B60BE58EB45CD07C2399F169B9818DD8F72F6846E6BDD57D3C08D9668"
+    },
+    {
+      "name": "fps-patches/patch_20260806_original.bin",
+      "sha256": "59E1D837544AB1ECAEFD8934BC8AE2F39FB6CF6F73DCFF06667A96AC2E51555A"
     }
   ]
 }

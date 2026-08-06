@@ -85,6 +85,20 @@ internal static class LifeAfterPresetLauncher
         public string Label;
     }
 
+    private sealed class FpsPatchSet
+    {
+        public string Id;
+        public int SlotSize;
+        public int OriginalSize;
+        public uint Checksum1;
+        public uint Checksum2;
+        public uint CompressionType;
+        public string OriginalFileName;
+        public string OriginalSlotSha256;
+        public bool RecognizeLegacyFixed;
+        public Dictionary<int, FpsPatchDefinition> Patches;
+    }
+
     private sealed class FpsNxpkRecord
     {
         public long IndexOffset;
@@ -95,6 +109,7 @@ internal static class LifeAfterPresetLauncher
         public uint Checksum1;
         public uint Checksum2;
         public uint CompressionType;
+        public FpsPatchSet PatchSet;
     }
 
     private sealed class FpsSlotState
@@ -140,6 +155,8 @@ internal static class LifeAfterPresetLauncher
         "D28A80EE2F0A209BD24ADE0838848B49FE2D9816946C304D15E9A83FEA6D2738";
     private const string FpsFeverOriginalArchiveSha256 =
         "BCACC8B1CFD4C4DB6F2B5633069EFDB39A1C8835A2436EAB338FB1B90BD69CC2";
+    private const string FpsNetease20260806OriginalArchiveSha256 =
+        "4D936017312E6667931FC3D4BBE67E76BC65BB483C8626F0CEF2A8378DF45362";
     private const string FpsOriginalSlotSha256 =
         "6F9165B65B8E32391E32FBC5174B8CC680E90C33C5887B46999D087ACE8FE050";
     private static readonly Regex FpsTransactionBackupNamePattern = new Regex(
@@ -184,6 +201,71 @@ internal static class LifeAfterPresetLauncher
         }
     };
 
+    private static readonly Dictionary<int, FpsPatchDefinition> FpsPatches20260806 =
+        new Dictionary<int, FpsPatchDefinition>
+    {
+        {
+            180,
+            new FpsPatchDefinition
+            {
+                Target = 180,
+                FileName = "patch_20260806_180.bin",
+                SlotSha256 = "2D01B9D6287AE02298F0D97F290B35C35EF09846E5D43479041011B955EC66AF",
+                Label = "120 → 180 FPS"
+            }
+        },
+        {
+            240,
+            new FpsPatchDefinition
+            {
+                Target = 240,
+                FileName = "patch_20260806_240.bin",
+                SlotSha256 = "1D9A26F2924221406EF3793ECE7B2CCFC38EFB9781378586237D99DEEBF361E2",
+                Label = "120 → 240 FPS"
+            }
+        },
+        {
+            300,
+            new FpsPatchDefinition
+            {
+                Target = 300,
+                FileName = "patch_20260806_300.bin",
+                SlotSha256 = "F8CE122B60BE58EB45CD07C2399F169B9818DD8F72F6846E6BDD57D3C08D9668",
+                Label = "120 → 300 FPS"
+            }
+        }
+    };
+
+    private static readonly FpsPatchSet[] FpsPatchSets = new FpsPatchSet[]
+    {
+        new FpsPatchSet
+        {
+            Id = "20260726",
+            SlotSize = FpsSlotSize,
+            OriginalSize = FpsOriginalSize,
+            Checksum1 = FpsChecksum1,
+            Checksum2 = FpsChecksum2,
+            CompressionType = FpsCompressionType,
+            OriginalFileName = "patch_original.bin",
+            OriginalSlotSha256 = FpsOriginalSlotSha256,
+            RecognizeLegacyFixed = true,
+            Patches = FpsPatches
+        },
+        new FpsPatchSet
+        {
+            Id = "20260806",
+            SlotSize = 109362,
+            OriginalSize = 325135,
+            Checksum1 = 986576325,
+            Checksum2 = 1000062369,
+            CompressionType = 2,
+            OriginalFileName = "patch_20260806_original.bin",
+            OriginalSlotSha256 = "59E1D837544AB1ECAEFD8934BC8AE2F39FB6CF6F73DCFF06667A96AC2E51555A",
+            RecognizeLegacyFixed = false,
+            Patches = FpsPatches20260806
+        }
+    };
+
 
     private static string gameRoot;
     private static string configDir;
@@ -195,7 +277,7 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.8.0";
+    private const string AppVersion = "v1.8.1";
     private const string ProjectUrl = "https://github.com/chincika/lifeafter-graphics-launcher";
 
     private const string Pc540p =
@@ -1551,7 +1633,9 @@ internal static class LifeAfterPresetLauncher
             (platformId == "fever" && normalizedHash.Equals(
                 FpsFeverOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase)) ||
             (platformId == "netease" && normalizedHash.Equals(
-                FpsNeteaseOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase));
+                FpsNeteaseOriginalArchiveSha256, StringComparison.OrdinalIgnoreCase)) ||
+            (platformId == "netease" && normalizedHash.Equals(
+                FpsNetease20260806OriginalArchiveSha256, StringComparison.OrdinalIgnoreCase));
         string normalized = normalizedHash.ToUpperInvariant();
         return new FpsCompatibilityProfile
         {
@@ -1607,12 +1691,15 @@ internal static class LifeAfterPresetLauncher
         return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "fps-patches");
     }
 
-    private static FpsSlotState IdentifyFpsSlotState(string slotHash)
+    private static FpsSlotState IdentifyFpsSlotState(
+        FpsPatchSet patchSet,
+        string slotHash)
     {
-        if (slotHash.Equals(FpsOriginalSlotSha256, StringComparison.OrdinalIgnoreCase))
+        if (slotHash.Equals(
+            patchSet.OriginalSlotSha256, StringComparison.OrdinalIgnoreCase))
             return new FpsSlotState { Id = "original", Label = "官方原始 120 FPS", Target = 120, Writable = true };
 
-        foreach (KeyValuePair<int, FpsPatchDefinition> item in FpsPatches)
+        foreach (KeyValuePair<int, FpsPatchDefinition> item in patchSet.Patches)
         {
             if (slotHash.Equals(item.Value.SlotSha256, StringComparison.OrdinalIgnoreCase))
             {
@@ -1628,11 +1715,11 @@ internal static class LifeAfterPresetLauncher
 
         // Recognize the earlier reviewed fixed-value patches so the launcher
         // can safely migrate the user's current test state to the conditional patch.
-        if (slotHash.Equals(
+        if (patchSet.RecognizeLegacyFixed && slotHash.Equals(
             "4D0997446DBD08E7AF24C536AFA7D5055E29E8EBEEA07300B36CB95B9849B469",
             StringComparison.OrdinalIgnoreCase))
             return new FpsSlotState { Id = "legacy-180", Label = "旧版全局强制 180 FPS", Target = 180, Writable = true };
-        if (slotHash.Equals(
+        if (patchSet.RecognizeLegacyFixed && slotHash.Equals(
             "15AAC9544494399DDDEF72E8278D00DF492D5D45EE29A1D5FE610AA1896943C4",
             StringComparison.OrdinalIgnoreCase))
             return new FpsSlotState { Id = "legacy-240", Label = "旧版全局强制 240 FPS", Target = 240, Writable = true };
@@ -1651,8 +1738,8 @@ internal static class LifeAfterPresetLauncher
             if (!File.Exists(packagePath))
                 return "{\"ok\":false,\"error\":\"未找到 Documents\\\\script.py314.lc.npk。\"}";
 
-            byte[] originalPatch = LoadFpsPatch("patch_original.bin", FpsOriginalSlotSha256);
             FpsNxpkRecord record;
+            byte[] originalPatch;
             byte[] currentSlot;
             string normalizedHash;
             string packageHash;
@@ -1660,6 +1747,10 @@ internal static class LifeAfterPresetLauncher
                 packagePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             {
                 record = ParseFpsNxpk(stream);
+                originalPatch = LoadFpsPatch(
+                    record.PatchSet.OriginalFileName,
+                    record.PatchSet.OriginalSlotSha256,
+                    record.PatchSet.SlotSize);
                 currentSlot = FpsReadAt(stream, record.DataOffset, record.CompressedSize);
                 ComputeFpsArchiveHashes(
                     stream,
@@ -1669,7 +1760,8 @@ internal static class LifeAfterPresetLauncher
                     out packageHash,
                     out normalizedHash);
             }
-            FpsSlotState state = IdentifyFpsSlotState(FpsSha256(currentSlot));
+            FpsSlotState state = IdentifyFpsSlotState(
+                record.PatchSet, FpsSha256(currentSlot));
             FpsCompatibilityProfile profile = BuildFpsCompatibilityProfile(normalizedHash);
             bool compatible = state.Writable;
             int transactionBackupCount = GetFpsTransactionBackups().Length;
@@ -1707,6 +1799,8 @@ internal static class LifeAfterPresetLauncher
                 .Append(",\"packageHash\":\"").Append(packageHash).Append('"')
                 .Append(",\"normalizedHash\":\"").Append(normalizedHash).Append('"')
                 .Append(",\"slotHash\":\"").Append(FpsSha256(currentSlot)).Append('"')
+                .Append(",\"patchProfile\":\"")
+                    .Append(JsonEscape(record.PatchSet.Id)).Append('"')
                 .Append(",\"rootPackagePath\":\"").Append(JsonEscape(rootPackagePath)).Append('"')
                 .Append(",\"rootPackagePresent\":").Append(rootPackagePresent ? "true" : "false")
                 .Append(",\"rootPackageReadOnly\":true")
@@ -1730,8 +1824,7 @@ internal static class LifeAfterPresetLauncher
 
     private static string ApplyFpsUnlock(int target)
     {
-        FpsPatchDefinition definition;
-        if (!FpsPatches.TryGetValue(target, out definition))
+        if (target != 180 && target != 240 && target != 300)
             throw new InvalidOperationException("仅支持 180、240、300 FPS。");
         EnsureFpsGameStopped();
 
@@ -1739,16 +1832,25 @@ internal static class LifeAfterPresetLauncher
         if (!IsValidGameRoot(gameRoot) || !File.Exists(packagePath))
             throw new InvalidOperationException("未找到兼容的游戏 NPK 包。");
 
-        byte[] originalPatch = LoadFpsPatch("patch_original.bin", FpsOriginalSlotSha256);
-        byte[] targetPatch = LoadFpsPatch(definition.FileName, definition.SlotSha256);
+        FpsPatchDefinition definition = null;
         string backupPath = null;
         using (FileStream stream = new FileStream(
             packagePath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
         {
             FpsNxpkRecord record = ParseFpsNxpk(stream);
+            if (!record.PatchSet.Patches.TryGetValue(target, out definition))
+                throw new InvalidOperationException("当前包体档案不支持所选帧率。");
+            byte[] originalPatch = LoadFpsPatch(
+                record.PatchSet.OriginalFileName,
+                record.PatchSet.OriginalSlotSha256,
+                record.PatchSet.SlotSize);
+            byte[] targetPatch = LoadFpsPatch(
+                definition.FileName,
+                definition.SlotSha256,
+                record.PatchSet.SlotSize);
             byte[] current = FpsReadAt(stream, record.DataOffset, record.CompressedSize);
             string currentHash = FpsSha256(current);
-            FpsSlotState state = IdentifyFpsSlotState(currentHash);
+            FpsSlotState state = IdentifyFpsSlotState(record.PatchSet, currentHash);
             if (!state.Writable)
                 throw new InvalidDataException("目标槽位不是已知原版或已审查补丁，拒绝覆盖。");
             string normalizedHash = ComputeFpsNormalizedArchiveHash(stream, record, originalPatch);
@@ -1804,22 +1906,25 @@ internal static class LifeAfterPresetLauncher
         if (!IsValidGameRoot(gameRoot) || !File.Exists(packagePath))
             throw new InvalidOperationException("未找到兼容的游戏 NPK 包。");
 
-        byte[] originalPatch = LoadFpsPatch("patch_original.bin", FpsOriginalSlotSha256);
         string backupPath;
         using (FileStream stream = new FileStream(
             packagePath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
         {
             FpsNxpkRecord record = ParseFpsNxpk(stream);
+            byte[] originalPatch = LoadFpsPatch(
+                record.PatchSet.OriginalFileName,
+                record.PatchSet.OriginalSlotSha256,
+                record.PatchSet.SlotSize);
             byte[] current = FpsReadAt(stream, record.DataOffset, record.CompressedSize);
             string currentHash = FpsSha256(current);
-            FpsSlotState state = IdentifyFpsSlotState(currentHash);
+            FpsSlotState state = IdentifyFpsSlotState(record.PatchSet, currentHash);
             if (!state.Writable)
                 throw new InvalidDataException("目标槽位不是已知状态，拒绝覆盖。");
             string normalizedHash = ComputeFpsNormalizedArchiveHash(stream, record, originalPatch);
             FpsCompatibilityProfile profile = BuildFpsCompatibilityProfile(normalizedHash);
             string baseline = FpsOfficialBaselinePath(profile);
             bool writeNeeded = !currentHash.Equals(
-                FpsOriginalSlotSha256, StringComparison.OrdinalIgnoreCase);
+                record.PatchSet.OriginalSlotSha256, StringComparison.OrdinalIgnoreCase);
             EnsureFpsBackupCapacity(
                 packagePath, baseline, !File.Exists(baseline), writeNeeded);
             EnsureFpsOfficialBaseline(packagePath, stream, record, originalPatch, profile);
@@ -1830,7 +1935,7 @@ internal static class LifeAfterPresetLauncher
             {
                 FpsWriteAt(stream, record.DataOffset, originalPatch);
                 if (!FpsSha256(FpsReadAt(stream, record.DataOffset, record.CompressedSize))
-                    .Equals(FpsOriginalSlotSha256, StringComparison.OrdinalIgnoreCase))
+                    .Equals(record.PatchSet.OriginalSlotSha256, StringComparison.OrdinalIgnoreCase))
                     throw new IOException("恢复后槽位哈希校验失败。");
                 string fullHash = FpsSha256File(stream);
                 if (!fullHash.Equals(
@@ -1900,24 +2005,54 @@ internal static class LifeAfterPresetLauncher
         }
         if (found == null)
             throw new InvalidDataException("未找到兼容的 SettingManager 记录。");
-        if (found.CompressedSize != FpsSlotSize ||
-            found.OriginalSize != FpsOriginalSize ||
-            found.Checksum1 != FpsChecksum1 ||
-            found.Checksum2 != FpsChecksum2 ||
-            found.CompressionType != FpsCompressionType ||
+        foreach (FpsPatchSet patchSet in FpsPatchSets)
+        {
+            if (found.CompressedSize == patchSet.SlotSize &&
+                found.OriginalSize == patchSet.OriginalSize &&
+                found.Checksum1 == patchSet.Checksum1 &&
+                found.Checksum2 == patchSet.Checksum2 &&
+                found.CompressionType == patchSet.CompressionType)
+            {
+                found.PatchSet = patchSet;
+                break;
+            }
+        }
+        if (found.PatchSet == null ||
             found.DataOffset < 32 ||
             found.DataOffset + found.CompressedSize > found.IndexOffset)
             throw new InvalidDataException("SettingManager 元数据与已审查版本不一致。");
         return found;
     }
 
-    private static byte[] LoadFpsPatch(string fileName, string expectedHash)
+    private static byte[] LoadFpsPatch(
+        string fileName,
+        string expectedHash,
+        int expectedSize)
     {
         string path = Path.Combine(FpsPatchDirectory(), fileName);
-        if (!File.Exists(path))
+        byte[] data = null;
+        if (File.Exists(path))
+        {
+            data = File.ReadAllBytes(path);
+        }
+        else
+        {
+            using (Stream embedded = Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("fps-patches/" + fileName))
+            {
+                if (embedded != null)
+                {
+                    using (MemoryStream buffer = new MemoryStream())
+                    {
+                        embedded.CopyTo(buffer);
+                        data = buffer.ToArray();
+                    }
+                }
+            }
+        }
+        if (data == null)
             throw new FileNotFoundException("缺少帧率补丁资源：" + fileName, path);
-        byte[] data = File.ReadAllBytes(path);
-        if (data.Length != FpsSlotSize ||
+        if (data.Length != expectedSize ||
             !FpsSha256(data).Equals(expectedHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("帧率补丁资源校验失败：" + fileName);
         return data;
@@ -2053,14 +2188,17 @@ internal static class LifeAfterPresetLauncher
         string packagePath = FpsPackagePath();
         if (!File.Exists(packagePath))
             throw new FileNotFoundException("未找到帧率目标包体。", packagePath);
-        byte[] originalPatch = LoadFpsPatch("patch_original.bin", FpsOriginalSlotSha256);
         FpsCompatibilityProfile profile;
         using (FileStream stream = new FileStream(
             packagePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
         {
             FpsNxpkRecord record = ParseFpsNxpk(stream);
+            byte[] originalPatch = LoadFpsPatch(
+                record.PatchSet.OriginalFileName,
+                record.PatchSet.OriginalSlotSha256,
+                record.PatchSet.SlotSize);
             byte[] current = FpsReadAt(stream, record.DataOffset, record.CompressedSize);
-            if (!IdentifyFpsSlotState(FpsSha256(current)).Writable)
+            if (!IdentifyFpsSlotState(record.PatchSet, FpsSha256(current)).Writable)
                 throw new InvalidDataException("当前目标槽位未知，拒绝清理事务备份。");
             profile = BuildFpsCompatibilityProfile(
                 ComputeFpsNormalizedArchiveHash(stream, record, originalPatch));
