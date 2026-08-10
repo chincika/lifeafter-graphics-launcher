@@ -49,7 +49,34 @@ function Write-TextNoBom($Path, [string]$Text) {
 }
 
 function Set-RawNumber([string]$Json, [string]$Key, [int]$Value) {
-    return [regex]::Replace($Json, ('"' + [regex]::Escape($Key) + '"\s*:\s*-?\d+(\.\d+)?'), ('"' + $Key + '": ' + $Value), 1)
+    $pattern = [regex]::new(('"' + [regex]::Escape($Key) + '"\s*:\s*-?\d+(\.\d+)?'))
+    if ($pattern.Matches($Json).Count -ne 1) {
+        throw "JSON field $Key is missing or duplicated. Write cancelled."
+    }
+    return $pattern.Replace($Json, ('"' + $Key + '": ' + $Value), 1)
+}
+
+function Set-Resolution([string]$Json, [int]$Width, [int]$Height) {
+    $pattern = [regex]::new('"resolution"\s*:\s*\[\s*\d+\s*,\s*\d+\s*\]')
+    if ($pattern.Matches($Json).Count -ne 1) {
+        throw "pcconfig resolution is missing or duplicated. Write cancelled."
+    }
+    return $pattern.Replace($Json, ('"resolution": [' + $Width + ', ' + $Height + ']'), 1)
+}
+
+function Merge-PresetWithCurrentConfig($Target) {
+    $targetResolution = [regex]::Match($Target.Pc, '"resolution"\s*:\s*\[\s*(\d+)\s*,\s*(\d+)\s*\]')
+    $targetFrame = [regex]::Match($Target.Quality, '"frame"\s*:\s*(-?\d+)')
+    if (-not $targetResolution.Success -or -not $targetFrame.Success) {
+        throw "Preset resolution or frame is invalid."
+    }
+
+    $currentPc = [System.IO.File]::ReadAllText($PcConfigPath, [System.Text.Encoding]::UTF8)
+    $currentQuality = [System.IO.File]::ReadAllText($QualityConfigPath, [System.Text.Encoding]::UTF8)
+    return @{
+        Pc = Set-Resolution $currentPc ([int]$targetResolution.Groups[1].Value) ([int]$targetResolution.Groups[2].Value)
+        Quality = Set-RawNumber $currentQuality "frame" ([int]$targetFrame.Groups[1].Value)
+    }
 }
 
 function Build-Preset([string]$Preset) {
@@ -68,12 +95,12 @@ function Build-Preset([string]$Preset) {
 }
 
 function Apply-Preset([string]$Preset, [bool]$Launch) {
-    $built = Build-Preset $Preset
+    $built = Merge-PresetWithCurrentConfig (Build-Preset $Preset)
     $pcBackup = Backup-Config $PcConfigPath
     $qualityBackup = Backup-Config $QualityConfigPath
     Write-TextNoBom $PcConfigPath $built.Pc
     Write-TextNoBom $QualityConfigPath $built.Quality
-    $message = (U "5bey5bqU55So6aKE6K6+77ya") + $Preset + "`r`n" + (U "5aSH5Lu95paH5Lu277ya") + "`r`n$pcBackup`r`n$qualityBackup"
+    $message = (U "5bey5bqU55So6aKE6K6+77ya") + $Preset + "`r`n" + (U "5aSH5Lu95paH5Lu277ya") + "`r`n$pcBackup`r`n$qualityBackup`r`n" + (U "5LuF5L+u5pS55YiG6L6o546H5LiO5bin546H77yM5YW25LuW6YWN572u5bey5L+d55WZ44CC")
     if ($Launch) {
         Start-Process -FilePath $GameExe -WorkingDirectory $GameRoot
         $message += "`r`n" + (U "5ri45oiP5bey5ZCv5Yqo44CC")
@@ -99,7 +126,7 @@ $form.Size = New-Object System.Drawing.Size(520, 260)
 $form.Font = New-Object System.Drawing.Font("Microsoft YaHei UI", 9)
 
 $label = New-Object System.Windows.Forms.Label
-$label.Text = U "5a6J5YWo6aKE6K6+5Lya5aSN5Yi25ri45oiP5Y6f5aeL6YWN572u5qih5p2/77yM5LiN6YeN5paw5Y6L57ypIEpTT07jgII="
+$label.Text = U "5bqU55So6aKE6K6+5pe25LuF5L+u5pS55YiG6L6o546H5ZKM5bin546H77yM5L+d55WZ5ri45oiP5YaF55S76LSo44CB54m55pWI5ZKM5oyJ6ZSu6K6+572u44CC"
 $label.AutoSize = $true
 $label.Left = 16
 $label.Top = 16

@@ -70,7 +70,7 @@ npm install
 npm run portable
 ```
 
-便携版输出到 `desktop-app/release/LifeAfter-Graphics-Launcher-2.5.1.exe`。
+便携版输出到 `desktop-app/release/LifeAfter-Graphics-Launcher-2.5.2.exe`。
 
 ## 编译经典版
 
@@ -82,9 +82,9 @@ npm run portable
 
 ## 版本
 
-当前版本：v2.5.1
+当前版本：v2.5.2
 
-- 现代便携版：v2.5.1
-- 经典单文件版：v1.8.1
+- 现代便携版：v2.5.2
+- 经典单文件版：v1.8.2
 
 完整更新内容见 [CHANGELOG.md](CHANGELOG.md)。
