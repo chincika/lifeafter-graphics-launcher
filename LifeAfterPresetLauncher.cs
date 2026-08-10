@@ -277,7 +277,7 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.8.1";
+    private const string AppVersion = "v1.8.2";
     private const string ProjectUrl = "https://github.com/chincika/lifeafter-graphics-launcher";
 
     private const string Pc540p =
@@ -683,7 +683,7 @@ internal static class LifeAfterPresetLauncher
             throw new InvalidOperationException("\u8bf7\u5148\u9009\u62e9\u6b63\u786e\u7684\u6e38\u620f\u76ee\u5f55\u3002");
         }
 
-        PresetData data = BuildPreset(preset);
+        PresetData data = MergePresetWithCurrentConfig(BuildPreset(preset));
         string pcBackup = BackupConfig(pcConfigPath);
         string qualityBackup = BackupConfig(qualityConfigPath);
 
@@ -695,7 +695,8 @@ internal static class LifeAfterPresetLauncher
                          "\u5f53\u524d\u914d\u7f6e\uff1a" + ReadCurrentConfigSummary() + Environment.NewLine +
                          "\u5907\u4efd\u6587\u4ef6\uff1a" + Environment.NewLine +
                          pcBackup + Environment.NewLine +
-                         qualityBackup;
+                         qualityBackup + Environment.NewLine +
+                         "仅修改分辨率与帧率，其他画质、特效和按键配置已保留。";
 
         if (launch)
         {
@@ -1140,21 +1141,17 @@ internal static class LifeAfterPresetLauncher
     private static string DetectCurrentPreset(string resolution, string quality)
     {
         string frame = ReadJsonNumber(quality, "frame");
-        string render = ReadJsonNumber(quality, "render");
-        string light = ReadJsonNumber(quality, "light");
-        string shadow = ReadJsonNumber(quality, "shadow");
-        string plant = ReadJsonNumber(quality, "plant");
 
-        if (resolution == "2560x1440" && frame == "4" && render == "4") return "\u5f53\u524d\u6863\u4f4d\uff1a2K 120";
-        if (resolution == "1920x1080" && frame == "4" && render == "4") return "\u5f53\u524d\u6863\u4f4d\uff1a1080p 120";
-        if (resolution == "1920x1080" && frame == "2" && render == "4") return "\u5f53\u524d\u6863\u4f4d\uff1a1080p 60";
-        if (resolution == "1600x900" && frame == "4" && render == "4") return "\u5f53\u524d\u6863\u4f4d\uff1a900p 120";
-        if (resolution == "1600x900" && frame == "2" && render == "0") return "\u5f53\u524d\u6863\u4f4d\uff1a900p 60";
-        if (resolution == "1280x720" && frame == "2" && render == "0") return "\u5f53\u524d\u6863\u4f4d\uff1a720p 60";
-        if (resolution == "960x540" && frame == "2" && render == "0") return "\u5f53\u524d\u6863\u4f4d\uff1a540p 60";
-        if (resolution == "960x540" && frame == "0" && render == "0") return "\u5f53\u524d\u6863\u4f4d\uff1a540p 25";
+        if (resolution == "2560x1440" && frame == "4") return "\u5f53\u524d\u6863\u4f4d\uff1a2K 120";
+        if (resolution == "1920x1080" && frame == "4") return "\u5f53\u524d\u6863\u4f4d\uff1a1080p 120";
+        if (resolution == "1920x1080" && frame == "2") return "\u5f53\u524d\u6863\u4f4d\uff1a1080p 60";
+        if (resolution == "1600x900" && frame == "4") return "\u5f53\u524d\u6863\u4f4d\uff1a900p 120";
+        if (resolution == "1600x900" && frame == "2") return "\u5f53\u524d\u6863\u4f4d\uff1a900p 60";
+        if (resolution == "1280x720" && frame == "2") return "\u5f53\u524d\u6863\u4f4d\uff1a720p 60";
+        if (resolution == "960x540" && frame == "2") return "\u5f53\u524d\u6863\u4f4d\uff1a540p 60";
+        if (resolution == "960x540" && frame == "0") return "\u5f53\u524d\u6863\u4f4d\uff1a540p 25";
 
-        if (light == "?" || shadow == "?" || plant == "?") return "\u5f53\u524d\u6863\u4f4d\uff1a\u672a\u77e5";
+        if (frame == "?") return "\u5f53\u524d\u6863\u4f4d\uff1a\u672a\u77e5";
         return "\u5f53\u524d\u6863\u4f4d\uff1a\u81ea\u5b9a\u4e49";
     }
 
@@ -1199,13 +1196,13 @@ internal static class LifeAfterPresetLauncher
             throw new InvalidOperationException("\u8bf7\u5148\u9009\u62e9\u6b63\u786e\u7684\u6e38\u620f\u76ee\u5f55\u3002");
         }
 
-        PresetData data = BuildPreset("2K 120");
+        PresetData data = MergePresetWithCurrentConfig(BuildPreset("2K 120"));
         BackupConfig(pcConfigPath);
         BackupConfig(qualityConfigPath);
         WriteTextNoBom(pcConfigPath, data.Pc);
         WriteTextNoBom(qualityConfigPath, data.Quality);
         EnsureFactoryDefaultBackup();
-        return "\u5df2\u6062\u590d\u9ed8\u8ba4\u914d\u7f6e\uff1a2K 120" + Environment.NewLine +
+        return "\u5df2\u6062\u590d\u9ed8\u8ba4\u6863\u4f4d\uff1a2K 120\uff08\u4ec5\u5206\u8fa8\u7387\u4e0e\u5e27\u7387\uff09" + Environment.NewLine +
                "\u5f53\u524d\u914d\u7f6e\uff1a" + ReadCurrentConfigSummary();
     }
 
@@ -1378,6 +1375,50 @@ internal static class LifeAfterPresetLauncher
             json,
             @"""" + key + @""": " + value,
             1);
+    }
+
+    private static PresetData MergePresetWithCurrentConfig(PresetData target)
+    {
+        string currentPc = File.ReadAllText(pcConfigPath, Encoding.UTF8);
+        string currentQuality = File.ReadAllText(qualityConfigPath, Encoding.UTF8);
+
+        Match resolution = Regex.Match(
+            target.Pc,
+            @"""resolution""\s*:\s*\[\s*(\d+)\s*,\s*(\d+)\s*\]");
+        if (!resolution.Success)
+        {
+            throw new InvalidDataException("\u9884\u8bbe\u4e2d\u7f3a\u5c11\u6709\u6548\u7684 resolution \u5b57\u6bb5\u3002");
+        }
+
+        int width = Int32.Parse(resolution.Groups[1].Value, CultureInfo.InvariantCulture);
+        int height = Int32.Parse(resolution.Groups[2].Value, CultureInfo.InvariantCulture);
+        string frameText = ReadJsonNumber(target.Quality, "frame");
+        int frame;
+        if (!Int32.TryParse(frameText, NumberStyles.Integer, CultureInfo.InvariantCulture, out frame))
+        {
+            throw new InvalidDataException("\u9884\u8bbe\u4e2d\u7f3a\u5c11\u6709\u6548\u7684 frame \u5b57\u6bb5\u3002");
+        }
+
+        Regex resolutionPattern = new Regex(@"""resolution""\s*:\s*\[\s*\d+\s*,\s*\d+\s*\]");
+        Regex framePattern = new Regex(@"""frame""\s*:\s*-?\d+(\.\d+)?");
+        if (resolutionPattern.Matches(currentPc).Count != 1)
+        {
+            throw new InvalidDataException("pcconfig \u4e2d resolution \u5b57\u6bb5\u7f3a\u5931\u6216\u91cd\u590d，\u5df2\u53d6\u6d88\u5199\u5165\u3002");
+        }
+        if (framePattern.Matches(currentQuality).Count != 1)
+        {
+            throw new InvalidDataException("qualityconfig \u4e2d frame \u5b57\u6bb5\u7f3a\u5931\u6216\u91cd\u590d，\u5df2\u53d6\u6d88\u5199\u5165\u3002");
+        }
+
+        string mergedPc = resolutionPattern.Replace(
+            currentPc,
+            @"""resolution"": [" + width + ", " + height + "]",
+            1);
+        string mergedQuality = framePattern.Replace(
+            currentQuality,
+            @"""frame"": " + frame,
+            1);
+        return new PresetData(mergedPc, mergedQuality);
     }
 
     private sealed class PresetData
