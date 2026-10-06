@@ -25,9 +25,9 @@ const { LanStatusServer } = require('./lan-status-server');
 const { MonitorService } = require('./monitor-service');
 const { ProcessSchedulingService } = require('./process-scheduling');
 const { SettingsStore } = require('./settings-store');
-const { RemoteNotices } = require('./remote-notices');
+const { RemoteNotices, NOTICE_CHECK_INTERVAL_MS } = require('./remote-notices');
 let remoteNotices = null;
-const SECURITY_BUILD = 2;
+const SECURITY_BUILD = 3;
 function requiredSecurityUpdate() { return remoteNotices?.requiredUpdate(SECURITY_BUILD); }
 async function checkSecurityPolicy() {
   await remoteNotices.check();
@@ -1043,7 +1043,7 @@ app.whenReady().then(async () => {
   remoteNotices = new RemoteNotices({ dataDir: app.getPath('userData'), publicKey: NOTICE_PUBLIC_KEY, currentVersion: app.getVersion(), fetchImpl: (...args) => net.fetch(...args) });
   if (!isRuntimeSmoke) {
     setTimeout(() => checkSecurityPolicy().catch(() => {}), 2000).unref();
-    setInterval(() => checkSecurityPolicy().catch(() => {}), 6 * 3600000).unref();
+    setInterval(() => checkSecurityPolicy().catch(() => {}), NOTICE_CHECK_INTERVAL_MS).unref();
   }
   cleanupUpdateCache(app.getPath('userData'), app.getVersion());
   updateService = new UpdateService({

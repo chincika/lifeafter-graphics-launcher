@@ -3,7 +3,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { RemoteNotices } = require('./remote-notices');
+const { RemoteNotices, NOTICE_CHECK_INTERVAL_MS } = require('./remote-notices');
 (async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'notices-test-'));
   const keys = crypto.generateKeyPairSync('ed25519');
@@ -34,6 +34,18 @@ const { RemoteNotices } = require('./remote-notices');
     assert.equal(service.requiredUpdate(2), null);
     envelope = sign({ schema: 1, sequence: 5, messages: [], updatePolicy: { minimumVersion: '2.6.2', minimumBuild: 0 } });
     service.lastCheck = 0; await service.check(); assert.ok(service.requiredUpdate(99));
+    let clock = 1000000; let requests = 0; let conditional = '';
+    const polling = new RemoteNotices({ ...options, dataDir: path.join(root, 'polling'), now: () => clock,
+      fetchImpl: async (_url, request) => {
+        requests++; conditional = request.headers['If-None-Match'] || '';
+        return requests === 1 ? new Response(JSON.stringify(envelope), { headers: { etag: 'verified-v5' } }) : new Response(null, { status: 304 });
+      } });
+    assert.equal(NOTICE_CHECK_INTERVAL_MS, 60000);
+    await polling.check(); assert.equal(requests, 1);
+    clock += 59999; await polling.check(); assert.equal(requests, 1);
+    clock += 1; await polling.check(); assert.equal(requests, 2);
+    assert.equal(conditional, 'verified-v5'); assert.equal(polling.state.sequence, 5);
+    console.log('one-minute throttle and conditional request tests passed');
     console.log('remote notices tests passed');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
