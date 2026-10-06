@@ -189,7 +189,8 @@ assert.equal(
         encoding: 'utf8',
         timeout: 30000
       });
-      assert.equal(installed.status, 0, installed.stderr || installed.stdout);
+      assert.equal(installed.status, 0, [installed.stderr, installed.stdout,
+        fs.existsSync(scheduled.logPath) ? fs.readFileSync(scheduled.logPath, 'utf8') : 'No installer log'].join('\n'));
       assert.ok(Date.now() - startedAt >= 2500);
       assert.equal(
         crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex').toUpperCase(),

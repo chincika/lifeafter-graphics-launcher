@@ -18,7 +18,19 @@ $patchNames = @(
     'patch_20260806_original.bin',
     'patch_20260806_180.bin',
     'patch_20260806_240.bin',
-    'patch_20260806_300.bin'
+    'patch_20260806_300.bin',
+    'patch_20260822_original.bin',
+    'patch_20260822_180.bin',
+    'patch_20260822_240.bin',
+    'patch_20260822_300.bin'
+)
+$lz4Directory = 'third-party\lz4\net462'
+$lz4Names = @(
+    'K4os.Compression.LZ4.dll',
+    'System.Buffers.dll',
+    'System.Memory.dll',
+    'System.Numerics.Vectors.dll',
+    'System.Runtime.CompilerServices.Unsafe.dll'
 )
 
 $outputName = [Text.Encoding]::UTF8.GetString(
@@ -35,6 +47,7 @@ try {
         "/out:$outputName",
         '/win32icon:assets\app.ico',
         '/resource:assets\cover.png,cover.png',
+        "/reference:$lz4Directory\K4os.Compression.LZ4.dll",
         '/reference:System.Windows.Forms.dll',
         '/reference:System.Drawing.dll'
     )
@@ -45,6 +58,13 @@ try {
             throw "Missing patch resource: $path"
         }
         $arguments += "/resource:$path,fps-patches/$name"
+    }
+    foreach ($name in $lz4Names) {
+        $path = Join-Path $lz4Directory $name
+        if (-not (Test-Path -LiteralPath $path)) {
+            throw "Missing LZ4 runtime dependency: $path"
+        }
+        $arguments += "/resource:$path,fps-dependencies/$name"
     }
     $arguments += 'LifeAfterPresetLauncher.cs'
 

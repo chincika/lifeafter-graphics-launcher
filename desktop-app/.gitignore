@@ -1,5 +1,6 @@
 node_modules/
 release/
+release-v260/
 ui-smoke-fps.png
 ui-smoke-performance.png
 ui-smoke-packages.png

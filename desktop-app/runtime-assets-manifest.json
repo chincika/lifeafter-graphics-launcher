@@ -2,7 +2,27 @@
   "assets": [
     {
       "name": "LifeAfterBackend.exe",
-      "sha256": "01AAA4FBA839D55F4F9FACFA74D75366250769A930A4D29151E4873F72FBD45B"
+      "sha256": "A494B1034D54470ED393CDEDB93819F32737BBFB3F57741F7235D76211A5534E"
+    },
+    {
+      "name": "K4os.Compression.LZ4.dll",
+      "sha256": "6DADE79664F48A163D6864C84A0A6C5C55B856BDFAF34BA187C87F18F9167238"
+    },
+    {
+      "name": "System.Buffers.dll",
+      "sha256": "ACCCCFBE45D9F08FFEED9916E37B33E98C65BE012CFFF6E7FA7B67210CE1FEFB"
+    },
+    {
+      "name": "System.Memory.dll",
+      "sha256": "BF3FB84664F4097F1A8A9BC71A51DCF8CF1A905D4080A4D290DA1730866E856F"
+    },
+    {
+      "name": "System.Numerics.Vectors.dll",
+      "sha256": "1D3EF8698281E7CF7371D1554AFEF5872B39F96C26DA772210A33DA041BA1183"
+    },
+    {
+      "name": "System.Runtime.CompilerServices.Unsafe.dll",
+      "sha256": "37768488E8EF45729BC7D9A2677633C6450042975BB96516E186DA6CB9CD0DCF"
     },
     {
       "name": "fps-patches/patch_180.bin",
@@ -35,6 +55,22 @@
     {
       "name": "fps-patches/patch_20260806_original.bin",
       "sha256": "59E1D837544AB1ECAEFD8934BC8AE2F39FB6CF6F73DCFF06667A96AC2E51555A"
+    },
+    {
+      "name": "fps-patches/patch_20260822_180.bin",
+      "sha256": "CF745D083D2C58508AE7F6A0E06F67ED82E68AB6801A8D6FAF4EEBD4B462AB87"
+    },
+    {
+      "name": "fps-patches/patch_20260822_240.bin",
+      "sha256": "47E118EE97A253B9BBFE8B7119F2607B60C3F892595A740312B7B9EDC677F4DB"
+    },
+    {
+      "name": "fps-patches/patch_20260822_300.bin",
+      "sha256": "045F36866460B2D2E75F90B2B739C2AA55A9988BE539DCB355139F055BFD9F43"
+    },
+    {
+      "name": "fps-patches/patch_20260822_original.bin",
+      "sha256": "1391EDF42903DCB107E3777A9FFB638503C0F8D602C9E96E4C15616BFAFA9EDD"
     }
   ]
 }

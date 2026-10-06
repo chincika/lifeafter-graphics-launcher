@@ -1,6 +1,6 @@
 {
   "name": "lifeafter-graphics-launcher",
-  "version": "2.5.2",
+  "version": "2.6.0",
   "description": "Windows 11 Fluent desktop launcher for LifeAfter graphics profiles",
   "main": "main.js",
   "author": "不与世俗纷争",
@@ -36,6 +36,26 @@
       {
         "from": "backend/LifeAfterBackend.exe",
         "to": "backend/LifeAfterBackend.exe"
+      },
+      {
+        "from": "backend/K4os.Compression.LZ4.dll",
+        "to": "backend/K4os.Compression.LZ4.dll"
+      },
+      {
+        "from": "backend/System.Buffers.dll",
+        "to": "backend/System.Buffers.dll"
+      },
+      {
+        "from": "backend/System.Memory.dll",
+        "to": "backend/System.Memory.dll"
+      },
+      {
+        "from": "backend/System.Numerics.Vectors.dll",
+        "to": "backend/System.Numerics.Vectors.dll"
+      },
+      {
+        "from": "backend/System.Runtime.CompilerServices.Unsafe.dll",
+        "to": "backend/System.Runtime.CompilerServices.Unsafe.dll"
       },
       {
         "from": "backend/fps-patches",

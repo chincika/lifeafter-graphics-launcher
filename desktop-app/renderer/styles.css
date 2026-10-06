@@ -841,6 +841,9 @@ option { background: #14222b; }
 .fps-package-state.error { border-color:rgba(239,107,114,.25); background:rgba(191,67,76,.08); }
 .fps-package-state.error > span { color:var(--danger); background:rgba(239,107,114,.12); }
 .fps-package-state.error p { color:#d6a0a4; }
+.fps-package-state.warning { border-color:rgba(233,181,99,.3); background:rgba(184,122,42,.1); }
+.fps-package-state.warning > span { color:var(--amber); background:rgba(233,181,99,.12); }
+.fps-package-state.warning p { color:#e2c58e; }
 .fps-package-route {
   margin-top:10px; padding:10px; border:1px solid rgba(255,255,255,.07);
   border-radius:11px; background:rgba(3,18,25,.24);

@@ -349,6 +349,7 @@ function syncFpsActionAvailability() {
   const cleanButton = $('#cleanFpsBackups');
   const refreshButton = $('#refreshFpsStatus');
   const state = String(fpsStatus?.state || '');
+  const recoveryAvailable = Boolean(fpsStatus?.recoveryAvailable);
   const safe = Boolean(
     fpsStatus &&
     fpsStatus.compatible &&
@@ -357,7 +358,11 @@ function syncFpsActionAvailability() {
   );
 
   if (applyButton) applyButton.disabled = busy || !safe;
-  if (restoreButton) restoreButton.disabled = busy || !safe || state === 'original';
+  if (restoreButton) {
+    restoreButton.disabled = busy || fpsStatus?.gameRunning ||
+      (state === 'original') || (!safe && !recoveryAvailable) ||
+      (recoveryAvailable && fpsStatus?.restoreAvailable === false);
+  }
   if (cleanButton) {
     cleanButton.disabled = busy || !fpsStatus?.baselineReady;
   }
@@ -386,7 +391,7 @@ function renderUpdateState(state) {
   const busyPhases = new Set(['checking', 'downloading', 'installing']);
   const button = $('#checkForUpdates');
   const frequency = $('#updateFrequency');
-  const currentVersion = state.currentVersion || '2.5.2';
+  const currentVersion = state.currentVersion || '2.6.0';
   $('#aboutVersion').textContent = `v${currentVersion}`;
   $('#sidebarVersion').textContent = `v${currentVersion}`;
   $('#updateStatus').textContent = state.message || '尚未检查更新';
@@ -1252,6 +1257,8 @@ function renderFpsStatus(status) {
     $('#fpsPlatformChip span').textContent = '游戏平台未识别';
     $('#fpsPlatformChip small').textContent = '写入已锁定';
     $('#fpsTargetPackageMeta').textContent = error;
+    if ($('#fpsTargetPackageRole')) $('#fpsTargetPackageRole').textContent = '写入已锁定';
+    if ($('#fpsRootPackageRole')) $('#fpsRootPackageRole').textContent = '只读保护';
     $('#fpsRootPackageMeta').textContent = '未执行根目录包体检测';
     $('#fpsCompatibilitySummary').textContent = '安全检查未通过，不会写入任何 NPK 文件。';
     $('#fpsBaselineState').textContent = '未检测';
@@ -1266,11 +1273,14 @@ function renderFpsStatus(status) {
 
   const legacy = String(fpsStatus.state).startsWith('legacy-');
   const unknown = fpsStatus.state === 'unknown';
+  const recoveryOnly = Boolean(fpsStatus.recoveryAvailable) && !fpsStatus.compatible;
   const safe = fpsStatus.compatible && !unknown;
   if (!safe || fpsStatus.gameRunning || legacy) {
     stateBadge.classList.add(safe ? 'warning' : 'error');
   }
-  stateBadge.querySelector('b').textContent = fpsStatus.gameRunning
+  stateBadge.querySelector('b').textContent = recoveryOnly
+    ? (fpsStatus.gameRunning ? '游戏运行中 · 恢复已锁定' : '已有接管状态 · 可用官方备份恢复')
+    : fpsStatus.gameRunning
     ? '游戏运行中 · 已锁定写入'
     : legacy
       ? '检测到旧版全局强制补丁'
@@ -1278,29 +1288,44 @@ function renderFpsStatus(status) {
         ? `当前已识别 · ${fpsStatus.stateLabel}`
         : '包体版本或槽位不兼容';
 
-  if (!safe) packageState.classList.add('error');
-  packageState.querySelector('strong').textContent = safe ? '当前包体已识别' : '当前包体拒绝写入';
-  packageState.querySelector('p').textContent = safe
-    ? `NXPK v3 · SettingManager 槽位匹配 · ${fpsStatus.compatibilityLabel || '兼容档案已建立'}`
+  if (!safe) packageState.classList.add(recoveryOnly ? 'warning' : 'error');
+  packageState.querySelector('strong').textContent = safe
+    ? '当前包体已识别'
+    : recoveryOnly
+      ? '当前包体已锁定，仅可恢复'
+      : '当前包体拒绝写入';
+  packageState.querySelector('p').textContent = recoveryOnly
+    ? (fpsStatus.error || '安全校验已锁定写入；检测到可验证的官方原始 NPK 备份，可安全恢复。')
+    : safe
+    ? `NXPK v3 · SettingManager 安全校验通过 · ${fpsStatus.compatibilityLabel || '兼容档案已建立'}`
     : '版本锁、目标槽或槽外整包哈希未通过';
   const platformLabel = fpsStatus.platformLabel || '老PC包体';
   const gameVersion = fpsStatus.gameVersion || '版本号未知';
   $('#fpsPlatformLabel').textContent = `${platformLabel} · ${gameVersion}`;
   $('#fpsPlatformChip span').textContent = platformLabel;
   $('#fpsPlatformChip small').textContent = fpsStatus.knownProfile ? '已验证档案' : '自动兼容档案';
-  $('#fpsTargetPackageMeta').textContent =
-    `${gameVersion} · ${formatPackageSize(fpsStatus.packageSize)} · 仅此文件可写`;
+  $('#fpsTargetPackageMeta').textContent = recoveryOnly
+    ? `${gameVersion} · ${formatPackageSize(fpsStatus.packageSize)} · 仅允许官方备份恢复`
+    : `${gameVersion} · ${formatPackageSize(fpsStatus.packageSize)} · 仅此文件可写`;
+  if ($('#fpsTargetPackageRole')) {
+    $('#fpsTargetPackageRole').textContent = recoveryOnly ? '仅可恢复' : safe ? '可修改' : '写入已锁定';
+  }
+  if ($('#fpsRootPackageRole')) $('#fpsRootPackageRole').textContent = '只读保护';
   $('#fpsRootPackageMeta').textContent = fpsStatus.rootPackagePresent
     ? `${formatPackageSize(fpsStatus.rootPackageSize)} · 已识别并保持只读`
     : '当前安装未检测到根目录完整包 · 无写入行为';
-  $('#fpsCompatibilitySummary').textContent = fpsStatus.knownProfile
+  $('#fpsCompatibilitySummary').textContent = recoveryOnly
+    ? `当前包体的新版结构暂不允许写入；已验证官方原始备份，可恢复至官方 120 FPS。${fpsStatus.recoveryPath ? `\n备份：${fpsStatus.recoveryPath}` : ''}`
+    : fpsStatus.knownProfile
     ? `已命中 ${platformLabel} 的审核档案 ${String(fpsStatus.normalizedHash || '').slice(0, 16)}；更新后仍会重新校验。`
-    : `包体整包哈希为新版本，但 NXPK 结构、SettingManager 元数据和槽位均与审核模型一致，已建立隔离档案 ${fpsStatus.profileId || ''}。`;
+    : `新包体已通过 set_frame_rate 函数语义指纹、常量布局与返回逻辑校验，本机已自动生成隔离档案 ${fpsStatus.profileId || ''}。`;
   $('#fpsCurrentState').textContent = fpsStatus.stateLabel;
-  $('#fpsBaselineState').textContent = fpsStatus.baselineReady
+  $('#fpsBaselineState').textContent = recoveryOnly
+    ? '官方原始备份已验证 · 允许恢复'
+    : fpsStatus.baselineReady
     ? `永久保留 · ${platformLabel} 当前版本`
     : '首次应用时在启动器数据区创建';
-  $('#fpsBaselineState').className = fpsStatus.baselineReady ? 'ok' : '';
+  $('#fpsBaselineState').className = (fpsStatus.baselineReady || recoveryOnly) ? 'ok' : '';
   const transactionBackupCount = Number(
     fpsStatus.transactionBackupCount ??
     Math.max(0, Number(fpsStatus.backupCount || 0) - (fpsStatus.baselineReady ? 1 : 0))

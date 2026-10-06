@@ -96,10 +96,10 @@ let historyEnabled = true;
 let updateFrequency = 'startup';
 const updateState = {
   phase: 'current',
-    currentVersion: '2.5.2',
-    latestVersion: '2.5.2',
+    currentVersion: '2.6.0',
+    latestVersion: '2.6.0',
   progress: 100,
-    message: '当前已是最新版本 v2.5.2',
+    message: '当前已是最新版本 v2.6.0',
   releaseUrl: 'https://github.com/chincika/lifeafter-graphics-launcher/releases/tag/v2.2.0',
   downloadedPath: '',
   error: '',
