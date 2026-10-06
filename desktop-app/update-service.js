@@ -161,7 +161,7 @@ class UpdateService {
     return digestFromText(text, asset.name);
   }
 
-  async check() {
+  async check({ allowSameVersion = false } = {}) {
     this.updateState({
       phase: 'checking',
       progress: 0,
@@ -175,7 +175,7 @@ class UpdateService {
       const latestVersion = String(release.tag_name || release.name || '').replace(/^v/i, '');
       const releaseUrl = String(release.html_url || '');
       if (!latestVersion) throw new Error('GitHub Release 未提供有效版本号。');
-      if (!isNewerVersion(latestVersion, this.currentVersion)) {
+      if (!isNewerVersion(latestVersion, this.currentVersion) && !(allowSameVersion && latestVersion === this.currentVersion)) {
         return {
           ok: true,
           updateAvailable: false,

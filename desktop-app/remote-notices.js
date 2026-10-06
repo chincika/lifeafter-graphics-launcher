@@ -23,6 +23,8 @@ class RemoteNotices {
     if (bytes.length > MAX_BYTES || !crypto.verify(null, bytes, this.publicKey, Buffer.from(envelope.signature, 'base64'))) throw Error('公告签名无效');
     const feed = JSON.parse(bytes.toString('utf8'));
     if (feed.schema !== 1 || !Number.isSafeInteger(feed.sequence) || feed.sequence < 1 || !Array.isArray(feed.messages) || feed.messages.length > 50) throw Error('公告清单无效');
+    if (feed.updatePolicy && (!/^\d+\.\d+\.\d+$/.test(feed.updatePolicy.minimumVersion) ||
+        !Number.isSafeInteger(feed.updatePolicy.minimumBuild) || feed.updatePolicy.minimumBuild < 0)) throw Error('强制更新策略无效');
     const identities = new Set();
     for (const item of feed.messages) {
       if (!/^[a-zA-Z0-9_-]{1,80}$/.test(item.id) || !/^[a-zA-Z0-9_.-]{1,80}$/.test(item.version) ||
@@ -70,6 +72,13 @@ class RemoteNotices {
       (!item.minVersion || !isNewerVersion(item.minVersion, this.version)) &&
       (!item.maxVersion || !isNewerVersion(this.version, item.maxVersion))
     ).map(item => ({ ...item, digest: crypto.createHash('sha256').update(JSON.stringify(item)).digest('hex') }));
+  }
+  requiredUpdate(build) {
+    if (!this.state.envelope) return null;
+    const policy = this.verify(this.state.envelope).updatePolicy;
+    if (!policy) return null;
+    return isNewerVersion(policy.minimumVersion, this.version) ||
+      (policy.minimumVersion === this.version && build < policy.minimumBuild) ? policy : null;
   }
   pending() { return this.messages().filter(item => this.state.acknowledged[`${item.id}:${item.version}`]?.digest !== item.digest); }
   acknowledge(id, version, digest, agreed) {

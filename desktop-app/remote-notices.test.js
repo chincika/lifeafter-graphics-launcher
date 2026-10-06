@@ -28,6 +28,12 @@ const { RemoteNotices } = require('./remote-notices');
     assert.throws(() => service.verify(sign({ schema: 1, sequence: 4, messages: [message, message] })));
     options.fetchImpl = async () => { throw Error('offline'); };
     const offline = new RemoteNotices(options); await offline.check(); assert.equal(offline.state.sequence, 3);
+    envelope = sign({ schema: 1, sequence: 4, messages: [], updatePolicy: { minimumVersion: '2.6.1', minimumBuild: 2 } });
+    service.lastCheck = 0; await service.check();
+    assert.equal(service.requiredUpdate(1).minimumBuild, 2);
+    assert.equal(service.requiredUpdate(2), null);
+    envelope = sign({ schema: 1, sequence: 5, messages: [], updatePolicy: { minimumVersion: '2.6.2', minimumBuild: 0 } });
+    service.lastCheck = 0; await service.check(); assert.ok(service.requiredUpdate(99));
     console.log('remote notices tests passed');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
