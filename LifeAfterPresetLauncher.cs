@@ -382,7 +382,7 @@ internal static class LifeAfterPresetLauncher
     private static readonly string SavedPathFile = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory,
         "LifeAfterLauncher.path");
-    private const string AppVersion = "v1.9.0";
+    private const string AppVersion = "v1.9.1";
     private const string ProjectUrl = "https://github.com/chincika/lifeafter-graphics-launcher";
 
     private const string Pc540p =
@@ -522,6 +522,37 @@ internal static class LifeAfterPresetLauncher
             return;
         }
 
+        if (args.Length >= 1 && args[0].Equals("--fps-consent-dialog", StringComparison.OrdinalIgnoreCase))
+        {
+            using (Form consent = new Form())
+            {
+                consent.Text = "帧率解锁风险告知与免责声明";
+                consent.Size = new Size(620, 360);
+                consent.StartPosition = FormStartPosition.CenterScreen;
+                Label body = new Label { Left = 24, Top = 24, Width = 550, Height = 185, Text = FpsDisclaimerText };
+                CheckBox check = new CheckBox { Left = 24, Top = 220, Width = 550, Text = "我已阅读并理解风险，同意使用帧率解锁功能" };
+                Button accept = new Button { Left = 400, Top = 265, Width = 150, Text = "同意并继续", Enabled = false };
+                Button cancel = new Button { Left = 235, Top = 265, Width = 150, Text = "暂不使用", DialogResult = DialogResult.Cancel };
+                check.CheckedChanged += delegate { accept.Enabled = check.Checked; };
+                accept.Click += delegate { SaveFpsConsent(); consent.DialogResult = DialogResult.OK; consent.Close(); };
+                consent.Controls.AddRange(new Control[] { body, check, accept, cancel });
+                consent.CancelButton = cancel;
+                consent.ShowDialog();
+            }
+            return;
+        }
+        if (args.Length >= 1 && args[0].Equals("--fps-consent-status", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine("{\"ok\":true,\"accepted\":" + (HasFpsConsent() ? "true" : "false") + ",\"version\":\"2026-10-06-v1\"}");
+            return;
+        }
+        if (args.Length >= 2 && args[0].Equals("--fps-consent-accept", StringComparison.OrdinalIgnoreCase))
+        {
+            if (args[1] != "2026-10-06-v1") throw new InvalidOperationException("免责声明版本已变化，请重新阅读。");
+            SaveFpsConsent();
+            Console.WriteLine("{\"ok\":true}");
+            return;
+        }
         if (args.Length >= 2 && args[0].Equals("--fps-apply", StringComparison.OrdinalIgnoreCase))
         {
             try
@@ -2181,8 +2212,33 @@ internal static class LifeAfterPresetLauncher
         }
     }
 
+    private static string FpsConsentPath()
+    {
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LifeAfterGraphicsLauncher", "fps-consent.txt");
+    }
+
+    private const string FpsDisclaimerText = "帧率解锁功能自 2026 年 7 月 28 日 v2.3.0 版本更新推出以来，作者一直使用主力账号测试。截至 v2.6.0 自动适配版本更新，作者尚未收到来自官方的警告或其他处罚。\n\n但修改帧率属于对游戏包体的修改，历史测试结果不代表未来没有处罚风险。作者不承担因此造成的任何后果；如果担心被处罚，请勿使用本功能。\n\n不同意不会影响恢复官方帧率及使用其他功能。";
+    private static string FpsDisclaimerDigest()
+    {
+        using (SHA256 sha = SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(FpsDisclaimerText))).Replace("-", "");
+    }
+    private static void SaveFpsConsent()
+    {
+        string file = FpsConsentPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(file));
+        File.WriteAllText(file + ".tmp", "2026-10-06-v1\n" + DateTime.UtcNow.ToString("O") + "\n" + FpsDisclaimerDigest(), Encoding.UTF8);
+        if (File.Exists(file)) File.Replace(file + ".tmp", file, null); else File.Move(file + ".tmp", file);
+    }
+
+    private static bool HasFpsConsent()
+    {
+        try { string[] lines = File.ReadAllLines(FpsConsentPath(), Encoding.UTF8); return lines.Length == 3 && lines[0] == "2026-10-06-v1" && lines[2] == FpsDisclaimerDigest(); }
+        catch { return false; }
+    }
+
     private static string ApplyFpsUnlock(int target)
     {
+        if (!HasFpsConsent()) throw new InvalidOperationException("请先阅读并同意帧率解锁免责声明；恢复官方帧率不受限制。");
         if (target != 180 && target != 240 && target != 300)
             throw new InvalidOperationException("仅支持 180、240、300 FPS。");
         EnsureFpsGameStopped();

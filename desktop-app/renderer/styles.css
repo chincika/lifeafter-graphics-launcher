@@ -1385,3 +1385,9 @@ option { background: #14222b; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; }
 }
+#fpsConsentModal .modal, #noticeModal .modal { width:min(560px,calc(100vw - 48px));max-height:calc(100vh - 48px);overflow:auto;text-align:left; }
+#fpsConsentModal p, #noticeModal p { margin:14px 0;font-size:14px;line-height:1.8;overflow-wrap:anywhere; }
+#fpsConsentModal label, #noticeModal label { display:flex;align-items:flex-start;gap:10px;margin-top:18px;color:var(--text);font-size:13px;line-height:1.7; }
+#noticeAgreement[hidden] { display:none; }
+#fpsConsentCheck, #noticeCheck { accent-color:var(--cyan);margin-top:5px; }
+#fpsConsentModal button:disabled, #noticeModal button:disabled { opacity:.45;cursor:not-allowed; }

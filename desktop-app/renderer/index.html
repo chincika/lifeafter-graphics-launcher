@@ -655,6 +655,7 @@
                 </select>
               </label>
               <button class="button secondary" id="checkForUpdates"><svg><use href="#i-refresh"/></svg>立即检查</button>
+              <button class="button secondary" id="noticeHistory">查看公告</button>
             </section>
           </section>
           <aside class="glass-card about-card">
@@ -697,6 +698,23 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="fpsConsentModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="fpsConsentTitle">
+      <h3 id="fpsConsentTitle">帧率解锁 · 风险告知与免责声明</h3>
+      <p>帧率解锁功能自 2026 年 7 月 28 日 v2.3.0 版本更新推出以来，作者一直使用主力账号测试。截至 v2.6.0 自动适配版本更新，作者尚未收到来自官方的警告或其他处罚。</p>
+      <p>但修改帧率属于对游戏包体的修改，历史测试结果不代表未来没有处罚风险。作者不承担因此造成的任何后果；如果担心被处罚，请勿使用本功能。</p>
+      <p>不同意不会影响恢复官方帧率及使用其他功能。</p>
+      <label><input type="checkbox" id="fpsConsentCheck"> 我已阅读并理解上述风险，同意使用本功能</label>
+      <div class="modal-actions"><button class="button secondary" id="fpsConsentDecline">暂不使用</button><button class="button primary" id="fpsConsentAccept" disabled>同意并继续</button></div>
+    </div>
+  </div>
+  <div class="modal-backdrop" id="noticeModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="noticeTitle">
+      <h3 id="noticeTitle"></h3><p id="noticeBody"></p>
+      <label id="noticeAgreement"><input type="checkbox" id="noticeCheck"> 我已阅读并同意上述风险告知</label>
+      <div class="modal-actions"><button class="button secondary" id="noticeLater">稍后处理</button><button class="button primary" id="noticeConfirm">我知道了</button></div>
+    </div>
+  </div>
   <script src="app.js"></script>
 </body>
 </html>

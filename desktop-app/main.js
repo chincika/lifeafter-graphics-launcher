@@ -25,6 +25,9 @@ const { LanStatusServer } = require('./lan-status-server');
 const { MonitorService } = require('./monitor-service');
 const { ProcessSchedulingService } = require('./process-scheduling');
 const { SettingsStore } = require('./settings-store');
+const { RemoteNotices } = require('./remote-notices');
+let remoteNotices = null;
+const NOTICE_PUBLIC_KEY = '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEABxX0AGMCaJ/04WAA5l5m+yRYkf6fbfWLbGWrJb+sY2U=\n-----END PUBLIC KEY-----\n';
 const { ensureRuntimeAssets } = require('./runtime-assets');
 const {
   UpdateService,
@@ -833,10 +836,18 @@ ipcMain.handle('launcher:clean-backups', () => runBackend(['--clean-backups'], 2
 ipcMain.handle('launcher:set-tiaozi', (_event, scale) =>
   runBackend(['--set-tiaozi', String(scale)], 20000));
 ipcMain.handle('launcher:get-fps-status', () => getFpsStatus());
+ipcMain.handle('launcher:fps-consent-status', async () => {
+  const result = await runBackend(['--fps-consent-status'], 10000);
+  if (!result.ok) return result;
+  try { return { ...result, data: JSON.parse(result.text) }; }
+  catch { return { ok: false, error: '免责声明状态格式无效' }; }
+});
+ipcMain.handle('launcher:fps-consent-accept', (_event, version) => runBackend(['--fps-consent-accept', String(version)], 10000));
 ipcMain.handle('launcher:save-fps-target', (_event, target) => ({
   ok: saveFpsPreference(target)
 }));
 ipcMain.handle('launcher:apply-fps', async (_event, target) => {
+  if (remoteNotices?.pending().some(item => item.type === 'disclaimer')) return { ok: false, error: '请先阅读并同意新的远程免责声明' };
   const value = Number(target);
   if (![180, 240, 300].includes(value)) return { ok: false, error: '不支持的帧率目标' };
   const result = await runBackend(['--fps-apply', String(value)], 300000);
@@ -847,6 +858,13 @@ ipcMain.handle('launcher:restore-fps', async () => {
   const result = await runBackend(['--fps-restore'], 300000);
   if (result.ok) saveFpsPreference(120);
   return result;
+});
+ipcMain.handle('launcher:get-notices', (_event, history) => ({
+  ok: true, messages: remoteNotices ? (history ? remoteNotices.messages() : remoteNotices.pending()) : []
+}));
+ipcMain.handle('launcher:ack-notice', (_event, payload) => {
+  try { remoteNotices.acknowledge(payload.id, payload.version, payload.digest, payload.agreed); return { ok: true }; }
+  catch (error) { return { ok: false, error: error.message }; }
 });
 ipcMain.handle('launcher:clean-fps-backups', () =>
   runBackend(['--fps-clean-backups'], 300000));
@@ -1003,6 +1021,11 @@ app.whenReady().then(async () => {
   }
   gameInstallationsStore = new GameInstallationsStore(installationsPath());
   settingsStore = new SettingsStore(settingsPath());
+  remoteNotices = new RemoteNotices({ dataDir: app.getPath('userData'), publicKey: NOTICE_PUBLIC_KEY, currentVersion: app.getVersion(), fetchImpl: (...args) => net.fetch(...args) });
+  if (!isRuntimeSmoke) {
+    remoteNotices.check();
+    setInterval(() => remoteNotices.check(), 6 * 3600000).unref();
+  }
   cleanupUpdateCache(app.getPath('userData'), app.getVersion());
   updateService = new UpdateService({
     currentVersion: app.getVersion(),

@@ -1376,6 +1376,8 @@ async function chooseFpsTarget(target) {
 async function applySelectedFpsTarget(button) {
   if (busy || !fpsStatus) return;
   const restoring = selectedFpsTarget === 120;
+  if (!restoring && !(await ensureFpsConsent())) return;
+  if (!restoring && !(await presentNotices(false, true))) return;
   const accepted = await confirmDialog(
     restoring ? '恢复官方帧率逻辑' : `接管 120 FPS 档为 ${selectedFpsTarget} FPS`,
     restoring
@@ -1436,6 +1438,92 @@ async function cleanFpsTransactionBackups(button) {
   }
 }
 
+let noticeShowing = false;
+document.addEventListener('keydown', event => {
+  const modal = [$('#fpsConsentModal'), $('#noticeModal')].find(element => !element.hidden);
+  if (!modal) return;
+  if (event.key === 'Escape') {
+    event.preventDefault(); modal.querySelector(modal.id === 'fpsConsentModal' ? '#fpsConsentDecline' : '#noticeLater').click();
+  }
+  if (event.key === 'Tab') {
+    const controls = [...modal.querySelectorAll('button:not(:disabled), input')].filter(element => element.getClientRects().length);
+    const first = controls[0]; const last = controls.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+});
+const deferredNotices = new Set();
+async function presentNotices(history = false, requireConsent = false) {
+  if (noticeShowing) return false;
+  if (!history && (document.hidden || !document.hasFocus() || busy || !$('#confirmModal').hidden || !$('#fpsConsentModal').hidden)) return false;
+  noticeShowing = true;
+  try {
+    const response = await window.launcher.getNotices(history);
+    if (!response.ok) return false;
+    if (history && !response.messages.length) { setActivity('暂无有效公告', '已过期公告不会展示'); return true; }
+    for (const item of response.messages) {
+      if (!history && !requireConsent && deferredNotices.has(`${item.id}:${item.version}`)) continue;
+      if (requireConsent && item.type !== 'disclaimer') continue;
+      const accepted = await new Promise(resolve => {
+        const modal = $('#noticeModal'); const check = $('#noticeCheck'); const confirm = $('#noticeConfirm');
+        const consent = item.type === 'disclaimer'; const previous = document.activeElement;
+        $('#noticeTitle').textContent = item.title; $('#noticeBody').textContent = item.body;
+        $('#noticeAgreement').hidden = !consent; check.checked = false; confirm.disabled = consent;
+        confirm.textContent = consent ? '同意并继续' : '我知道了'; modal.hidden = false;
+        (consent ? check : confirm).focus();
+        const finish = result => { modal.hidden = true; check.onchange = confirm.onclick = $('#noticeLater').onclick = null; previous?.focus(); resolve(result); };
+        check.onchange = () => { confirm.disabled = consent && !check.checked; };
+        $('#noticeLater').onclick = () => finish(false);
+        confirm.onclick = async () => {
+          confirm.disabled = true;
+          try {
+            const result = await window.launcher.acknowledgeNotice({ id: item.id, version: item.version, digest: item.digest, agreed: consent && check.checked });
+            if (result.ok) finish(true); else { setActivity('公告确认失败', result.error, 'error'); confirm.disabled = false; }
+          } catch (error) { setActivity('公告确认失败', error.message, 'error'); confirm.disabled = false; }
+        };
+      });
+      if (!accepted) { deferredNotices.add(`${item.id}:${item.version}`); return false; }
+    }
+    return true;
+  } finally { noticeShowing = false; }
+}
+$('#noticeHistory').addEventListener('click', () => presentNotices(true));
+window.addEventListener('focus', () => presentNotices().catch(() => {}));
+setInterval(() => presentNotices().catch(() => {}), 30000);
+
+let fpsConsentRequest = null;
+async function ensureFpsConsent() {
+  if (fpsConsentRequest) return fpsConsentRequest;
+  fpsConsentRequest = (async () => {
+    const status = await window.launcher.getFpsConsent();
+    if (!status.ok) { setActivity('无法读取免责声明确认状态', status.error, 'error'); return false; }
+    if (status.data?.accepted) return true;
+    return new Promise(resolve => {
+      const modal = $('#fpsConsentModal');
+      const check = $('#fpsConsentCheck');
+      const accept = $('#fpsConsentAccept');
+      const decline = $('#fpsConsentDecline');
+      const previous = document.activeElement;
+      check.checked = false; accept.disabled = true; modal.hidden = false; check.focus();
+      const finish = value => {
+        modal.hidden = true; check.onchange = accept.onclick = decline.onclick = null;
+        previous?.focus(); resolve(value);
+      };
+      check.onchange = () => { accept.disabled = !check.checked; };
+      decline.onclick = () => finish(false);
+      accept.onclick = async () => {
+        accept.disabled = true;
+        try {
+          const result = await window.launcher.acceptFpsConsent('2026-10-06-v1');
+          if (result.ok) finish(true);
+          else { setActivity('确认未保存', result.error, 'error'); accept.disabled = false; }
+        } catch (error) { setActivity('确认未保存', error.message, 'error'); accept.disabled = false; }
+      };
+    });
+  })();
+  try { return await fpsConsentRequest; } finally { fpsConsentRequest = null; }
+}
+
 function switchView(view) {
   setPackageMenuOpen(false);
   currentView = view;
@@ -1459,7 +1547,7 @@ function switchView(view) {
     setTimeout(() => $('#plansCard').scrollIntoView({ behavior: 'smooth', block: 'center' }), 20);
   }
   if (view === 'history') loadHistory(currentHistoryRange, true);
-  if (view === 'fps') loadFpsStatus(true);
+  if (view === 'fps') { loadFpsStatus(true); ensureFpsConsent().catch(error => setActivity('免责声明加载失败', error.message, 'error')); }
   if (view === 'remote') loadBackgroundState(true);
 }
 

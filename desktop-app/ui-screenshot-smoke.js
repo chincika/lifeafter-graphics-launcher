@@ -145,6 +145,11 @@ const installations = {
   ]
 };
 
+let consentAccepted = true;
+ipcMain.handle('launcher:fps-consent-status', async () => ({ ok: true, data: { accepted: consentAccepted } }));
+ipcMain.handle('launcher:fps-consent-accept', async () => { consentAccepted = true; return { ok: true }; });
+ipcMain.handle('launcher:get-notices', async () => ({ ok: true, messages: [] }));
+ipcMain.handle('launcher:ack-notice', async () => ({ ok: true }));
 ipcMain.handle('launcher:init', async () => ({
   ok: true,
   root: 'D:\\LifeAfter',
@@ -600,7 +605,27 @@ app.whenReady().then(async () => {
   const historyImage = await win.webContents.capturePage();
   fs.writeFileSync(historyOutput, historyImage.toPNG());
 
+  consentAccepted = false;
+  await win.webContents.executeJavaScript("switchView('fps')");
+  await new Promise(resolve => setTimeout(resolve, 200));
+  const consentVisual = await win.webContents.executeJavaScript(`(() => {
+    const modal = document.querySelector('#fpsConsentModal');
+    const accept = document.querySelector('#fpsConsentAccept');
+    if (modal.hidden || !accept.disabled) throw Error('Consent must require explicit checkbox');
+    const rect = modal.querySelector('.modal').getBoundingClientRect();
+    return { top: rect.top, bottom: rect.bottom, height: innerHeight };
+  })()`);
+  if (consentVisual.top < 0 || consentVisual.bottom > consentVisual.height) throw Error('Consent modal is clipped');
+  fs.writeFileSync(path.join(__dirname, 'ui-smoke-consent.png'), (await win.webContents.capturePage()).toPNG());
+  await win.webContents.executeJavaScript("document.querySelector('#fpsConsentDecline').click()");
+  await win.webContents.executeJavaScript("switchView('fps')");
+  await new Promise(resolve => setTimeout(resolve, 100));
+  await win.webContents.executeJavaScript("document.querySelector('#fpsConsentCheck').click(); document.querySelector('#fpsConsentAccept').click()");
+  await new Promise(resolve => setTimeout(resolve, 100));
+  if (!consentAccepted) throw Error('Consent acceptance not persisted');
+
   process.stdout.write(`${JSON.stringify({
+    consentVisual,
     performance,
     schedulingVisual,
     systemManagedVisual,
