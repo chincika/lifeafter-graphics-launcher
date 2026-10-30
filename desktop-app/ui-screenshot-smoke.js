@@ -230,6 +230,20 @@ ipcMain.handle('launcher:get-instances', async () => ({
   data: { capturedAt: Date.now(), instances: [] }
 }));
 ipcMain.handle('launcher:get-fps-status', async () => ({ ok: true, data: fpsStatus }));
+const nativeStatus = {
+  ok: true, state: 'official', gameRunning: false, message: '当前为原始包体。',
+  backupDirectory: 'E:\\FeverGames\\mrzh\\帧率解锁备份\\游戏内档位'
+};
+ipcMain.handle('launcher:get-native-fps-status', async () => ({ ok: true, data: { ...nativeStatus } }));
+ipcMain.handle('launcher:apply-native-fps', async () => {
+  nativeStatus.state = 'native'; nativeStatus.message = '游戏内四档已启用';
+  return { ok: true, data: { ...nativeStatus } };
+});
+ipcMain.handle('launcher:restore-native-fps', async () => {
+  nativeStatus.state = 'official'; nativeStatus.message = '官方帧率已恢复';
+  return { ok: true, data: { ...nativeStatus } };
+});
+ipcMain.handle('launcher:open-native-fps-backups', async () => ({ ok: true }));
 ipcMain.handle('launcher:save-fps-target', async () => ({ ok: true }));
 ipcMain.handle('launcher:apply-fps', async () => {
   throw new Error('UI smoke simulated IPC failure');
@@ -450,7 +464,7 @@ app.whenReady().then(async () => {
     document.querySelectorAll('.view').forEach(view => {
       view.style.animation = 'none';
     });
-    switchView('fps');
+    switchView('legacyFps');
   })()`);
   await new Promise(resolve => setTimeout(resolve, 250));
 
@@ -522,14 +536,44 @@ app.whenReady().then(async () => {
       viewHeight: Math.round(view.getBoundingClientRect().height),
       layoutHeight: Math.round(layout.getBoundingClientRect().height),
       rootDisplay: getComputedStyle(document.querySelector('#chooseRootButton')).display,
-      takeoverDisplay: getComputedStyle(document.querySelector('#fpsTakeoverPill')).display
+      takeoverDisplay: getComputedStyle(document.querySelector('#fpsTakeoverPill')).display,
+      rates: [...view.querySelectorAll('.native-fps-rates b')].map(el => el.textContent.trim()),
+      legacyEntryInDeveloperOptions: Boolean(document.querySelector('.developer-options #openLegacyFps'))
     };
   })()`);
-  if (visual.rootDisplay !== 'none' || visual.takeoverDisplay === 'none') {
+  if (visual.rootDisplay !== 'none' || visual.takeoverDisplay !== 'none' ||
+      visual.rates.join(',') !== '180 FPS,240 FPS,300 FPS,360 FPS' || !visual.legacyEntryInDeveloperOptions) {
     throw new Error(`FPS hero controls overlap regression: ${JSON.stringify(visual)}`);
   }
   const image = await win.webContents.capturePage();
   fs.writeFileSync(output, image.toPNG());
+
+  const nativeFlow = await win.webContents.executeJavaScript(`(async () => {
+    const oldHasFocus = document.hasFocus;
+    document.hasFocus = () => true; // This off-screen smoke window uses showInactive().
+    await applyNativeFps(document.querySelector('#applyNativeFps'));
+    const afterApply = { state: nativeFpsStatus.state, restoreDisabled: document.querySelector('#restoreNativeFps').disabled, activity: document.querySelector('#activityMessage').textContent };
+    const enabled = afterApply.state === 'native' && !afterApply.restoreDisabled;
+    const restored = applyNativeFps(document.querySelector('#restoreNativeFps'), true);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    document.querySelector('#confirmModal [data-result="confirm"]').click();
+    await restored;
+    document.hasFocus = oldHasFocus;
+    return { enabled, afterApply, finalState: nativeFpsStatus.state, applyEnabled: !document.querySelector('#applyNativeFps').disabled };
+  })()`);
+  if (!nativeFlow.enabled || nativeFlow.finalState !== 'official' || !nativeFlow.applyEnabled) {
+    throw new Error(`Native FPS enable/restore UI mismatch: ${JSON.stringify(nativeFlow)}`);
+  }
+
+  const developerFlow = await win.webContents.executeJavaScript(`(() => {
+    switchView('tools');
+    document.querySelector('.developer-options').open = true;
+    document.querySelector('#openLegacyFps').click();
+    return { activeView: document.querySelector('.view.active')?.id, mainHidden: !document.querySelector('#fpsView').classList.contains('active') };
+  })()`);
+  if (developerFlow.activeView !== 'legacyFpsView' || !developerFlow.mainHidden) {
+    throw new Error(`Developer mode navigation mismatch: ${JSON.stringify(developerFlow)}`);
+  }
 
   await win.webContents.executeJavaScript(`(() => {
     switchView('launch');
@@ -606,7 +650,7 @@ app.whenReady().then(async () => {
   fs.writeFileSync(historyOutput, historyImage.toPNG());
 
   consentAccepted = false;
-  await win.webContents.executeJavaScript("switchView('fps')");
+  await win.webContents.executeJavaScript("switchView('legacyFps')");
   await new Promise(resolve => setTimeout(resolve, 200));
   const consentVisual = await win.webContents.executeJavaScript(`(() => {
     const modal = document.querySelector('#fpsConsentModal');
@@ -616,9 +660,9 @@ app.whenReady().then(async () => {
     return { top: rect.top, bottom: rect.bottom, height: innerHeight };
   })()`);
   if (consentVisual.top < 0 || consentVisual.bottom > consentVisual.height) throw Error('Consent modal is clipped');
-  fs.writeFileSync(path.join(__dirname, 'ui-smoke-consent.png'), (await win.webContents.capturePage()).toPNG());
+  fs.writeFileSync(path.resolve(process.env.LAUNCHER_CONSENT_UI_SCREENSHOT || path.join(__dirname, 'ui-smoke-consent.png')), (await win.webContents.capturePage()).toPNG());
   await win.webContents.executeJavaScript("document.querySelector('#fpsConsentDecline').click()");
-  await win.webContents.executeJavaScript("switchView('fps')");
+  await win.webContents.executeJavaScript("switchView('legacyFps')");
   await new Promise(resolve => setTimeout(resolve, 100));
   await win.webContents.executeJavaScript("document.querySelector('#fpsConsentCheck').click(); document.querySelector('#fpsConsentAccept').click()");
   await new Promise(resolve => setTimeout(resolve, 100));

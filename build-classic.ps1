@@ -49,7 +49,8 @@ try {
         '/resource:assets\cover.png,cover.png',
         "/reference:$lz4Directory\K4os.Compression.LZ4.dll",
         '/reference:System.Windows.Forms.dll',
-        '/reference:System.Drawing.dll'
+        '/reference:System.Drawing.dll',
+        '/reference:System.Web.Extensions.dll'
     )
 
     foreach ($name in $patchNames) {
@@ -66,7 +67,13 @@ try {
         }
         $arguments += "/resource:$path,fps-dependencies/$name"
     }
+    foreach ($name in @('panel.original.bin', 'panel.v04.bin', 'manager.original.bin', 'manager.v04.bin')) {
+        $path = Join-Path 'native-fps-integration\patches' $name
+        if (-not (Test-Path -LiteralPath $path)) { throw "Missing native FPS resource: $path" }
+        $arguments += "/resource:$path,$name"
+    }
     $arguments += 'LifeAfterPresetLauncher.cs'
+    $arguments += 'native-fps-integration\NativeFpsTool.cs'
 
     & $csc @arguments
     if ($LASTEXITCODE -ne 0) {

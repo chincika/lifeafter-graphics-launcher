@@ -12,3 +12,8 @@ current-npk-fps-analysis/
 wm-optimizer-v2.3.1-analysis/
 wm-optimizer-v2.3.1-analysis.zip
 *.npk
+
+# Release secrets and generated operational files
+**/notices-private*.pem
+release-operations/private/
+release-operations/generated/

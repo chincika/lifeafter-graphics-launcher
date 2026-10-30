@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "sequence": 3,
+  "updatePolicy": { "minimumVersion": "2.6.1", "minimumBuild": 3 },
+  "messages": [
+    {
+      "id": "announcement-example",
+      "version": "1",
+      "type": "notice",
+      "title": "填写公告标题",
+      "body": "填写公告正文；本文件仅为模板，发布前先查询远端并更新 sequence。",
+      "minVersion": "2.6.1",
+      "expiresAt": "2026-12-31T23:59:59+08:00"
+    }
+  ]
+}

@@ -56,9 +56,22 @@ $output = Join-Path $PSScriptRoot 'backend\LifeAfterBackend.exe'
     /reference:$lz4Assembly `
     /reference:System.Windows.Forms.dll `
     /reference:System.Drawing.dll `
-    (Join-Path $root 'LifeAfterPresetLauncher.cs')
+    /reference:System.Web.Extensions.dll `
+    "/resource:$(Join-Path $root 'native-fps-integration\patches\panel.original.bin'),panel.original.bin" `
+    "/resource:$(Join-Path $root 'native-fps-integration\patches\panel.v04.bin'),panel.v04.bin" `
+    "/resource:$(Join-Path $root 'native-fps-integration\patches\manager.original.bin'),manager.original.bin" `
+    "/resource:$(Join-Path $root 'native-fps-integration\patches\manager.v04.bin'),manager.v04.bin" `
+    (Join-Path $root 'LifeAfterPresetLauncher.cs') `
+    (Join-Path $root 'native-fps-integration\NativeFpsTool.cs')
 if ($LASTEXITCODE -ne 0) {
     throw "Backend compilation failed with exit code $LASTEXITCODE"
 }
+
+$manifestPath = Join-Path $PSScriptRoot 'runtime-assets-manifest.json'
+$manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$backendEntry = @($manifest.assets | Where-Object { $_.name -eq 'LifeAfterBackend.exe' })
+if ($backendEntry.Count -ne 1) { throw 'Backend asset manifest entry is missing or duplicated.' }
+$backendEntry[0].sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $output).Hash
+[IO.File]::WriteAllText($manifestPath, (($manifest | ConvertTo-Json -Depth 10) + "`n"), (New-Object Text.UTF8Encoding($false)))
 
 Write-Host "Backend generated: $output"

@@ -55,6 +55,11 @@ let updateService = null;
 let updateCheckInFlight = null;
 let pendingUpdate = null;
 let mainWindow = null;
+let uiTheme = 'light';
+const windowThemeColors = {
+  light: { background: '#e9eff6', caption: '#26303d' },
+  dark: { background: '#171e28', caption: '#f3f4f6' }
+};
 let tray = null;
 let isQuitting = false;
 let cachedQrUrl = '';
@@ -347,10 +352,9 @@ async function runBackend(args, timeout = 30000) {
       maxBuffer: 1024 * 1024 * 4,
       env: {
         ...process.env,
-        LIFEAFTER_PROTECTED_BACKUP_ROOT: path.join(
-          app.getPath('userData'),
-          'protected-backups'
-        )
+        LIFEAFTER_PROTECTED_BACKUP_ROOT: readSavedRoot()
+          ? path.join(readSavedRoot(), '帧率解锁备份', '接管模式') : '',
+        LIFEAFTER_LEGACY_FPS_PROFILE_ROOT: path.join(app.getPath('userData'), 'auto-fps-profiles')
       }
     });
     return { ok: true, text: (stdout || '').trim(), stderr: (stderr || '').trim() };
@@ -458,6 +462,15 @@ async function getFpsStatus() {
   } catch (error) {
     return { ok: false, error: `帧率状态解析失败：${error.message}` };
   }
+}
+
+async function nativeFpsOperation(operation) {
+  const result = await runBackend([`--native-fps-${operation}`], operation === 'status' ? 120000 : 300000);
+  if (!result.ok) return result;
+  try {
+    const data = JSON.parse(result.text);
+    return data.ok ? { ok: true, data } : { ok: false, error: data.error || '游戏内帧率状态不可用' };
+  } catch (error) { return { ok: false, error: `帧率状态解析失败：${error.message}` }; }
 }
 
 function broadcast(channel, payload) {
@@ -659,12 +672,12 @@ function createWindow() {
     minWidth: 1120,
     minHeight: 720,
     show: false,
-    backgroundColor: '#0b151d',
+    backgroundColor: windowThemeColors[uiTheme].background,
     backgroundMaterial: 'mica',
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#0b151d',
-      symbolColor: '#d8e4e8',
+      color: windowThemeColors[uiTheme].background,
+      symbolColor: windowThemeColors[uiTheme].caption,
       height: 52
     },
     icon: path.join(__dirname, 'renderer', 'assets', 'app-icon.png'),
@@ -706,6 +719,17 @@ function createWindow() {
   });
   return win;
 }
+
+ipcMain.on('launcher:ui-theme', (event, theme) => {
+  if (!['light', 'dark'].includes(theme) || event.sender !== mainWindow?.webContents) return;
+  uiTheme = theme;
+  mainWindow.setBackgroundColor(windowThemeColors[theme].background);
+  mainWindow.setTitleBarOverlay({
+    color: windowThemeColors[theme].background,
+    symbolColor: windowThemeColors[theme].caption,
+    height: 52
+  });
+});
 
 ipcMain.handle('launcher:init', async () => {
   const persistedRoot = readSavedRoot();
@@ -850,6 +874,13 @@ ipcMain.handle('launcher:clean-backups', () => runBackend(['--clean-backups'], 2
 ipcMain.handle('launcher:set-tiaozi', (_event, scale) =>
   runBackend(['--set-tiaozi', String(scale)], 20000));
 ipcMain.handle('launcher:get-fps-status', () => getFpsStatus());
+ipcMain.handle('launcher:get-native-fps-status', () => nativeFpsOperation('status'));
+ipcMain.handle('launcher:apply-native-fps', async () => {
+  if (requiredSecurityUpdate()) return { ok: false, error: '必须更新安全版本后才能继续应用帧率解锁；恢复官方帧率不受限制。' };
+  if (remoteNotices?.pending().some(item => item.type === 'disclaimer')) return { ok: false, error: '请先阅读并同意新的远程免责声明' };
+  return nativeFpsOperation('apply');
+});
+ipcMain.handle('launcher:restore-native-fps', () => nativeFpsOperation('restore'));
 ipcMain.handle('launcher:fps-consent-status', async () => {
   const result = await runBackend(['--fps-consent-status'], 10000);
   if (!result.ok) return result;
@@ -1020,7 +1051,18 @@ ipcMain.handle('launcher:open-fps-backups', async () => {
 });
 
 ipcMain.handle('launcher:open-fps-protected-backups', async () => {
-  const target = path.join(app.getPath('userData'), 'protected-backups');
+  const root = readSavedRoot();
+  if (!root) return { ok: false, error: '请先选择游戏目录' };
+  const target = path.join(root, '帧率解锁备份', '接管模式');
+  fs.mkdirSync(target, { recursive: true });
+  const error = await shell.openPath(target);
+  return error ? { ok: false, error } : { ok: true };
+});
+
+ipcMain.handle('launcher:open-native-fps-backups', async () => {
+  const root = readSavedRoot();
+  if (!root) return { ok: false, error: '请先选择游戏目录' };
+  const target = path.join(root, '帧率解锁备份', '游戏内档位');
   fs.mkdirSync(target, { recursive: true });
   const error = await shell.openPath(target);
   return error ? { ok: false, error } : { ok: true };

@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('launcher', {
+  setUiTheme: (theme) => ipcRenderer.send('launcher:ui-theme', theme),
   init: () => ipcRenderer.invoke('launcher:init'),
   chooseGameRoot: () => ipcRenderer.invoke('launcher:choose-root'),
   scanGameRoots: () => ipcRenderer.invoke('launcher:scan-roots'),
@@ -19,6 +20,10 @@ contextBridge.exposeInMainWorld('launcher', {
   cleanBackups: () => ipcRenderer.invoke('launcher:clean-backups'),
   setTiaozi: (scale) => ipcRenderer.invoke('launcher:set-tiaozi', scale),
   getFpsStatus: () => ipcRenderer.invoke('launcher:get-fps-status'),
+  getNativeFpsStatus: () => ipcRenderer.invoke('launcher:get-native-fps-status'),
+  applyNativeFps: () => ipcRenderer.invoke('launcher:apply-native-fps'),
+  restoreNativeFps: () => ipcRenderer.invoke('launcher:restore-native-fps'),
+  openNativeFpsBackups: () => ipcRenderer.invoke('launcher:open-native-fps-backups'),
   getFpsConsent: () => ipcRenderer.invoke('launcher:fps-consent-status'),
   getNotices: (history = false) => ipcRenderer.invoke('launcher:get-notices', history),
   acknowledgeNotice: (payload) => ipcRenderer.invoke('launcher:ack-notice', payload),

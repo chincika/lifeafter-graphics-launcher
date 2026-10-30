@@ -1,0 +1,126 @@
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: Windows 11 Liquid Glass (by request) · scope: app implementation
+ * nav: retained six destinations · signature: clear graphics readings on softly curved glass · modes: light+dark · posture: restrained · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V4 · weakest: R, kept clear controls and quiet surfaces so the glass does not compete with game status */
+/* Hallmark · dismissed 29 · The user requested liquid glass on the navigation, settings drawer and dialogs; the blur belongs to those functional surfaces rather than decorative glow */
+/* Hallmark · answered F24 · The requested liquid glass uses a fine refractive edge and a neutral offset shadow to distinguish the floating settings drawer from the app beneath */
+:root {
+  --radius-shell:28px; --radius-panel:20px; --radius-control:12px; --radius-small:8px; --radius-floating:24px;
+  --color-canvas:#e9eff6; --color-shell:#dfe8f1;
+  --color-secondary:#414b59; --color-muted:#3c4858; --color-link:#005a9e; --color-edge:#657487;
+  --color-glass-chrome:rgb(245 249 253 / .68);
+  --color-glass-navigation:rgb(246 249 253 / .56);
+  --color-glass-content:rgb(245 249 253 / .28);
+  --color-glass-panel:rgb(253 254 255 / .74);
+  --color-glass-floating:rgb(252 254 255 / .82);
+  --color-glass-control:rgb(252 254 255 / .86);
+  --color-glass-control-hover:rgb(254 254 255 / .96);
+  --color-glass-selected:rgb(250 253 255 / .76);
+  --color-glass-track:rgb(226 233 242 / .64);
+  --color-glass-stroke:rgb(254 254 255 / .88);
+  --color-glass-edge:rgb(254 254 255 / .96);
+  --color-glass-lower-edge:rgb(153 170 190 / .26);
+  --color-glass-shadow:rgb(34 57 84 / .08);
+  --color-glass-shadow-raised:rgb(34 57 84 / .15);
+  --color-glass-overlay:rgb(70 88 112 / .10);
+  --glass-photo-opacity:.48;
+  --glass-blur:20px; --glass-floating-blur:32px;
+  --shadow-glass:inset 0 1px 0 var(--color-glass-edge), inset 0 -1px 0 var(--color-glass-lower-edge), 0 8px 24px var(--color-glass-shadow);
+  --shadow-glass-floating:inset 0 1px 0 var(--color-glass-edge), inset 0 -1px 0 var(--color-glass-lower-edge), 0 16px 40px var(--color-glass-shadow-raised);
+}
+:root[data-theme="dark"] {
+  --color-canvas:#171e28; --color-shell:#172330;
+  --color-secondary:#d6dce5; --color-muted:#cbd5e2; --color-link:#83d8ff; --color-edge:#9caec3;
+  --color-glass-chrome:rgb(30 40 54 / .76);
+  --color-glass-navigation:rgb(28 39 54 / .66);
+  --color-glass-content:rgb(22 33 48 / .28);
+  --color-glass-panel:rgb(38 49 65 / .84);
+  --color-glass-floating:rgb(41 54 72 / .88);
+  --color-glass-control:rgb(51 65 83 / .88);
+  --color-glass-control-hover:rgb(64 79 100 / .94);
+  --color-glass-selected:rgb(80 99 122 / .52);
+  --color-glass-track:rgb(20 31 47 / .56);
+  --color-glass-stroke:rgb(169 196 226 / .20);
+  --color-glass-edge:rgb(204 224 249 / .24);
+  --color-glass-lower-edge:rgb(13 22 37 / .30);
+  --color-glass-shadow:rgb(7 15 28 / .10);
+  --color-glass-shadow-raised:rgb(5 12 24 / .24);
+  --color-glass-overlay:rgb(9 18 32 / .20);
+  --glass-photo-opacity:.38;
+}
+.app { border-radius:var(--radius-shell); isolation:isolate; border-color:var(--color-glass-stroke); background:var(--color-shell); box-shadow:var(--shadow-glass-floating); }
+.app::before { content:""; position:absolute; inset:0; z-index:-1; pointer-events:none; background:url("assets/cover.png") right center / auto 140% no-repeat; filter:grayscale(1); opacity:var(--glass-photo-opacity); }
+.app-header { background:var(--color-glass-chrome); backdrop-filter:blur(var(--glass-blur)) saturate(1.15); }
+.navigation { background:var(--color-glass-navigation); backdrop-filter:blur(var(--glass-blur)) saturate(1.15); }
+.main { background:var(--color-glass-content); border-color:var(--color-glass-stroke); border-radius:var(--radius-floating) 0 0 0; }
+.panel,.game-location,.fps-takeover-pill { position:relative; border-color:var(--color-glass-stroke); border-radius:var(--radius-panel); background:var(--color-glass-panel); color:var(--color-ink); backdrop-filter:blur(var(--glass-blur)) saturate(1.15); box-shadow:var(--shadow-glass); }
+.nav { border-radius:var(--radius-control); }
+.nav.active { background:var(--color-glass-selected); box-shadow:inset 0 1px 0 var(--color-glass-edge), 0 2px 8px var(--color-glass-shadow); }
+.nav.active::before { left:0; height:18px; border-radius:var(--radius-small); }
+.nav:hover { background:var(--color-glass-selected); }
+.standard-button,.quiet-button,.accent-button,.text-button,.row-action,
+.policy-options button,.fps-choices button,select,input[type="number"] { border-radius:var(--radius-control); }
+.standard-button,.quiet-button,select,input[type="number"] { background:var(--color-glass-control); color:var(--color-ink); box-shadow:inset 0 1px 0 var(--color-glass-edge); }
+.standard-button:hover,.quiet-button:hover { background:var(--color-glass-control-hover); }
+.text-button { color:var(--color-link); }
+.text-button:hover { background:var(--color-glass-selected); }
+.row-action:hover { background:var(--color-glass-selected); }
+.accent-button { box-shadow:inset 0 1px 0 var(--color-glass-edge), 0 4px 12px var(--color-glass-shadow); }
+.preview-options,.segments { background:var(--color-glass-panel); color:var(--color-ink); border-color:var(--color-glass-stroke); border-radius:16px; box-shadow:inset 0 1px 0 var(--color-glass-edge); }
+.preview-options button,.segments button { border-radius:var(--radius-control); }
+.preview-options button[aria-pressed="true"],.segments .selected { color:var(--color-link); }
+.quality-choices { border-radius:16px; background:var(--color-glass-track); border-color:var(--color-glass-stroke); box-shadow:inset 0 1px 0 var(--color-glass-edge); }
+.quality-choices button { border-radius:var(--radius-control); }
+.quality-choices button.active { background:var(--color-glass-control); color:var(--color-ink); box-shadow:inset 0 1px 0 var(--color-glass-edge), 0 2px 6px var(--color-glass-shadow); }
+.quality-choices button:hover { background:var(--color-glass-control-hover); }
+.subtle-tag { border-radius:var(--radius-small); background:var(--color-glass-track); color:var(--color-secondary); }
+.statusbar { background:var(--color-glass-chrome); border-color:var(--color-glass-stroke); backdrop-filter:blur(var(--glass-blur)); }
+.fps-choices button { background:var(--color-glass-control); color:var(--color-ink); box-shadow:inset 0 1px 0 var(--color-glass-edge); }
+.fps-choices .active { background:var(--color-accent-soft); color:var(--color-ink); box-shadow:inset 0 1px 0 var(--color-glass-edge); }
+
+/* Game-native FPS page and developer-only legacy entry. */
+.native-fps-stack { display:grid; align-content:start; gap:var(--space-lg); min-width:0; }
+.native-fps-intro, .native-fps-guide, .native-fps-package { padding:var(--space-lg); }
+.native-fps-rates { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--space-xs); margin-top:var(--space-lg); }
+.native-fps-rates > div { min-width:0; padding:var(--space-md); border:1px solid var(--color-rule); border-radius:var(--radius-control); background:var(--color-glass-control); }
+.native-fps-rates small { display:block; color:var(--text-muted); font-size:12px; }
+.native-fps-rates b { display:block; margin-top:var(--space-sm); font-size:25px; font-weight:600; white-space:nowrap; }
+.native-fps-rates b span { color:var(--text-muted); font-size:12px; }
+.native-fps-pill { color:var(--color-accent); font-size:12px; }
+.native-fps-steps { display:grid; gap:var(--space-md); margin-top:var(--space-lg); }
+.native-fps-steps > div { display:flex; gap:var(--space-sm); align-items:flex-start; }
+.native-fps-steps i { display:grid; place-items:center; width:28px; height:28px; flex:none; border-radius:50%; background:var(--color-accent-soft); color:var(--color-accent); font-style:normal; font-weight:600; }
+.native-fps-steps b, .native-fps-steps small { display:block; }
+.native-fps-steps small { color:var(--text-muted); margin-top:4px; line-height:1.5; }
+.native-fps-details { margin-top:var(--space-lg); }
+.native-fps-package .fps-package-state { margin-top:var(--space-lg); }
+.developer-options { margin:var(--space-lg); padding:var(--space-md); border:1px solid var(--color-rule); border-radius:var(--radius-control); background:var(--color-glass-control); }
+.developer-options summary { display:flex; align-items:center; justify-content:space-between; cursor:pointer; list-style:none; }
+.developer-options summary::-webkit-details-marker { display:none; }
+.developer-options summary span, .developer-options summary small { display:block; }
+.developer-options summary small, .developer-options p { color:var(--text-muted); font-size:12px; line-height:1.5; }
+.developer-options summary small { margin-top:4px; }
+.developer-options summary svg { width:18px; height:18px; transition:transform .15s; }
+.developer-options[open] summary svg { transform:rotate(90deg); }
+.developer-options p { margin:var(--space-md) 0; }
+@media (max-width: 800px) { .native-fps-rates { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+.info-message { border-radius:var(--radius-control); }
+.policy-options button { background:var(--color-glass-control); color:var(--color-ink); box-shadow:inset 0 1px 0 var(--color-glass-edge); }
+.policy-options button.active { color:var(--color-link); }
+.fps-path > strong { color:var(--color-link); }
+.drawer-layer { padding:var(--space-sm); background:var(--color-glass-overlay); backdrop-filter:blur(6px); }
+.drawer,.package-menu { border:1px solid var(--color-glass-stroke); border-radius:var(--radius-floating); background:var(--color-glass-floating); color:var(--color-ink); backdrop-filter:blur(var(--glass-floating-blur)) saturate(1.2); box-shadow:var(--shadow-glass-floating); }
+.drawer-footer { border-color:var(--color-glass-lower-edge); }
+.dialog-layer { background:var(--color-glass-overlay); backdrop-filter:blur(6px); }
+.dialog { border:1px solid var(--color-glass-stroke); border-radius:var(--radius-floating); overflow:clip; background:var(--color-glass-floating); color:var(--color-ink); backdrop-filter:blur(var(--glass-floating-blur)) saturate(1.2); box-shadow:var(--shadow-glass-floating); }
+.dialog-footer { background:var(--color-glass-track); color:var(--color-ink); border-color:var(--color-glass-lower-edge); border-radius:0 0 var(--radius-floating) var(--radius-floating); }
+@supports not (backdrop-filter:blur(1px)) {
+  .app-header,.navigation,.statusbar { background:var(--color-shell); }
+  .panel,.game-location,.fps-takeover-pill,.preview-options,.segments,.drawer,.package-menu,.dialog { background:var(--color-panel); color:var(--color-ink); }
+  .main { background:var(--color-content); }
+  .standard-button,.quiet-button,select,input[type="number"] { background:var(--color-panel); }
+}
+@media (max-width:640px) {
+  :root { --radius-shell:20px; --radius-panel:18px; --radius-floating:20px; }
+  .main { border-radius:var(--radius-panel) var(--radius-panel) 0 0; }
+  .drawer-layer { padding:var(--space-xs); }
+}

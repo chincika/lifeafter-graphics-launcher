@@ -1,0 +1,4 @@
+generated/
+test-work/
+test-artifacts/
+__pycache__/

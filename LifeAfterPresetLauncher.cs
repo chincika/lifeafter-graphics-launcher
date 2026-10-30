@@ -507,6 +507,33 @@ internal static class LifeAfterPresetLauncher
             return;
         }
 
+        if (args.Length >= 1 && (args[0].Equals("--native-fps-status", StringComparison.OrdinalIgnoreCase) ||
+            args[0].Equals("--native-fps-apply", StringComparison.OrdinalIgnoreCase) ||
+            args[0].Equals("--native-fps-restore", StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                string root = args.Length >= 2 ? args[1] : gameRoot;
+                if (String.IsNullOrWhiteSpace(root)) throw new InvalidOperationException("请先选择游戏目录。");
+                NativeFpsTool tool = new NativeFpsTool();
+                Dictionary<string, object> result;
+                if (args[0].Equals("--native-fps-apply", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!HasFpsConsent()) throw new InvalidOperationException("请先阅读并同意帧率解锁免责声明；恢复官方帧率不受限制。");
+                    result = tool.Apply(root, true);
+                }
+                else if (args[0].Equals("--native-fps-restore", StringComparison.OrdinalIgnoreCase)) result = tool.Restore(root);
+                else result = tool.Status(root);
+                Console.WriteLine(NativeFpsTool.Json.Serialize(result));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.GetType().Name + "：" + ex.Message);
+                Environment.ExitCode = 1;
+            }
+            return;
+        }
+
         if (args.Length >= 1 && args[0].Equals("--fps-status", StringComparison.OrdinalIgnoreCase))
         {
             Console.WriteLine(GetFpsUnlockStatusJson());
@@ -852,6 +879,24 @@ internal static class LifeAfterPresetLauncher
         }
 
         PresetData data = MergePresetWithCurrentConfig(BuildPreset(preset));
+        // A high-FPS choice made in the game's own settings should survive a
+        // subsequent launcher start with a 120-FPS graphics preset. Explicit
+        // 25/60 presets still select their requested native frame rate.
+        string retainedNativeFrame = null;
+        if (preset.EndsWith(" 120", StringComparison.OrdinalIgnoreCase))
+        {
+            string currentFrame = ReadJsonNumber(File.ReadAllText(qualityConfigPath, Encoding.UTF8), "frame");
+            if (currentFrame == "7" || currentFrame == "8" || currentFrame == "9" || currentFrame == "10")
+            {
+                Dictionary<string, object> nativeStatus = new NativeFpsTool().Status(gameRoot);
+                string nativeState = Convert.ToString(nativeStatus["state"], CultureInfo.InvariantCulture);
+                if (nativeState == "native" || (nativeState == "prototype" && currentFrame == "7"))
+                {
+                    retainedNativeFrame = currentFrame;
+                    data = new PresetData(data.Pc, SetRawNumber(data.Quality, "frame", Int32.Parse(currentFrame, CultureInfo.InvariantCulture)));
+                }
+            }
+        }
         string pcBackup = BackupConfig(pcConfigPath);
         string qualityBackup = BackupConfig(qualityConfigPath);
 
@@ -865,6 +910,7 @@ internal static class LifeAfterPresetLauncher
                          pcBackup + Environment.NewLine +
                          qualityBackup + Environment.NewLine +
                          "仅修改分辨率与帧率，其他画质、特效和按键配置已保留。";
+        if (retainedNativeFrame != null) message += Environment.NewLine + "已保留游戏内选择的高帧档位。";
 
         if (launch)
         {
@@ -1867,10 +1913,8 @@ internal static class LifeAfterPresetLauncher
             "LIFEAFTER_PROTECTED_BACKUP_ROOT");
         if (!String.IsNullOrWhiteSpace(configured))
             return Path.GetFullPath(configured.Trim());
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "LifeAfterGraphicsLauncher",
-            "protected-backups");
+        if (String.IsNullOrWhiteSpace(gameRoot)) throw new InvalidOperationException("请先选择游戏目录。");
+        return Path.Combine(gameRoot, "帧率解锁备份", "接管模式");
     }
 
     private static string FpsInstallId()
@@ -2048,6 +2092,13 @@ internal static class LifeAfterPresetLauncher
                 return "{\"ok\":false,\"error\":\"请先选择有效的游戏目录。\"}";
             if (!File.Exists(packagePath))
                 return "{\"ok\":false,\"error\":\"未找到 Documents\\\\script.py314.lc.npk。\"}";
+            // A native-options archive deliberately retains the original
+            // set_frame_rate method. Do not mistake its manager module for a
+            // new stock auto-profile or let either mode overwrite the other.
+            if (new NativeFpsTool().HasNativeSlots(gameRoot))
+                return "{\"ok\":true,\"compatible\":false,\"writable\":false,\"state\":\"native-mode-active\"," +
+                    "\"stateLabel\":\"游戏内档位已启用\",\"gameRunning\":" + (IsFpsGameRunning() ? "true" : "false") +
+                    ",\"error\":\"请先在帧率解锁主界面恢复官方帧率，再使用接管模式。\",\"packagePath\":\"" + JsonEscape(packagePath) + "\"}";
 
             FpsNxpkRecord record;
             byte[] originalPatch;
@@ -2239,6 +2290,8 @@ internal static class LifeAfterPresetLauncher
     private static string ApplyFpsUnlock(int target)
     {
         if (!HasFpsConsent()) throw new InvalidOperationException("请先阅读并同意帧率解锁免责声明；恢复官方帧率不受限制。");
+        if (!String.IsNullOrWhiteSpace(gameRoot) && new NativeFpsTool().HasNativeSlots(gameRoot))
+            throw new InvalidOperationException("已安装游戏内帧率档位，请先在主界面恢复官方帧率，再使用接管模式。");
         if (target != 180 && target != 240 && target != 300)
             throw new InvalidOperationException("仅支持 180、240、300 FPS。");
         EnsureFpsGameStopped();
@@ -2318,6 +2371,8 @@ internal static class LifeAfterPresetLauncher
 
     private static string RestoreFpsUnlock()
     {
+        if (!String.IsNullOrWhiteSpace(gameRoot) && new NativeFpsTool().HasNativeSlots(gameRoot))
+            throw new InvalidOperationException("检测到游戏内帧率档位，请在主界面使用恢复官方帧率。");
         EnsureFpsGameStopped();
         string packagePath = FpsPackagePath();
         if (!IsValidGameRoot(gameRoot) || !File.Exists(packagePath))
@@ -2966,25 +3021,39 @@ internal static class LifeAfterPresetLauncher
         FpsNxpkRecord record,
         string currentSlotHash)
     {
-        string root = FpsAutoProfileRoot();
-        if (!Directory.Exists(root)) return null;
+        string currentRoot = FpsAutoProfileRoot();
+        string oldRoot = Environment.GetEnvironmentVariable("LIFEAFTER_LEGACY_FPS_PROFILE_ROOT");
+        if (String.IsNullOrWhiteSpace(oldRoot))
+            oldRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "LifeAfterGraphicsLauncher", "auto-fps-profiles");
+        List<string> roots = new List<string> { currentRoot };
+        if (!Path.GetFullPath(oldRoot).TrimEnd('\\').Equals(Path.GetFullPath(currentRoot).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+            roots.Add(oldRoot);
         FpsPatchSet found = null;
-        foreach (string directory in Directory.GetDirectories(root, "auto-*"))
+        foreach (string root in roots)
         {
-            FpsPatchSet candidate;
-            try
+            if (!Directory.Exists(root)) continue;
+            foreach (string directory in Directory.GetDirectories(root, "auto-*"))
             {
-                candidate = ReadCachedAutoFpsPatchSet(
-                    directory, record, currentSlotHash);
+                FpsPatchSet candidate;
+                try { candidate = ReadCachedAutoFpsPatchSet(directory, record, currentSlotHash); }
+                catch { continue; }
+                if (candidate == null) continue;
+                if (found != null)
+                {
+                    bool same = found.OriginalSlotSha256.Equals(candidate.OriginalSlotSha256, StringComparison.OrdinalIgnoreCase) &&
+                        found.Patches.Count == candidate.Patches.Count;
+                    foreach (KeyValuePair<int, FpsPatchDefinition> item in found.Patches)
+                    {
+                        FpsPatchDefinition other;
+                        if (!candidate.Patches.TryGetValue(item.Key, out other) ||
+                            !item.Value.SlotSha256.Equals(other.SlotSha256, StringComparison.OrdinalIgnoreCase)) same = false;
+                    }
+                    if (!same) throw new InvalidDataException("发现多个不一致的自动适配档案。");
+                    continue;
+                }
+                found = candidate;
             }
-            catch
-            {
-                continue;
-            }
-            if (candidate == null) continue;
-            if (found != null)
-                throw new InvalidDataException("发现多个匹配的自动适配档案。");
-            found = candidate;
         }
         return found;
     }
@@ -3391,6 +3460,8 @@ internal static class LifeAfterPresetLauncher
     {
         if (!IsValidGameRoot(gameRoot))
             throw new InvalidOperationException("请先选择有效的游戏目录。");
+        if (new NativeFpsTool().HasNativeSlots(gameRoot))
+            throw new InvalidOperationException("游戏内档位已启用，接管模式的备份清理暂不可用。");
 
         string packagePath = FpsPackagePath();
         if (!File.Exists(packagePath))

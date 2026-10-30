@@ -4,7 +4,7 @@ v2.6.1 安全构建号为 3。签名清单可加入 `"updatePolicy":{"minimumVer
 
 客户端只从官方仓库 `launcher-notices` Release 的 `notices.json` 获取经过 Ed25519 签名的文本清单，每次启动检查，之后每一分钟检查。支持 ETag 条件请求，不变时服务器可返回 304；请求互斥、八秒超时，未更新内容不重复写盘。不下载可执行代码，不修改游戏文件。
 
-首次部署需要在 GitHub 创建该公告 Release 并上传签名文件。当前未部署，不会自动发布公告。
+公告 Release 已部署。2026-10-06 已发布 sequence=2，最低版本 2.6.1、最低安全构建号 3。后续发布必须先查询远端现状，不直接沿用这里的快照。完整操作说明见项目根目录 `release-operations/README.md`。
 
 原始 JSON：
 

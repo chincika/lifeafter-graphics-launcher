@@ -3,8 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="明日之后本地画质预设、游戏启动、多开调度与实例状态工具。">
   <title>明日之后画质启动器</title>
+  <script src="theme.js"></script>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="fluent.css">
+  <link rel="stylesheet" href="glass.css">
 </head>
 <body>
   <svg class="icon-sprite" aria-hidden="true">
@@ -35,40 +39,42 @@
     <symbol id="i-coffee" viewBox="0 0 24 24"><path d="M5 8h12v6a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5V8Z"/><path d="M17 10h2a3 3 0 0 1 0 6h-2M8 4c0 1 1 1 1 2M12 3c0 1 1 1 1 2"/></symbol>
   </svg>
 
-  <header class="topbar">
-    <div class="brand-mark">LA</div>
+  <div class="application app">
+  <header class="topbar app-header">
+    <img class="app-logo" src="assets/app-icon.png" width="24" height="24" alt="">
     <div class="topbar-title">
       <strong>明日之后画质启动器</strong>
-      <span>CONTROL CENTER</span>
+      
     </div>
-    <div class="topbar-status"><span class="status-dot"></span><span id="topStatus">本地模式</span></div>
+    <button type="button" class="theme-toggle" id="themeToggle" aria-label="切换深色主题" title="切换深色主题"><svg aria-hidden="true"><use href="#i-image"/></svg><span>深色</span></button>
+    <div class="topbar-status"><svg aria-hidden="true"><use href="#i-shield"/></svg><span id="topStatus">本地模式</span></div>
   </header>
 
   <div class="app-shell">
-    <aside class="sidebar" aria-label="主导航">
+    <aside class="sidebar navigation" aria-label="主导航">
       <nav class="nav-list">
-        <button class="nav-item active" data-view="launch" aria-label="启动">
-          <svg><use href="#i-play"/></svg><span>启动</span>
+        <button class="nav-item nav active" data-view="launch" aria-label="启动">
+          <svg aria-hidden="true"><use href="#i-play"/></svg><span>启动</span>
         </button>
-        <button class="nav-item" data-view="multi" aria-label="多开">
-          <svg><use href="#i-layers"/></svg><span>多开</span>
+        <button class="nav-item nav" data-view="multi" aria-label="多开">
+          <svg aria-hidden="true"><use href="#i-layers"/></svg><span>多开</span>
         </button>
-        <button class="nav-item" data-view="history" aria-label="记录">
-          <svg><use href="#i-clock"/></svg><span>记录</span>
+        <button class="nav-item nav" data-view="history" aria-label="记录">
+          <svg aria-hidden="true"><use href="#i-clock"/></svg><span>记录</span>
         </button>
-        <button class="nav-item" data-view="fps" aria-label="帧率解锁">
-          <small class="nav-badge">NEW</small><svg><use href="#i-gauge"/></svg><span>帧率解锁</span>
+        <button class="nav-item nav" data-view="fps" aria-label="帧率解锁">
+          <svg aria-hidden="true"><use href="#i-gauge"/></svg><span>帧率解锁</span>
         </button>
-        <button class="nav-item" data-view="remote" aria-label="后台与远程">
-          <small class="nav-badge">BETA</small><svg><use href="#i-wifi"/></svg><span>后台与远程</span>
+        <button class="nav-item nav" data-view="remote" aria-label="后台与远程">
+          <svg aria-hidden="true"><use href="#i-wifi"/></svg><span>后台与远程</span>
         </button>
-        <button class="nav-item" data-view="tools" aria-label="工具">
-          <svg><use href="#i-wrench"/></svg><span>工具</span>
+        <button class="nav-item nav" data-view="tools" aria-label="工具">
+          <svg aria-hidden="true"><use href="#i-wrench"/></svg><span>工具</span>
         </button>
       </nav>
       <div class="sidebar-foot">
-        <button class="icon-button" id="aboutButton" aria-label="关于"><svg><use href="#i-info"/></svg></button>
-        <span id="sidebarVersion">v2.6.0</span>
+        <button class="icon-button" id="aboutButton" aria-label="关于"><svg aria-hidden="true"><use href="#i-info"/></svg></button>
+        <span id="sidebarVersion">v2.7.0</span>
       </div>
     </aside>
 
@@ -76,21 +82,26 @@
       <section class="hero">
         <div class="hero-overlay"></div>
         <div class="hero-copy">
-          <span class="eyebrow" id="heroEyebrow">LIFEAFTER · GRAPHICS</span>
-          <h1 id="heroTitle">画质与实例，一处掌控</h1>
-          <p id="heroDescription">安全切换预设、稳定多开、实时观察每个窗口。</p>
+          <span id="heroEyebrow" hidden></span>
+          <h1 id="heroTitle">启动</h1>
+          <p id="heroDescription">选择画质预设，准备好后进入明日之后。</p>
         </div>
-        <button class="path-pill" id="chooseRootButton">
-          <span class="path-icon"><svg><use href="#i-folder"/></svg></span>
+        <button class="scheduling-entry" id="openProcessScheduling" type="button">
+                      <svg aria-hidden="true"><use href="#i-cpu"/></svg>
+                      <span id="schedulingSummary">调度：高 · 性能核心</span>
+                      <svg aria-hidden="true"><use href="#i-chevron"/></svg>
+                    </button>
+        <button class="path-pill game-location" id="chooseRootButton">
+          <span class="path-icon"><svg aria-hidden="true"><use href="#i-folder"/></svg></span>
           <span class="path-copy">
             <span class="path-label"><small>当前游戏包体</small><b id="gamePlatformLabel">正在识别</b><em>使用中</em></span>
             <strong id="gameRoot">正在检测…</strong>
           </span>
-          <svg class="chevron"><use href="#i-chevron"/></svg>
+          <svg aria-hidden="true" class="chevron"><use href="#i-chevron"/></svg>
         </button>
         <div class="fps-takeover-pill" id="fpsTakeoverPill" hidden>
-          <svg><use href="#i-gauge"/></svg>
-          <span><small>当前接管规则</small><strong id="fpsHeroRule">配置选择 120 FPS → 游戏实际 180 FPS</strong></span>
+          <svg aria-hidden="true"><use href="#i-gauge"/></svg>
+          <span><small>当前接管规则</small><strong id="fpsHeroRule">配置选择 120 <abbr title="每秒帧数">FPS</abbr> → 游戏实际 180 <abbr title="每秒帧数">FPS</abbr></strong></span>
         </div>
       </section>
 
@@ -98,13 +109,12 @@
       <section class="package-menu" id="packageMenu" aria-label="游戏包体" hidden>
         <header class="package-menu-head">
           <div>
-            <span class="section-kicker">GAME INSTALLATIONS</span>
             <h2>游戏包体</h2>
             <p>切换后，画质、启动通道和帧率状态会重新检测。</p>
           </div>
           <div class="package-menu-actions">
-            <button id="scanGameRoots"><svg><use href="#i-refresh"/></svg>扫描全部磁盘</button>
-            <button class="primary" id="addGameRoot"><svg><use href="#i-plus"/></svg>添加游戏目录</button>
+            <button id="scanGameRoots"><svg aria-hidden="true"><use href="#i-refresh"/></svg>扫描全部磁盘</button>
+            <button class="primary" id="addGameRoot"><svg aria-hidden="true"><use href="#i-plus"/></svg>添加游戏目录</button>
           </div>
         </header>
         <div class="package-scan-state" id="packageScanState">
@@ -114,7 +124,7 @@
         </div>
         <div class="package-list" id="packageList"></div>
         <footer class="package-menu-foot">
-          <svg><use href="#i-shield"/></svg>
+          <svg aria-hidden="true"><use href="#i-shield"/></svg>
           自动扫描只读取目录结构；移除记录不会删除任何游戏文件。发现多个包体时保持当前选择。
         </footer>
       </section>
@@ -122,25 +132,12 @@
       <section id="launchView" class="view active">
         <div class="workspace-grid">
           <div class="left-stack">
-            <section class="glass-card preset-card">
+            <section class="glass-card panel preset-card">
               <div class="section-header">
                 <div>
-                  <span class="section-kicker">CURRENT PRESET</span>
                   <h2>当前预设</h2>
                 </div>
                 <div class="preset-header-actions">
-                  <div class="launch-mode-control">
-                    <label class="toggle" title="启动时使用游戏官方 x64-3 性能通道">
-                      <input id="performanceMode" type="checkbox" checked>
-                      <span></span>性能优先
-                    </label>
-                    <small id="performanceModeStatus" data-state="checking">正在检测性能通道…</small>
-                    <button class="scheduling-entry" id="openProcessScheduling" type="button">
-                      <svg><use href="#i-cpu"/></svg>
-                      <span id="schedulingSummary">调度：高 · 性能核心</span>
-                      <svg><use href="#i-chevron"/></svg>
-                    </button>
-                  </div>
                   <div class="preset-select-wrap">
                     <select id="presetSelect" aria-label="画质预设">
                       <option>2K 120</option><option>1080p 120</option><option>1080p 60</option>
@@ -154,7 +151,7 @@
               <div class="preset-body">
                 <div class="preset-orbit">
                   <div class="orbit-ring"></div>
-                  <svg><use href="#i-monitor"/></svg>
+                  <svg aria-hidden="true"><use href="#i-monitor"/></svg>
                 </div>
                 <div class="preset-details">
                   <div class="preset-title"><span id="resolutionLabel">2K</span><b>·</b><span id="fpsLabel">120 FPS</span></div>
@@ -162,24 +159,34 @@
                     <div><small>分辨率</small><strong id="resolutionValue">2560 × 1440</strong></div>
                     <div><small>帧率上限</small><strong id="fpsValue">120 FPS</strong></div>
                   </div>
-                  <div class="quality-tabs">
-                    <button data-preset="2K 120"><svg><use href="#i-star"/></svg><span>极致画质</span></button>
-                    <button data-preset="1080p 120"><svg><use href="#i-image"/></svg><span>高清画质</span></button>
-                    <button data-preset="900p 120"><svg><use href="#i-leaf"/></svg><span>均衡画质</span></button>
-                    <button data-preset="540p 25"><svg><use href="#i-sliders"/></svg><span>流畅画质</span></button>
+                  <div class="quality-tabs quality-choices">
+                    <button data-preset="2K 120"><svg aria-hidden="true"><use href="#i-star"/></svg><span>极致画质</span></button>
+                    <button data-preset="1080p 120"><svg aria-hidden="true"><use href="#i-image"/></svg><span>高清画质</span></button>
+                    <button data-preset="900p 120"><svg aria-hidden="true"><use href="#i-leaf"/></svg><span>均衡画质</span></button>
+                    <button data-preset="540p 25"><svg aria-hidden="true"><use href="#i-sliders"/></svg><span>流畅画质</span></button>
                   </div>
                 </div>
               </div>
+              <div class="preset-operator-row">
+                  <div class="launch-mode-control">
+                    <label class="toggle" title="启动时使用游戏官方 x64-3 性能通道">
+                      <input id="performanceMode" type="checkbox" checked>
+                      <span></span>性能优先
+                    </label>
+                    <small id="performanceModeStatus" data-state="checking">正在检测性能通道…</small>
+                    
+                  </div>
+              </div>
               <div class="primary-actions">
-                <button class="button secondary" id="applyButton">仅应用</button>
-                <button class="button primary" id="applyLaunchButton"><svg><use href="#i-play"/></svg>应用并启动</button>
-                <button class="button ghost" id="readConfigButton"><svg><use href="#i-refresh"/></svg>读取当前</button>
+                <button class="button secondary standard-button" id="applyButton">仅应用</button>
+                <button class="button primary accent-button" id="applyLaunchButton"><svg aria-hidden="true"><use href="#i-play"/></svg>应用并启动</button>
+                <button class="button ghost quiet-button" id="readConfigButton"><svg aria-hidden="true"><use href="#i-refresh"/></svg>读取当前</button>
               </div>
             </section>
 
-            <section class="glass-card plans-card" id="plansCard">
+            <section class="glass-card panel plans-card" id="plansCard">
               <div class="section-header compact">
-                <div><span class="section-kicker">MULTI LAUNCH</span><h2>多开方案</h2></div>
+                <div><h2>多开方案</h2></div>
                 <div class="plan-controls">
                   <label>模式
                     <select id="multiMode"><option value="manual">分步确认</option><option value="auto">自动倒计时</option></select>
@@ -194,35 +201,477 @@
                 <label>主号<select id="mainPreset"><option>2K 120</option><option>1080p 120</option><option>1080p 60</option><option>900p 120</option></select></label>
                 <label>小号<select id="idlePreset"><option>540p 25</option><option>540p 60</option><option>720p 60</option><option>900p 60</option></select></label>
                 <label>间隔<input id="waitSeconds" type="number" min="5" max="180" value="20"><span>秒</span></label>
-                <button class="button primary small" id="multiLaunchButton"><svg><use href="#i-layers"/></svg>稳定多开</button>
+                <button class="button primary accent-button small" id="multiLaunchButton"><svg aria-hidden="true"><use href="#i-layers"/></svg>稳定多开</button>
               </div>
             </section>
           </div>
 
-          <aside class="glass-card monitor-card">
+          <aside class="glass-card panel monitor-card">
             <div class="monitor-pane" id="instancesPanel">
               <div class="section-header compact">
-                <div><span class="section-kicker">LIVE INSTANCES</span><h2>实例运行详情</h2></div>
+                <div><h2>实例运行详情</h2></div>
                 <span class="live-badge"><i></i><b id="runningCount">0</b> 运行中</span>
               </div>
               <div id="instanceList" class="instance-list"></div>
-              <button class="refresh-button" id="refreshInstances"><svg><use href="#i-refresh"/></svg>刷新状态</button>
+              <button class="refresh-button" id="refreshInstances"><svg aria-hidden="true"><use href="#i-refresh"/></svg>刷新状态</button>
             </div>
 
-            <section class="scheduling-drawer" id="processSchedulingDrawer" hidden>
+
+          </aside>
+        </div>
+      </section>
+
+      <section id="historyView" class="view">
+        <div class="history-head">
+          <div>
+            <div class="history-title-row">
+              <h1>启动记录</h1>
+              <label class="toggle history-record-toggle">
+                <input id="historyEnabled" type="checkbox" checked>
+                <span></span>
+                <b id="historyEnabledLabel">自动记录已开启</b>
+              </label>
+            </div>
+            <p>按游戏 ID 统计每个账号的运行时长</p>
+          </div>
+          <div class="history-head-actions">
+            <span class="privacy-badge"><svg aria-hidden="true"><use href="#i-shield"/></svg>数据仅保存在本机</span>
+            <div class="range-tabs segments" role="tablist" aria-label="统计周期">
+              <button data-range="day">日</button>
+              <button class="active" data-range="week">周</button>
+              <button data-range="month">月</button>
+              <button data-range="total">总</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="summary-grid">
+          <article class="glass-card panel summary-card">
+            <span class="summary-icon cyan"><svg aria-hidden="true"><use href="#i-clock"/></svg></span>
+            <small>总运行时长</small>
+            <strong id="historyTotal">0小时0分</strong>
+            <span id="historyDurationDelta">本周期暂无记录</span>
+          </article>
+          <article class="glass-card panel summary-card">
+            <span class="summary-icon green"><svg aria-hidden="true"><use href="#i-play"/></svg></span>
+            <small>启动次数</small>
+            <strong id="historyLaunches">0次</strong>
+            <span id="historyLaunchDelta">本周期暂无启动</span>
+          </article>
+          <article class="glass-card panel summary-card">
+            <span class="summary-icon amber"><svg aria-hidden="true"><use href="#i-star"/></svg></span>
+            <small>最常用账号</small>
+            <strong id="historyMostUsed">暂无</strong>
+            <span id="historyMostUsedShare">等待首次检测</span>
+          </article>
+          <article class="glass-card panel summary-card">
+            <span class="summary-icon violet"><svg aria-hidden="true"><use href="#i-sliders"/></svg></span>
+            <small>平均单次</small>
+            <strong id="historyAverage">0分钟</strong>
+            <span>按已记录会话计算</span>
+          </article>
+        </div>
+
+        <div class="history-content-grid">
+          <section class="glass-card panel ranking-card">
+            <div class="section-header compact">
+              <div><h2>账号时长排行</h2></div>
+              <span class="history-count" id="historyAccountCount">0 个账号</span>
+            </div>
+            <div id="accountRanking" class="account-ranking"></div>
+          </section>
+
+          <section class="glass-card panel sessions-card">
+            <div class="section-header compact">
+              <div><h2>最近启动会话</h2></div>
+              <span class="live-badge subtle" id="historyRecordingBadge"><i></i>自动记录</span>
+            </div>
+            <div class="session-table">
+              <div class="session-row session-header-row">
+                <span>账号 ID</span><span>开始时间</span><span>结束时间</span><span>时长</span>
+              </div>
+              <div id="sessionRows"></div>
+            </div>
+          </section>
+        </div>
+
+        <div class="history-footer">
+          <div>
+            <button class="button secondary standard-button" id="exportHistory"><svg aria-hidden="true"><use href="#i-list"/></svg>导出 CSV</button>
+            <button class="button ghost quiet-button" id="openHistoryFolder"><svg aria-hidden="true"><use href="#i-folder"/></svg>打开记录目录</button>
+          </div>
+          <p><svg aria-hidden="true"><use href="#i-info"/></svg>切换游戏 ID 会自动分段；总时长按多个窗口共同覆盖的时间去重。</p>
+        </div>
+      </section>
+
+      <section id="fpsView" class="view">
+        <div class="fps-layout native-fps-layout">
+          <div class="native-fps-stack">
+            <section class="glass-card panel fps-target-card native-fps-intro">
+              <div class="fps-section-head">
+                <div><h2>“真”帧率解锁</h2><p>启用后，可直接在游戏内画质设置中选择 180、240、300 或 360 FPS。</p></div>
+                <span class="fps-state-badge" id="nativeFpsBadge"><i></i><b>正在检测包体…</b></span>
+              </div>
+              <div class="native-fps-rates" aria-label="可添加的游戏内帧率档位">
+                <div><small>游戏内档位</small><b>180 <span>FPS</span></b></div>
+                <div><small>游戏内档位</small><b>240 <span>FPS</span></b></div>
+                <div><small>游戏内档位</small><b>300 <span>FPS</span></b></div>
+                <div><small>游戏内档位</small><b>360 <span>FPS</span></b></div>
+              </div>
+            </section>
+            <section class="glass-card panel fps-route-card native-fps-guide">
+              <div class="fps-route-head"><div><h2>使用方式</h2></div><span class="native-fps-pill">游戏内切换</span></div>
+              <div class="native-fps-steps">
+                <div><i>1</i><span><b>退出游戏并启用</b><small>启动器会先在游戏目录中备份包体。</small></span></div>
+                <div><i>2</i><span><b>进入显示设置</b><small>在帧数设置中选择所需档位；使用 120 帧预设启动时会保留高帧选择。</small></span></div>
+                <div><i>3</i><span><b>按需恢复</b><small>原有 120 帧及其他官方档位仍可使用。</small></span></div>
+              </div>
+              <div class="fps-route-note"><svg aria-hidden="true"><use href="#i-info"/></svg><span>帧率数字为目标上限，实际帧数取决于设备和游戏场景。敬请期待后续“真”帧率解锁自动适配游戏版本更新。</span></div>
+            </section>
+          </div>
+          <aside class="glass-card panel fps-package-card native-fps-package">
+            <div class="fps-section-head"><div><h2>状态与恢复</h2></div><button class="fps-refresh" id="refreshNativeFps" aria-label="刷新游戏内帧率状态"><svg aria-hidden="true"><use href="#i-refresh"/></svg></button></div>
+            <div class="fps-package-state" id="nativeFpsState"><span><svg aria-hidden="true"><use href="#i-shield"/></svg></span><div><strong>正在识别包体</strong><p>验证游戏版本和文件完整性</p></div></div>
+            <div class="fps-details native-fps-details">
+              <div><span>支持版本</span><b>已验证的发烧平台包体</b></div>
+              <div><span>原有档位</span><b class="ok">保留</b></div>
+              <div><span>备份位置</span><b>游戏目录内</b></div>
+              <div><span>写入保护</span><b class="ok">整包校验</b></div>
+            </div>
+            <div class="fps-actions">
+              <button class="button primary accent-button" id="applyNativeFps" disabled>启用游戏内四档</button>
+              <button class="button secondary standard-button" id="restoreNativeFps" disabled>恢复官方帧率</button>
+              <button class="button ghost quiet-button" id="openNativeFpsBackups"><svg aria-hidden="true"><use href="#i-folder"/></svg>打开游戏目录内的备份</button>
+            </div>
+            <p class="fps-micro" id="nativeFpsBackupPath">备份保存在游戏目录的“帧率解锁备份”文件夹。</p>
+          </aside>
+        </div>
+      </section>
+
+      <section id="legacyFpsView" class="view">
+        <div class="fps-layout">
+          <div class="fps-stack">
+            <section class="glass-card panel fps-target-card">
+              <div class="fps-section-head">
+                <div>
+                  <h2>选择 120 FPS 档的实际目标</h2>
+                  <p>只接管原生 120 档；写入前完整备份，成功后自动清理冗余备份。</p>
+                </div>
+                <span class="fps-state-badge" id="fpsStateBadge"><i></i><b>正在检测包体…</b></span>
+              </div>
+              <div class="fps-targets fps-choices" role="radiogroup" aria-label="帧率接管目标">
+                <button class="fps-target" data-fps-target="120" role="radio" aria-checked="false">
+                  <i></i><small>原版</small><b>120 <span>FPS</span></b>
+                  <p>不接管<br>使用官方原始逻辑</p>
+                </button>
+                <button class="fps-target active" data-fps-target="180" role="radio" aria-checked="true">
+                  <i></i><small>推荐</small><b>180 <span>FPS</span></b>
+                  <p>120 档 → 180<br>兼顾负载与流畅度</p>
+                </button>
+                <button class="fps-target" data-fps-target="240" role="radio" aria-checked="false">
+                  <i></i><small>高帧</small><b>240 <span>FPS</span></b>
+                  <p>120 档 → 240<br>适合高刷设备</p>
+                </button>
+                <button class="fps-target" data-fps-target="300" role="radio" aria-checked="false">
+                  <i></i><small>实验</small><b>300 <span>FPS</span></b>
+                  <p>120 档 → 300<br>实验档，负载更高</p>
+                </button>
+              </div>
+            </section>
+
+            <section class="glass-card panel fps-route-card">
+              <div class="fps-route-head">
+                <div><h2>配置档位生效路径</h2></div>
+                <div class="fps-route-legend"><span><i></i>原样直通</span><span><i></i>接管替换</span></div>
+              </div>
+              <div class="fps-rail">
+                <div class="fps-node"><i></i><b>25</b><small>保持 25</small></div>
+                <div class="fps-node"><i></i><b>30</b><small>保持 30</small></div>
+                <div class="fps-node"><i></i><b>40</b><small>保持 40</small></div>
+                <div class="fps-node"><i></i><b>50</b><small>保持 50</small></div>
+                <div class="fps-node"><i></i><b>60</b><small>保持 60</small></div>
+                <div class="fps-node"><i></i><b>90</b><small>保持 90</small></div>
+                <div class="fps-node takeover"><i></i><b id="fpsRouteTarget">120 → 180</b><small>由启动器接管</small></div>
+              </div>
+              <div class="fps-route-note">
+                <svg aria-hidden="true"><use href="#i-info"/></svg>
+                <span>启用后，游戏界面的“120 FPS”名称不再代表真实上限；启动页会显示当前实际映射值。</span>
+              </div>
+              <div class="fps-guidance-area">
+                <section class="fps-retention-panel">
+                  <div class="retention-heading">
+                    <span class="retention-shield"><svg aria-hidden="true"><use href="#i-shield"/></svg></span>
+                    <div>
+                      
+                      <strong>官方初始还原点，永久保留</strong>
+                      <p>无论自动清理还是手动清理，都不会删除这份从未修改的数据包。</p>
+                    </div>
+                    <span class="permanent-badge">永久</span>
+                  </div>
+                  <div class="retention-flow">
+                    <span><i>1</i><b>写入前</b><small>创建完整事务备份</small></span>
+                    <em></em>
+                    <span><i>2</i><b>应用成功</b><small>自动清理更早备份</small></span>
+                    <em></em>
+                    <span class="keep"><i>3</i><b>最终保留</b><small>官方原包 + 最新 1 份</small></span>
+                  </div>
+                  <div class="retention-foot"><svg aria-hidden="true"><use href="#i-check"/></svg>失败或校验未通过时不会执行自动清理</div>
+                </section>
+                <div class="fps-guidance-stack">
+                  <div class="fps-launch-link">
+                    <small>启动页联动提示</small>
+                    <p id="fpsLaunchHint">选择“2K 120”等预设时，将显示“配置 120 · 实际 180”；其他帧率预设保持原标签。</p>
+                  </div>
+                  <div class="fps-warning">
+                    <strong>联网游戏文件修改提示</strong>
+                    应用与恢复时要求游戏完全退出；本功能不包含反作弊绕过。
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <aside class="glass-card panel fps-package-card">
+            <div class="fps-section-head">
+              <div><h2>包体与恢复保护</h2></div>
+              <button class="fps-refresh" id="refreshFpsStatus" aria-label="刷新帧率状态"><svg aria-hidden="true"><use href="#i-refresh"/></svg></button>
+            </div>
+            <div class="fps-platform-chip" id="fpsPlatformChip">
+              <i></i><span>正在识别游戏平台</span><small>自动检测</small>
+            </div>
+            <div class="fps-package-state" id="fpsPackageState">
+              <span><svg aria-hidden="true"><use href="#i-shield"/></svg></span>
+              <div><strong>正在识别包体</strong><p>读取 NXPK v3 与 SettingManager 目标槽位</p></div>
+            </div>
+            <div class="fps-package-route">
+              <div class="fps-package-route-item target">
+                <span class="route-icon"><svg aria-hidden="true"><use href="#i-check"/></svg></span>
+                <div>
+                  <small>唯一写入目标，Documents 增量包</small>
+                  <b>script.py314.lc.npk</b>
+                  <p id="fpsTargetPackageMeta">等待读取包体信息</p>
+                </div>
+                <em id="fpsTargetPackageRole">可修改</em>
+              </div>
+              <div class="fps-package-route-line"><i></i><span>严格隔离</span><i></i></div>
+              <div class="fps-package-route-item protected">
+                <span class="route-icon"><svg aria-hidden="true"><use href="#i-shield"/></svg></span>
+                <div>
+                  <small>游戏根目录完整包</small>
+                  <b>script.py314.lc.npk</b>
+                  <p id="fpsRootPackageMeta">仅检测存在性，不读取槽位</p>
+                </div>
+                <em id="fpsRootPackageRole">只读保护</em>
+              </div>
+              <p class="fps-compatibility-summary" id="fpsCompatibilitySummary">正在建立版本兼容档案…</p>
+            </div>
+            <div class="fps-details">
+              <div><span>游戏平台</span><b class="accent" id="fpsPlatformLabel">检测中</b></div>
+              <div><span>当前状态</span><b class="accent" id="fpsCurrentState">检测中</b></div>
+              <div><span>接管范围</span><b>仅原 120 FPS 档</b></div>
+              <div><span>其他档位</span><b class="ok">保持配置文件控制</b></div>
+              <div><span>官方初始还原点</span><b id="fpsBaselineState">首次应用时创建</b></div>
+              <div><span>备份保留</span><b id="fpsBackupCount">0 份临时</b></div>
+              <div><span>写后校验</span><b class="ok">槽位 + 槽外整包</b></div>
+            </div>
+            <div class="fps-actions">
+              <button class="button primary accent-button" id="applyFpsUnlock">应用 180 FPS 接管并备份</button>
+              <button class="button secondary standard-button" id="restoreFpsUnlock">恢复官方原版帧率逻辑</button>
+              <button class="button fps-backup-clean" id="cleanFpsBackups">
+                <svg aria-hidden="true"><use href="#i-list"/></svg>
+                <span><b>清理冗余备份</b><small>保留官方初始还原点</small></span>
+              </button>
+              <button class="button ghost quiet-button" id="openFpsBackups"><svg aria-hidden="true"><use href="#i-folder"/></svg>打开事务备份目录</button>
+              <button class="button ghost quiet-button" id="openFpsProtectedBackups"><svg aria-hidden="true"><use href="#i-shield"/></svg>打开永久还原点目录</button>
+            </div>
+            <p class="fps-micro" id="fpsPackagePath">应用后重新启动的游戏实例生效</p>
+          </aside>
+        </div>
+      </section>
+
+      <section id="remoteView" class="view">
+        <div class="remote-page-head">
+          <div>
+            <h1>后台记录与局域网副屏</h1>
+            <p>关闭窗口后继续统计游戏时长；远端只查看，不接管本机操作。</p>
+          </div>
+          <span class="remote-runtime-badge"><i></i><span><small>守护状态</small><b id="remoteGuardState">正在连接后台守护</b></span></span>
+        </div>
+
+        <div class="remote-layout">
+          <div class="remote-stack">
+            <section class="glass-card panel remote-guard-card">
+              <div class="remote-card-head">
+                <div><h2>托盘常驻</h2><p>隐藏界面后释放渲染窗口，只保留监控与记录核心。</p></div>
+                <span class="remote-state-chip"><i></i>运行中</span>
+              </div>
+              <div class="remote-settings">
+                <div class="remote-setting">
+                  <span class="remote-setting-icon"><svg aria-hidden="true"><use href="#i-tray"/></svg></span>
+                  <span><b>关闭窗口时收至托盘</b><small>最小化始终进入托盘；关闭按钮可按此设置处理</small></span>
+                  <button class="switch-control active" id="minimizeToTrayToggle" aria-pressed="true" aria-label="关闭窗口时收至托盘"><i></i></button>
+                </div>
+                <div class="remote-setting">
+                  <span class="remote-setting-icon"><svg aria-hidden="true"><use href="#i-play"/></svg></span>
+                  <span><b>随系统静默启动</b><small>登录 Windows 后直接驻留托盘，不弹出主窗口</small></span>
+                  <button class="switch-control" id="autoStartToggle" aria-pressed="false" aria-label="随系统静默启动"><i></i></button>
+                </div>
+                <div class="remote-setting">
+                  <span class="remote-setting-icon"><svg aria-hidden="true"><use href="#i-gauge"/></svg></span>
+                  <span><b>后台采样策略</b><small>有游戏或远端连接时加快，无游戏时自动降频</small></span>
+                  <strong class="remote-select-chip">自适应 · 推荐</strong>
+                </div>
+              </div>
+              <div class="remote-resource-strip">
+                <span><small>当前模式</small><b id="remotePollMode">正在检测</b></span>
+                <span><small>渲染窗口</small><b id="remoteRendererState" class="ok">前台使用中</b></span>
+                <span><small>记录落盘</small><b>状态变化 / 60 秒</b></span>
+                <span><small>远端连接</small><b id="remoteClientCount">0 台设备</b></span>
+              </div>
+            </section>
+
+            <section class="glass-card panel remote-route-card">
+              <div class="remote-route-head">
+                <div><h2>状态只向外读，不接受远程控制</h2></div>
+                <span>只读</span>
+              </div>
+              <div class="remote-route">
+                <span><i><svg aria-hidden="true"><use href="#i-monitor"/></svg></i><b>本机监控核心</b><small>实例、时长与性能</small></span>
+                <em></em>
+                <span><i><svg aria-hidden="true"><use href="#i-server"/></svg></i><b>局域网接口</b><small>缓存快照与 SSE 推送</small></span>
+                <em></em>
+                <span><i><svg aria-hidden="true"><use href="#i-phone"/></svg></i><b>远端浏览器</b><small>手机、平板与 PC</small></span>
+              </div>
+            </section>
+          </div>
+
+          <aside class="glass-card panel remote-server-card">
+            <div class="remote-card-head">
+              <div><h2>局域网只读访问</h2><p>只监听自动识别的家庭或专用网络 IPv4。</p></div>
+              <button class="switch-control" id="lanEnabledToggle" aria-pressed="false" aria-label="局域网只读访问"><i></i></button>
+            </div>
+
+            <div class="remote-server-state" id="remoteServerState">
+              <span><svg aria-hidden="true"><use href="#i-shield"/></svg></span>
+              <div><b id="remoteServerTitle">服务未开启</b><small id="remoteServerDetail">开启后生成本机访问地址与临时配对码</small></div>
+            </div>
+
+            <div class="remote-url-row">
+              <code id="remoteUrl">等待开启局域网服务</code>
+              <button id="copyRemoteUrl" disabled>复制</button>
+            </div>
+
+            <div class="remote-pairing">
+              <div class="remote-qr"><img width="116" height="116" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" id="remoteQrCode" alt="远端页面二维码" hidden><span id="remoteQrPlaceholder"><svg aria-hidden="true"><use href="#i-wifi"/></svg>等待服务</span></div>
+              <div>
+                <h3>连接新设备</h3>
+                <p>扫码打开页面，再输入五分钟内有效的六位配对码。</p>
+                <button class="remote-pair-code" id="remotePairCode" disabled>--- ---</button>
+                <small id="remotePairExpiry">服务开启后可配对</small>
+                <button class="remote-text-action" id="rotatePairingCode" disabled>刷新配对码</button>
+              </div>
+            </div>
+
+            <div class="remote-devices-head">
+              <span><b>已授权设备</b><small id="remoteDeviceCount">0 台</small></span>
+              <button id="revokeAllDevices" disabled>全部撤销</button>
+            </div>
+            <div class="remote-device-list" id="remoteDeviceList">
+              <div class="remote-device-empty">还没有已授权设备</div>
+            </div>
+
+            <div class="remote-privacy-note">
+              <svg aria-hidden="true"><use href="#i-shield"/></svg>
+              <span><b>本功能不经过云端</b><small>仅公开实例状态与运行记录，并隐藏游戏目录、备份位置等本机路径。</small></span>
+            </div>
+            <button class="button primary accent-button remote-preview-button" id="openRemotePage" disabled>在浏览器中预览远端页面</button>
+          </aside>
+        </div>
+      </section>
+
+      <section id="toolsView" class="view">
+        <div class="tools-grid">
+          <section class="glass-card panel tools-main">
+            <div class="section-header"><div><h2>安全与工具</h2></div></div>
+            <div class="tool-grid">
+              <button class="tool-tile" data-action="restoreLatest"><svg aria-hidden="true"><use href="#i-refresh"/></svg><b>恢复最近备份</b><span>回到上一次配置状态</span></button>
+              <button class="tool-tile" data-action="restoreFactory"><svg aria-hidden="true"><use href="#i-shield"/></svg><b>恢复默认 2K120</b><span>使用内置安全恢复点</span></button>
+              <button class="tool-tile" data-action="cleanBackups"><svg aria-hidden="true"><use href="#i-list"/></svg><b>清理普通备份</b><span>保留默认恢复点</span></button>
+              <button class="tool-tile" data-action="openBackups"><svg aria-hidden="true"><use href="#i-folder"/></svg><b>打开备份目录</b><span>查看所有配置备份</span></button>
+              <button class="tool-tile" data-action="openLog"><svg aria-hidden="true"><use href="#i-info"/></svg><b>打开运行日志</b><span>诊断启动与写入记录</span></button>
+              <div class="tool-tile input-tile">
+                <svg aria-hidden="true"><use href="#i-sliders"/></svg><b>跳字缩放</b><span>建议范围 0.5–1.8</span>
+                <div><input id="tiaoziScale" type="number" min="0.1" max="8" step="0.1" value="1.5"><button id="applyTiaozi">应用</button></div>
+              </div>
+            </div>
+            <section class="update-panel">
+              <span class="update-icon"><svg aria-hidden="true"><use href="#i-refresh"/></svg></span>
+              <div class="update-copy">
+                <b id="updateStatus">正在读取更新设置…</b>
+                <small id="updateDetail">从 GitHub Release 获取并校验 Windows 便携版</small>
+                <div class="update-progress"><i id="updateProgress"></i></div>
+              </div>
+              <label class="update-frequency">
+                <small>检查频率</small>
+                <select id="updateFrequency">
+                  <option value="startup">每次启动</option>
+                  <option value="daily">每天一次</option>
+                  <option value="weekly">每周一次</option>
+                  <option value="monthly">每月一次</option>
+                </select>
+              </label>
+              <button class="button secondary standard-button" id="checkForUpdates"><svg aria-hidden="true"><use href="#i-refresh"/></svg>立即检查</button>
+              <button class="button secondary standard-button" id="noticeHistory">查看公告</button>
+            </section>
+            <details class="developer-options">
+              <summary><span><b>开发者选项</b><small>高级功能与兼容模式</small></span><svg aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+              <div><p>旧版接管模式会改变原有 120 帧档位的实际目标，适用于需要该模式的情况。</p><button class="button secondary standard-button" id="openLegacyFps">进入接管解锁模式</button></div>
+            </details>
+          </section>
+          <aside class="panel about-panel">
+            <div class="about-top">
+              <h2>本地、离线、可扩展</h2>
+              <p>所有配置与实例数据都只在本机处理。局域网副屏仅提供经过设备配对的只读状态。</p>
+              <div class="about-line"><span>界面引擎</span><b>Electron · Fluent UI</b></div>
+              <div class="about-line"><span>本地后台</span><b>C# · .NET Framework</b></div>
+              <div class="about-line"><span>版本</span><b id="aboutVersion">v2.7.0 “真”帧率解锁</b></div>
+            </div>
+            <section class="support-card">
+              <div class="support-head">
+                <span class="support-cup"><svg aria-hidden="true"><use href="#i-coffee"/></svg></span>
+                <span><b>请我喝杯咖啡</b></span>
+              </div>
+              <div class="support-code"><img width="728" height="728" src="assets/support-coffee.png" alt="个人赞赏码"></div>
+              <p>如果这个工具帮你省下一些折腾时间，<br>有余力的话，可以支持一杯咖啡。</p>
+              <span class="support-voluntary"><i></i>完全自愿 · 不影响任何功能</span>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+
+    </main>
+  </div>
+
+      <section class="activity-bar" aria-live="polite">
+        <div class="activity-icon"><svg aria-hidden="true"><use href="#i-check"/></svg></div>
+        <div><small id="activityTime">就绪</small><strong id="activityMessage">正在连接本地后台…</strong></div>
+        <button id="activityDetails">查看详情</button>
+      </section>
+  <div class="scheduling-backdrop drawer-layer" id="schedulingBackdrop" aria-hidden="true" hidden></div>
+            <section class="scheduling-drawer drawer" role="dialog" aria-modal="true" aria-label="进程调度高级配置" id="processSchedulingDrawer" hidden>
               <header class="scheduling-drawer-head">
                 <button class="drawer-back" id="closeProcessScheduling" type="button" aria-label="返回实例列表">
-                  <svg><use href="#i-chevron"/></svg>
+                  <svg aria-hidden="true"><use href="#i-chevron"/></svg>
                 </button>
                 <div>
-                  <span class="section-kicker">PROCESS SCHEDULING</span>
                   <h2>进程调度高级配置</h2>
                 </div>
               </header>
 
               <div class="scheduling-scroll">
                 <article class="cpu-summary">
-                  <span><svg><use href="#i-cpu"/></svg></span>
+                  <span><svg aria-hidden="true"><use href="#i-cpu"/></svg></span>
                   <div>
                     <small>CPU 信息</small>
                     <strong id="cpuModel">正在识别处理器…</strong>
@@ -243,21 +692,21 @@
 
                 <fieldset class="scheduling-fieldset">
                   <legend>核心策略</legend>
-                  <div class="cpu-mode-options" id="cpuModeOptions">
+                  <div class="cpu-mode-options policy-options" id="cpuModeOptions">
                     <button type="button" data-cpu-mode="system">
-                      <svg><use href="#i-sliders"/></svg><b>系统管理</b><small>由 Windows 分配</small>
+                      <svg aria-hidden="true"><use href="#i-sliders"/></svg><b>系统管理</b><small>由 Windows 分配</small>
                     </button>
                     <button type="button" data-cpu-mode="all">
-                      <svg><use href="#i-layers"/></svg><b>全部核心</b><small>主力高帧推荐</small>
+                      <svg aria-hidden="true"><use href="#i-layers"/></svg><b>全部核心</b><small>主力高帧推荐</small>
                     </button>
                     <button type="button" data-cpu-mode="performance">
-                      <svg><use href="#i-cpu"/></svg><b>性能核心</b><small>优先主力实例</small>
+                      <svg aria-hidden="true"><use href="#i-cpu"/></svg><b>性能核心</b><small>优先主力实例</small>
                     </button>
                     <button type="button" data-cpu-mode="efficiency">
-                      <svg><use href="#i-leaf"/></svg><b>能效核心</b><small>适合挂机实例</small>
+                      <svg aria-hidden="true"><use href="#i-leaf"/></svg><b>能效核心</b><small>适合挂机实例</small>
                     </button>
                     <button type="button" data-cpu-mode="custom">
-                      <svg><use href="#i-wrench"/></svg><b>自定义</b><small>自由选择核心</small>
+                      <svg aria-hidden="true"><use href="#i-wrench"/></svg><b>自定义</b><small>自由选择核心</small>
                     </button>
                   </div>
                 </fieldset>
@@ -267,7 +716,7 @@
                   <div class="cpu0-reservation" id="cpu0Reservation" hidden>
                     <span class="cpu0-chip">CPU 0</span>
                     <div>
-                      <b>为系统保留 CPU 0 <em>实验性</em></b>
+                      <b>为系统保留 <abbr title="逻辑处理器">CPU</abbr> 0 <em>实验性</em></b>
                       <small id="cpu0ReservationDetail">从游戏核心绑定中排除逻辑处理器 CPU 0</small>
                     </div>
                     <label class="toggle" title="从游戏核心绑定中排除逻辑处理器 CPU 0">
@@ -277,7 +726,7 @@
                   </div>
                   <div class="topology-groups" id="topologyGroups"></div>
                   <button class="topology-detail-toggle" id="toggleTopologyDetails" type="button">
-                    <span>查看逻辑处理器明细</span><svg><use href="#i-chevron"/></svg>
+                    <span>查看逻辑处理器明细</span><svg aria-hidden="true"><use href="#i-chevron"/></svg>
                   </button>
                   <div class="logical-processor-grid" id="logicalProcessorGrid" hidden></div>
                 </fieldset>
@@ -286,434 +735,37 @@
               <footer class="scheduling-actions">
                 <p>仅保存到当前画质预设，不与其他预设共用</p>
                 <div>
-                  <button class="button secondary" id="resetProcessPolicy" type="button">恢复推荐</button>
-                  <button class="button primary" id="saveProcessPolicy" type="button">保存到当前预设</button>
+                  <button class="button secondary standard-button" id="resetProcessPolicy" type="button">恢复推荐</button>
+                  <button class="button primary accent-button" id="saveProcessPolicy" type="button">保存到当前预设</button>
                 </div>
               </footer>
             </section>
-          </aside>
-        </div>
-      </section>
-
-      <section id="historyView" class="view">
-        <div class="history-head">
-          <div>
-            <span class="section-kicker">LAUNCH ANALYTICS</span>
-            <div class="history-title-row">
-              <h1>启动记录</h1>
-              <label class="toggle history-record-toggle">
-                <input id="historyEnabled" type="checkbox" checked>
-                <span></span>
-                <b id="historyEnabledLabel">自动记录已开启</b>
-              </label>
-            </div>
-            <p>按游戏 ID 统计每个账号的运行时长</p>
-          </div>
-          <div class="history-head-actions">
-            <span class="privacy-badge"><svg><use href="#i-shield"/></svg>数据仅保存在本机</span>
-            <div class="range-tabs" role="tablist" aria-label="统计周期">
-              <button data-range="day">日</button>
-              <button class="active" data-range="week">周</button>
-              <button data-range="month">月</button>
-              <button data-range="total">总</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="summary-grid">
-          <article class="glass-card summary-card">
-            <span class="summary-icon cyan"><svg><use href="#i-clock"/></svg></span>
-            <small>总运行时长</small>
-            <strong id="historyTotal">0小时0分</strong>
-            <span id="historyDurationDelta">本周期暂无记录</span>
-          </article>
-          <article class="glass-card summary-card">
-            <span class="summary-icon green"><svg><use href="#i-play"/></svg></span>
-            <small>启动次数</small>
-            <strong id="historyLaunches">0次</strong>
-            <span id="historyLaunchDelta">本周期暂无启动</span>
-          </article>
-          <article class="glass-card summary-card">
-            <span class="summary-icon amber"><svg><use href="#i-star"/></svg></span>
-            <small>最常用账号</small>
-            <strong id="historyMostUsed">暂无</strong>
-            <span id="historyMostUsedShare">等待首次检测</span>
-          </article>
-          <article class="glass-card summary-card">
-            <span class="summary-icon violet"><svg><use href="#i-sliders"/></svg></span>
-            <small>平均单次</small>
-            <strong id="historyAverage">0分钟</strong>
-            <span>按已记录会话计算</span>
-          </article>
-        </div>
-
-        <div class="history-content-grid">
-          <section class="glass-card ranking-card">
-            <div class="section-header compact">
-              <div><span class="section-kicker">ACCOUNT RANKING</span><h2>账号时长排行</h2></div>
-              <span class="history-count" id="historyAccountCount">0 个账号</span>
-            </div>
-            <div id="accountRanking" class="account-ranking"></div>
-          </section>
-
-          <section class="glass-card sessions-card">
-            <div class="section-header compact">
-              <div><span class="section-kicker">RECENT SESSIONS</span><h2>最近启动会话</h2></div>
-              <span class="live-badge subtle" id="historyRecordingBadge"><i></i>自动记录</span>
-            </div>
-            <div class="session-table">
-              <div class="session-row session-header-row">
-                <span>账号 ID</span><span>开始时间</span><span>结束时间</span><span>时长</span>
-              </div>
-              <div id="sessionRows"></div>
-            </div>
-          </section>
-        </div>
-
-        <div class="history-footer">
-          <div>
-            <button class="button secondary" id="exportHistory"><svg><use href="#i-list"/></svg>导出 CSV</button>
-            <button class="button ghost" id="openHistoryFolder"><svg><use href="#i-folder"/></svg>打开记录目录</button>
-          </div>
-          <p><svg><use href="#i-info"/></svg>切换游戏 ID 会自动分段；总时长按多个窗口共同覆盖的时间去重。</p>
-        </div>
-      </section>
-
-      <section id="fpsView" class="view">
-        <div class="fps-layout">
-          <div class="fps-stack">
-            <section class="glass-card fps-target-card">
-              <div class="fps-section-head">
-                <div>
-                  <span class="section-kicker">UNLOCK TARGET</span>
-                  <h2>选择 120 FPS 档的实际目标</h2>
-                  <p>只接管原生 120 档；写入前完整备份，成功后自动清理冗余备份。</p>
-                </div>
-                <span class="fps-state-badge" id="fpsStateBadge"><i></i><b>正在检测包体…</b></span>
-              </div>
-              <div class="fps-targets" role="radiogroup" aria-label="帧率接管目标">
-                <button class="fps-target" data-fps-target="120" role="radio" aria-checked="false">
-                  <i></i><small>OFFICIAL</small><b>120 <span>FPS</span></b>
-                  <p>不接管<br>使用官方原始逻辑</p>
-                </button>
-                <button class="fps-target active" data-fps-target="180" role="radio" aria-checked="true">
-                  <i></i><small>RECOMMENDED</small><b>180 <span>FPS</span></b>
-                  <p>120 档 → 180<br>兼顾负载与流畅度</p>
-                </button>
-                <button class="fps-target" data-fps-target="240" role="radio" aria-checked="false">
-                  <i></i><small>HIGH</small><b>240 <span>FPS</span></b>
-                  <p>120 档 → 240<br>适合高刷设备</p>
-                </button>
-                <button class="fps-target" data-fps-target="300" role="radio" aria-checked="false">
-                  <i></i><small>EXPERIMENTAL</small><b>300 <span>FPS</span></b>
-                  <p>120 档 → 300<br>实验档，负载更高</p>
-                </button>
-              </div>
-            </section>
-
-            <section class="glass-card fps-route-card">
-              <div class="fps-route-head">
-                <div><span class="section-kicker">FRAME ROUTE</span><h2>配置档位生效路径</h2></div>
-                <div class="fps-route-legend"><span><i></i>原样直通</span><span><i></i>接管替换</span></div>
-              </div>
-              <div class="fps-rail">
-                <div class="fps-node"><i></i><b>25</b><small>保持 25</small></div>
-                <div class="fps-node"><i></i><b>30</b><small>保持 30</small></div>
-                <div class="fps-node"><i></i><b>40</b><small>保持 40</small></div>
-                <div class="fps-node"><i></i><b>50</b><small>保持 50</small></div>
-                <div class="fps-node"><i></i><b>60</b><small>保持 60</small></div>
-                <div class="fps-node"><i></i><b>90</b><small>保持 90</small></div>
-                <div class="fps-node takeover"><i></i><b id="fpsRouteTarget">120 → 180</b><small>由启动器接管</small></div>
-              </div>
-              <div class="fps-route-note">
-                <svg><use href="#i-info"/></svg>
-                <span>启用后，游戏界面的“120 FPS”名称不再代表真实上限；启动页会显示当前实际映射值。</span>
-              </div>
-              <div class="fps-guidance-area">
-                <section class="fps-retention-panel">
-                  <div class="retention-heading">
-                    <span class="retention-shield"><svg><use href="#i-shield"/></svg></span>
-                    <div>
-                      <small>BACKUP RETENTION</small>
-                      <strong>官方初始还原点，永久保留</strong>
-                      <p>无论自动清理还是手动清理，都不会删除这份从未修改的数据包。</p>
-                    </div>
-                    <span class="permanent-badge">永久</span>
-                  </div>
-                  <div class="retention-flow">
-                    <span><i>1</i><b>写入前</b><small>创建完整事务备份</small></span>
-                    <em></em>
-                    <span><i>2</i><b>应用成功</b><small>自动清理更早备份</small></span>
-                    <em></em>
-                    <span class="keep"><i>3</i><b>最终保留</b><small>官方原包 + 最新 1 份</small></span>
-                  </div>
-                  <div class="retention-foot"><svg><use href="#i-check"/></svg>失败或校验未通过时不会执行自动清理</div>
-                </section>
-                <div class="fps-guidance-stack">
-                  <div class="fps-launch-link">
-                    <small>启动页联动提示</small>
-                    <p id="fpsLaunchHint">选择“2K 120”等预设时，将显示“配置 120 · 实际 180”；其他帧率预设保持原标签。</p>
-                  </div>
-                  <div class="fps-warning">
-                    <strong>联网游戏文件修改提示</strong>
-                    应用与恢复时要求游戏完全退出；本功能不包含反作弊绕过。
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-
-          <aside class="glass-card fps-package-card">
-            <div class="fps-section-head">
-              <div><span class="section-kicker">PACKAGE & RECOVERY</span><h2>包体与恢复保护</h2></div>
-              <button class="fps-refresh" id="refreshFpsStatus" aria-label="刷新帧率状态"><svg><use href="#i-refresh"/></svg></button>
-            </div>
-            <div class="fps-platform-chip" id="fpsPlatformChip">
-              <i></i><span>正在识别游戏平台</span><small>自动检测</small>
-            </div>
-            <div class="fps-package-state" id="fpsPackageState">
-              <span><svg><use href="#i-shield"/></svg></span>
-              <div><strong>正在识别包体</strong><p>读取 NXPK v3 与 SettingManager 目标槽位</p></div>
-            </div>
-            <div class="fps-package-route">
-              <div class="fps-package-route-item target">
-                <span class="route-icon"><svg><use href="#i-check"/></svg></span>
-                <div>
-                  <small>唯一写入目标 · DOCUMENTS 增量包</small>
-                  <b>script.py314.lc.npk</b>
-                  <p id="fpsTargetPackageMeta">等待读取包体信息</p>
-                </div>
-                <em id="fpsTargetPackageRole">可修改</em>
-              </div>
-              <div class="fps-package-route-line"><i></i><span>严格隔离</span><i></i></div>
-              <div class="fps-package-route-item protected">
-                <span class="route-icon"><svg><use href="#i-shield"/></svg></span>
-                <div>
-                  <small>游戏根目录完整包</small>
-                  <b>script.py314.lc.npk</b>
-                  <p id="fpsRootPackageMeta">仅检测存在性，不读取槽位</p>
-                </div>
-                <em id="fpsRootPackageRole">只读保护</em>
-              </div>
-              <p class="fps-compatibility-summary" id="fpsCompatibilitySummary">正在建立版本兼容档案…</p>
-            </div>
-            <div class="fps-details">
-              <div><span>游戏平台</span><b class="accent" id="fpsPlatformLabel">检测中</b></div>
-              <div><span>当前状态</span><b class="accent" id="fpsCurrentState">检测中</b></div>
-              <div><span>接管范围</span><b>仅原 120 FPS 档</b></div>
-              <div><span>其他档位</span><b class="ok">保持配置文件控制</b></div>
-              <div><span>官方初始还原点</span><b id="fpsBaselineState">首次应用时创建</b></div>
-              <div><span>备份保留</span><b id="fpsBackupCount">0 份临时</b></div>
-              <div><span>写后校验</span><b class="ok">槽位 + 槽外整包</b></div>
-            </div>
-            <div class="fps-actions">
-              <button class="button primary" id="applyFpsUnlock">应用 180 FPS 接管并备份</button>
-              <button class="button secondary" id="restoreFpsUnlock">恢复官方原版帧率逻辑</button>
-              <button class="button fps-backup-clean" id="cleanFpsBackups">
-                <svg><use href="#i-list"/></svg>
-                <span><b>清理冗余备份</b><small>保留官方初始还原点</small></span>
-              </button>
-              <button class="button ghost" id="openFpsBackups"><svg><use href="#i-folder"/></svg>打开事务备份目录</button>
-              <button class="button ghost" id="openFpsProtectedBackups"><svg><use href="#i-shield"/></svg>打开永久还原点目录</button>
-            </div>
-            <p class="fps-micro" id="fpsPackagePath">应用后重新启动的游戏实例生效</p>
-          </aside>
-        </div>
-      </section>
-
-      <section id="remoteView" class="view">
-        <div class="remote-page-head">
-          <div>
-            <span class="section-kicker">BACKGROUND · LAN RELAY</span>
-            <h1>后台记录与局域网副屏</h1>
-            <p>关闭窗口后继续统计游戏时长；远端只查看，不接管本机操作。</p>
-          </div>
-          <span class="remote-runtime-badge"><i></i><span><small>守护状态</small><b id="remoteGuardState">正在连接后台守护</b></span></span>
-        </div>
-
-        <div class="remote-layout">
-          <div class="remote-stack">
-            <section class="glass-card remote-guard-card">
-              <div class="remote-card-head">
-                <div><span class="section-kicker">TRAY GUARD</span><h2>托盘常驻</h2><p>隐藏界面后释放渲染窗口，只保留监控与记录核心。</p></div>
-                <span class="remote-state-chip"><i></i>运行中</span>
-              </div>
-              <div class="remote-settings">
-                <div class="remote-setting">
-                  <span class="remote-setting-icon"><svg><use href="#i-tray"/></svg></span>
-                  <span><b>关闭窗口时收至托盘</b><small>最小化始终进入托盘；关闭按钮可按此设置处理</small></span>
-                  <button class="switch-control active" id="minimizeToTrayToggle" aria-pressed="true" aria-label="关闭窗口时收至托盘"><i></i></button>
-                </div>
-                <div class="remote-setting">
-                  <span class="remote-setting-icon"><svg><use href="#i-play"/></svg></span>
-                  <span><b>随系统静默启动</b><small>登录 Windows 后直接驻留托盘，不弹出主窗口</small></span>
-                  <button class="switch-control" id="autoStartToggle" aria-pressed="false" aria-label="随系统静默启动"><i></i></button>
-                </div>
-                <div class="remote-setting">
-                  <span class="remote-setting-icon"><svg><use href="#i-gauge"/></svg></span>
-                  <span><b>后台采样策略</b><small>有游戏或远端连接时加快，无游戏时自动降频</small></span>
-                  <strong class="remote-select-chip">自适应 · 推荐</strong>
-                </div>
-              </div>
-              <div class="remote-resource-strip">
-                <span><small>当前模式</small><b id="remotePollMode">正在检测</b></span>
-                <span><small>渲染窗口</small><b id="remoteRendererState" class="ok">前台使用中</b></span>
-                <span><small>记录落盘</small><b>状态变化 / 60 秒</b></span>
-                <span><small>远端连接</small><b id="remoteClientCount">0 台设备</b></span>
-              </div>
-            </section>
-
-            <section class="glass-card remote-route-card">
-              <div class="remote-route-head">
-                <div><span class="section-kicker">STATUS ROUTE</span><h2>状态只向外读，不接受远程控制</h2></div>
-                <span>READ ONLY</span>
-              </div>
-              <div class="remote-route">
-                <span><i><svg><use href="#i-monitor"/></svg></i><b>本机监控核心</b><small>实例 · 时长 · 性能</small></span>
-                <em></em>
-                <span><i><svg><use href="#i-server"/></svg></i><b>局域网接口</b><small>缓存快照 · SSE 推送</small></span>
-                <em></em>
-                <span><i><svg><use href="#i-phone"/></svg></i><b>远端浏览器</b><small>手机 · 平板 · PC</small></span>
-              </div>
-            </section>
-          </div>
-
-          <aside class="glass-card remote-server-card">
-            <div class="remote-card-head">
-              <div><span class="section-kicker">LOCAL STATUS SERVICE</span><h2>局域网只读访问</h2><p>只监听自动识别的家庭或专用网络 IPv4。</p></div>
-              <button class="switch-control" id="lanEnabledToggle" aria-pressed="false" aria-label="局域网只读访问"><i></i></button>
-            </div>
-
-            <div class="remote-server-state" id="remoteServerState">
-              <span><svg><use href="#i-shield"/></svg></span>
-              <div><b id="remoteServerTitle">服务未开启</b><small id="remoteServerDetail">开启后生成本机访问地址与临时配对码</small></div>
-            </div>
-
-            <div class="remote-url-row">
-              <code id="remoteUrl">等待开启局域网服务</code>
-              <button id="copyRemoteUrl" disabled>复制</button>
-            </div>
-
-            <div class="remote-pairing">
-              <div class="remote-qr"><img id="remoteQrCode" alt="远端页面二维码" hidden><span id="remoteQrPlaceholder"><svg><use href="#i-wifi"/></svg>等待服务</span></div>
-              <div>
-                <h3>连接新设备</h3>
-                <p>扫码打开页面，再输入五分钟内有效的六位配对码。</p>
-                <button class="remote-pair-code" id="remotePairCode" disabled>--- ---</button>
-                <small id="remotePairExpiry">服务开启后可配对</small>
-                <button class="remote-text-action" id="rotatePairingCode" disabled>刷新配对码</button>
-              </div>
-            </div>
-
-            <div class="remote-devices-head">
-              <span><b>已授权设备</b><small id="remoteDeviceCount">0 台</small></span>
-              <button id="revokeAllDevices" disabled>全部撤销</button>
-            </div>
-            <div class="remote-device-list" id="remoteDeviceList">
-              <div class="remote-device-empty">还没有已授权设备</div>
-            </div>
-
-            <div class="remote-privacy-note">
-              <svg><use href="#i-shield"/></svg>
-              <span><b>本功能不经过云端</b><small>仅公开实例状态与运行记录，并隐藏游戏目录、备份位置等本机路径。</small></span>
-            </div>
-            <button class="button primary remote-preview-button" id="openRemotePage" disabled>在浏览器中预览远端页面</button>
-          </aside>
-        </div>
-      </section>
-
-      <section id="toolsView" class="view">
-        <div class="tools-grid">
-          <section class="glass-card tools-main">
-            <div class="section-header"><div><span class="section-kicker">MAINTENANCE</span><h2>安全与工具</h2></div></div>
-            <div class="tool-grid">
-              <button class="tool-tile" data-action="restoreLatest"><svg><use href="#i-refresh"/></svg><b>恢复最近备份</b><span>回到上一次配置状态</span></button>
-              <button class="tool-tile" data-action="restoreFactory"><svg><use href="#i-shield"/></svg><b>恢复默认 2K120</b><span>使用内置安全恢复点</span></button>
-              <button class="tool-tile" data-action="cleanBackups"><svg><use href="#i-list"/></svg><b>清理普通备份</b><span>保留默认恢复点</span></button>
-              <button class="tool-tile" data-action="openBackups"><svg><use href="#i-folder"/></svg><b>打开备份目录</b><span>查看所有配置备份</span></button>
-              <button class="tool-tile" data-action="openLog"><svg><use href="#i-info"/></svg><b>打开运行日志</b><span>诊断启动与写入记录</span></button>
-              <div class="tool-tile input-tile">
-                <svg><use href="#i-sliders"/></svg><b>跳字缩放</b><span>建议范围 0.5–1.8</span>
-                <div><input id="tiaoziScale" type="number" min="0.1" max="8" step="0.1" value="1.5"><button id="applyTiaozi">应用</button></div>
-              </div>
-            </div>
-            <section class="update-panel">
-              <span class="update-icon"><svg><use href="#i-refresh"/></svg></span>
-              <div class="update-copy">
-                <span class="section-kicker">SECURE UPDATE</span>
-                <b id="updateStatus">正在读取更新设置…</b>
-                <small id="updateDetail">从 GitHub Release 获取并校验 Windows 便携版</small>
-                <div class="update-progress"><i id="updateProgress"></i></div>
-              </div>
-              <label class="update-frequency">
-                <small>检查频率</small>
-                <select id="updateFrequency">
-                  <option value="startup">每次启动</option>
-                  <option value="daily">每天一次</option>
-                  <option value="weekly">每周一次</option>
-                  <option value="monthly">每月一次</option>
-                </select>
-              </label>
-              <button class="button secondary" id="checkForUpdates"><svg><use href="#i-refresh"/></svg>立即检查</button>
-              <button class="button secondary" id="noticeHistory">查看公告</button>
-            </section>
-          </section>
-          <aside class="glass-card about-card">
-            <div class="about-top">
-              <div class="about-icon">LA</div>
-              <span class="section-kicker">ABOUT & SUPPORT</span>
-              <h2>本地、离线、可扩展</h2>
-              <p>所有配置与实例数据都只在本机处理。局域网副屏仅提供经过设备配对的只读状态。</p>
-              <div class="about-line"><span>界面引擎</span><b>Electron · Fluent UI</b></div>
-              <div class="about-line"><span>本地后台</span><b>C# · .NET Framework</b></div>
-              <div class="about-line"><span>版本</span><b id="aboutVersion">v2.6.0 包体自动适配</b></div>
-            </div>
-            <section class="support-card">
-              <div class="support-head">
-                <span class="support-cup"><svg><use href="#i-coffee"/></svg></span>
-                <span><small>SUPPORT THE PROJECT</small><b>请我喝杯咖啡</b></span>
-              </div>
-              <div class="support-code"><img src="assets/support-coffee.png" alt="个人赞赏码"></div>
-              <p>如果这个工具帮你省下一些折腾时间，<br>有余力的话，可以支持一杯咖啡。</p>
-              <span class="support-voluntary"><i></i>完全自愿 · 不影响任何功能</span>
-            </section>
-          </aside>
-        </div>
-      </section>
-
-      <section class="activity-bar" aria-live="polite">
-        <div class="activity-icon"><svg><use href="#i-check"/></svg></div>
-        <div><small id="activityTime">READY</small><strong id="activityMessage">正在连接本地后台…</strong></div>
-        <button id="activityDetails">查看详情</button>
-      </section>
-    </main>
-  </div>
-
-  <div class="modal-backdrop" id="confirmModal" hidden>
-    <div class="modal">
-      <div class="modal-icon"><svg><use href="#i-layers"/></svg></div>
+  <div class="modal-backdrop dialog-layer" id="confirmModal" hidden>
+    <div class="modal dialog">
+      <div class="modal-icon"><svg aria-hidden="true"><use href="#i-layers"/></svg></div>
       <h3 id="modalTitle">继续启动下一个窗口？</h3>
       <p id="modalMessage"></p>
-      <div class="modal-actions"><button class="button secondary" data-result="cancel">取消</button><button class="button primary" data-result="confirm">继续</button></div>
+      <div class="modal-actions"><button class="button secondary standard-button" data-result="cancel">取消</button><button class="button primary accent-button" data-result="confirm">继续</button></div>
     </div>
   </div>
 
-  <div class="modal-backdrop" id="fpsConsentModal" hidden>
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="fpsConsentTitle">
+  <div class="modal-backdrop dialog-layer" id="fpsConsentModal" hidden>
+    <div class="modal dialog" role="dialog" aria-modal="true" aria-labelledby="fpsConsentTitle">
       <h3 id="fpsConsentTitle">帧率解锁 · 风险告知与免责声明</h3>
       <p>帧率解锁功能自 2026 年 7 月 28 日 v2.3.0 版本更新推出以来，作者一直使用主力账号测试。截至 v2.6.0 自动适配版本更新，作者尚未收到来自官方的警告或其他处罚。</p>
       <p>但修改帧率属于对游戏包体的修改，历史测试结果不代表未来没有处罚风险。作者不承担因此造成的任何后果；如果担心被处罚，请勿使用本功能。</p>
       <p>不同意不会影响恢复官方帧率及使用其他功能。</p>
       <label><input type="checkbox" id="fpsConsentCheck"> 我已阅读并理解上述风险，同意使用本功能</label>
-      <div class="modal-actions"><button class="button secondary" id="fpsConsentDecline">暂不使用</button><button class="button primary" id="fpsConsentAccept" disabled>同意并继续</button></div>
+      <div class="modal-actions"><button class="button secondary standard-button" id="fpsConsentDecline">暂不使用</button><button class="button primary accent-button" id="fpsConsentAccept" disabled>同意并继续</button></div>
     </div>
   </div>
-  <div class="modal-backdrop" id="noticeModal" hidden>
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="noticeTitle">
+  <div class="modal-backdrop dialog-layer" id="noticeModal" hidden>
+    <div class="modal dialog" role="dialog" aria-modal="true" aria-labelledby="noticeTitle">
       <h3 id="noticeTitle"></h3><p id="noticeBody"></p>
       <label id="noticeAgreement"><input type="checkbox" id="noticeCheck"> 我已阅读并同意上述风险告知</label>
-      <div class="modal-actions"><button class="button secondary" id="noticeLater">稍后处理</button><button class="button primary" id="noticeConfirm">我知道了</button></div>
+      <div class="modal-actions"><button class="button secondary standard-button" id="noticeLater">稍后处理</button><button class="button primary accent-button" id="noticeConfirm">我知道了</button></div>
     </div>
+  </div>
   </div>
   <script src="app.js"></script>
 </body>

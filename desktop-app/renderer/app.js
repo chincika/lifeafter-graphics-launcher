@@ -23,6 +23,8 @@ let fpsStatus = null;
 let selectedFpsTarget = 180;
 let busyButton = null;
 let fpsStatusLoading = false;
+let nativeFpsStatus = null;
+let nativeFpsStatusLoading = false;
 let backgroundState = null;
 let backgroundLoading = false;
 let updateState = null;
@@ -391,7 +393,7 @@ function renderUpdateState(state) {
   const busyPhases = new Set(['checking', 'downloading', 'installing']);
   const button = $('#checkForUpdates');
   const frequency = $('#updateFrequency');
-  const currentVersion = state.currentVersion || '2.6.0';
+  const currentVersion = state.currentVersion || '2.7.0';
   $('#aboutVersion').textContent = `v${currentVersion}`;
   $('#sidebarVersion').textContent = `v${currentVersion}`;
   $('#updateStatus').textContent = state.message || '尚未检查更新';
@@ -599,6 +601,8 @@ function applyGameRootResult(result) {
   performanceModeAvailable = result.launchMode?.performanceAvailable === true;
   renderPerformanceMode();
   if (result.fpsStatus) renderFpsStatus(result.fpsStatus);
+  nativeFpsStatus = null;
+  loadNativeFpsStatus(true);
   const match = String(result.summary || '').match(/当前档位：([^/]+)/);
   if (match && presets[match[1].trim()]) updatePreset(match[1].trim());
 }
@@ -699,10 +703,14 @@ function setBusy(value, activeButton) {
     busyButton = null;
   }
   syncFpsActionAvailability();
+  syncNativeFpsActionAvailability();
 }
 
 function fpsPresentation(preset) {
   const native120 = preset.fps === '120 FPS';
+  if (native120 && ['native', 'prototype'].includes(nativeFpsStatus?.state)) {
+    return { title: '游戏内帧率', detail: '120 预设 · 优先保留游戏内高帧选择' };
+  }
   if (!fpsStatus) return { title: preset.fps, detail: preset.fps };
   if (String(fpsStatus.state).startsWith('conditional-') && native120) {
     return {
@@ -1272,6 +1280,7 @@ function renderFpsStatus(status) {
   }
 
   const legacy = String(fpsStatus.state).startsWith('legacy-');
+  const nativeMode = fpsStatus.state === 'native-mode-active';
   const unknown = fpsStatus.state === 'unknown';
   const recoveryOnly = Boolean(fpsStatus.recoveryAvailable) && !fpsStatus.compatible;
   const safe = fpsStatus.compatible && !unknown;
@@ -1286,19 +1295,19 @@ function renderFpsStatus(status) {
       ? '检测到旧版全局强制补丁'
       : safe
         ? `当前已识别 · ${fpsStatus.stateLabel}`
-        : '包体版本或槽位不兼容';
+        : nativeMode ? '游戏内档位已启用' : '包体版本或槽位不兼容';
 
   if (!safe) packageState.classList.add(recoveryOnly ? 'warning' : 'error');
   packageState.querySelector('strong').textContent = safe
     ? '当前包体已识别'
     : recoveryOnly
       ? '当前包体已锁定，仅可恢复'
-      : '当前包体拒绝写入';
+    : nativeMode ? '请先恢复游戏内档位' : '当前包体拒绝写入';
   packageState.querySelector('p').textContent = recoveryOnly
     ? (fpsStatus.error || '安全校验已锁定写入；检测到可验证的官方原始 NPK 备份，可安全恢复。')
     : safe
     ? `NXPK v3 · SettingManager 安全校验通过 · ${fpsStatus.compatibilityLabel || '兼容档案已建立'}`
-    : '版本锁、目标槽或槽外整包哈希未通过';
+    : nativeMode ? fpsStatus.error : '版本锁、目标槽或槽外整包哈希未通过';
   const platformLabel = fpsStatus.platformLabel || '老PC包体';
   const gameVersion = fpsStatus.gameVersion || '版本号未知';
   $('#fpsPlatformLabel').textContent = `${platformLabel} · ${gameVersion}`;
@@ -1324,7 +1333,7 @@ function renderFpsStatus(status) {
     ? '官方原始备份已验证 · 允许恢复'
     : fpsStatus.baselineReady
     ? `永久保留 · ${platformLabel} 当前版本`
-    : '首次应用时在启动器数据区创建';
+    : '首次应用时在游戏目录内创建';
   $('#fpsBaselineState').className = (fpsStatus.baselineReady || recoveryOnly) ? 'ok' : '';
   const transactionBackupCount = Number(
     fpsStatus.transactionBackupCount ??
@@ -1365,6 +1374,81 @@ async function loadFpsStatus(silent = false) {
     refreshButton?.classList.remove('loading');
     syncFpsActionAvailability();
   }
+}
+
+function syncNativeFpsActionAvailability() {
+  const state = nativeFpsStatus?.state;
+  const stopped = nativeFpsStatus && !nativeFpsStatus.gameRunning;
+  $('#applyNativeFps').disabled = busy || nativeFpsStatusLoading || !stopped || !['official', 'prototype'].includes(state);
+  $('#restoreNativeFps').disabled = busy || nativeFpsStatusLoading || !stopped || !['native', 'prototype', 'partial'].includes(state);
+  $('#refreshNativeFps').disabled = busy || nativeFpsStatusLoading;
+}
+
+function renderNativeFpsStatus(status) {
+  nativeFpsStatus = status?.ok === false ? null : status;
+  const badge = $('#nativeFpsBadge');
+  const panel = $('#nativeFpsState');
+  badge.className = 'fps-state-badge';
+  panel.className = 'fps-package-state';
+  if (!nativeFpsStatus) {
+    badge.classList.add('error'); panel.classList.add('error');
+    badge.querySelector('b').textContent = '当前包体不可用';
+    panel.querySelector('strong').textContent = '无法启用游戏内档位';
+    panel.querySelector('p').textContent = status?.error || '请选择兼容的游戏目录。';
+    $('#nativeFpsBackupPath').textContent = '备份保存在游戏目录的“帧率解锁备份”文件夹。';
+  } else {
+    const state = nativeFpsStatus.state;
+    const labels = { official: '可启用', prototype: '可升级实验版', native: '四档已启用', partial: '需要恢复' };
+    badge.querySelector('b').textContent = nativeFpsStatus.gameRunning ? '游戏运行中' : (labels[state] || '状态未知');
+    if (state === 'partial' || nativeFpsStatus.gameRunning) badge.classList.add('warning');
+    panel.querySelector('strong').textContent = labels[state] || '状态未知';
+    panel.querySelector('p').textContent = nativeFpsStatus.gameRunning
+      ? '请先退出游戏和官方启动器，再安装或恢复。' : nativeFpsStatus.message;
+    $('#nativeFpsBackupPath').textContent = nativeFpsStatus.backupDirectory || '游戏目录内的“帧率解锁备份”文件夹';
+  }
+  syncNativeFpsActionAvailability();
+  updatePreset($('#presetSelect').value);
+  renderPlanRows();
+}
+
+async function loadNativeFpsStatus(silent = false) {
+  if (nativeFpsStatusLoading) return;
+  nativeFpsStatusLoading = true;
+  $('#refreshNativeFps').classList.add('loading');
+  syncNativeFpsActionAvailability();
+  try {
+    const result = await window.launcher.getNativeFpsStatus();
+    renderNativeFpsStatus(result.ok ? result.data : { ok: false, error: result.error });
+    if (!silent) result.ok ? setActivity('游戏内帧率状态已刷新', result.data.message)
+      : setActivity('游戏内帧率状态不可用', result.error, 'error');
+  } catch (error) {
+    const message = error?.message || String(error);
+    renderNativeFpsStatus({ ok: false, error: message });
+    if (!silent) setActivity('游戏内帧率状态不可用', message, 'error');
+  } finally {
+    nativeFpsStatusLoading = false;
+    $('#refreshNativeFps').classList.remove('loading');
+    syncNativeFpsActionAvailability();
+  }
+}
+
+async function applyNativeFps(button, restoring = false) {
+  if (busy || !nativeFpsStatus) return;
+  if (!restoring && !(await ensureFpsConsent())) return;
+  if (!restoring && !(await presentNotices(false, true))) return;
+  if (restoring && !(await confirmDialog('恢复官方帧率', '将先在游戏目录内备份当前包体，再恢复官方帧率；已选的新增档位会切回 120 帧。', '备份并恢复'))) return;
+  setBusy(true, button);
+  setActivity(restoring ? '正在备份并恢复官方帧率…' : '正在备份并启用游戏内四档…', '正在校验游戏文件，请保持启动器开启');
+  try {
+    const result = restoring ? await window.launcher.restoreNativeFps() : await window.launcher.applyNativeFps();
+    result.ok ? setActivity(restoring ? '官方帧率已恢复' : '游戏内四档已启用', result.data.message)
+      : setActivity('帧率操作失败', result.error, 'error');
+    await loadNativeFpsStatus(true);
+    await loadFpsStatus(true);
+  } catch (error) {
+    setActivity('帧率操作失败', error?.message || String(error), 'error');
+    await loadNativeFpsStatus(true);
+  } finally { setBusy(false, button); }
 }
 
 async function chooseFpsTarget(target) {
@@ -1531,23 +1615,32 @@ function switchView(view) {
   $('#launchView').classList.toggle('active', view === 'launch' || view === 'multi');
   $('#historyView').classList.toggle('active', view === 'history');
   $('#fpsView').classList.toggle('active', view === 'fps');
+  $('#legacyFpsView').classList.toggle('active', view === 'legacyFps');
   $('#remoteView').classList.toggle('active', view === 'remote');
   $('#toolsView').classList.toggle('active', view === 'tools');
   $('.main').classList.toggle('history-mode', view === 'history');
   $('.main').classList.toggle('remote-mode', view === 'remote');
-  const fpsMode = view === 'fps';
+  const fpsMode = view === 'fps' || view === 'legacyFps';
   $('#heroEyebrow').textContent = fpsMode ? 'LIFEAFTER · FRAME ROUTING' : 'LIFEAFTER · GRAPHICS';
-  $('#heroTitle').textContent = fpsMode ? '只接管 120，其余档位照常' : '画质与实例，一处掌控';
-  $('#heroDescription').textContent = fpsMode
-    ? '保留原有低帧与中帧配置，仅将游戏的 120 FPS 档映射到新的高帧目标。'
-    : '安全切换预设、稳定多开、实时观察每个窗口。';
+  const viewCopy = {
+    launch: ['启动', '选择画质预设，准备好后进入明日之后。'],
+    multi: ['多开', '为主号与挂机账号分别选择画质和调度策略。'],
+    fps: ['帧率解锁', '保留原有低帧与中帧配置，独立选择高帧目标。'],
+    legacyFps: ['接管解锁模式', '开发者兼容模式：修改原有 120 FPS 档的实际目标。'],
+    tools: ['工具', '配置备份、运行日志与程序更新。']
+  };
+  const [title, description] = viewCopy[view] || viewCopy.launch;
+  $('#heroTitle').textContent = title;
+  $('#heroDescription').textContent = description;
   $('#chooseRootButton').hidden = fpsMode;
-  $('#fpsTakeoverPill').hidden = !fpsMode;
+  $('#fpsTakeoverPill').hidden = view !== 'legacyFps';
+  $('.main').scrollTo({ top: 0, behavior: 'instant' });
   if (view === 'multi') {
     setTimeout(() => $('#plansCard').scrollIntoView({ behavior: 'smooth', block: 'center' }), 20);
   }
   if (view === 'history') loadHistory(currentHistoryRange, true);
-  if (view === 'fps') { loadFpsStatus(true); ensureFpsConsent().catch(error => setActivity('免责声明加载失败', error.message, 'error')); }
+  if (view === 'fps') loadNativeFpsStatus(true);
+  if (view === 'legacyFps') { loadFpsStatus(true); ensureFpsConsent().catch(error => setActivity('免责声明加载失败', error.message, 'error')); }
   if (view === 'remote') loadBackgroundState(true);
 }
 
@@ -1576,6 +1669,7 @@ async function initialize() {
     ? Number(result.fpsTargetPreference)
     : 180;
   renderFpsStatus(result.fpsStatus || { ok: false, error: '未返回帧率包体状态' });
+  if (result.root) loadNativeFpsStatus(true);
   const match = String(result.summary || '').match(/当前档位：([^/]+)/);
   if (match && presets[match[1].trim()]) updatePreset(match[1].trim());
   setActivity(result.root ? '游戏环境检测通过，可以启动' : '请先选择游戏目录', result.summary);
@@ -1773,6 +1867,14 @@ $('#readConfigButton').addEventListener('click', async () => {
 
 $$('.fps-target').forEach(button =>
   button.addEventListener('click', () => chooseFpsTarget(Number(button.dataset.fpsTarget))));
+$('#openLegacyFps').addEventListener('click', () => switchView('legacyFps'));
+$('#refreshNativeFps').addEventListener('click', () => loadNativeFpsStatus(false));
+$('#applyNativeFps').addEventListener('click', event => applyNativeFps(event.currentTarget));
+$('#restoreNativeFps').addEventListener('click', event => applyNativeFps(event.currentTarget, true));
+$('#openNativeFpsBackups').addEventListener('click', async () => {
+  const result = await window.launcher.openNativeFpsBackups();
+  result.ok ? setActivity('已打开游戏目录内的帧率备份') : setActivity('无法打开帧率备份', result.error, 'error');
+});
 $('#refreshFpsStatus').addEventListener('click', () => loadFpsStatus(false));
 $('#applyFpsUnlock').addEventListener('click', event => applySelectedFpsTarget(event.currentTarget));
 $('#restoreFpsUnlock').addEventListener('click', async event => {
