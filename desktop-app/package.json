@@ -7,8 +7,9 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "test": "node history-store.test.js && node background-services.test.js && node game-installations-store.test.js && node process-scheduling.test.js && node runtime-assets.test.js && node remote-notices.test.js && node update-service.test.js",
+    "test": "node startup-checks.test.js && node history-store.test.js && node background-services.test.js && node game-installations-store.test.js && node process-scheduling.test.js && node runtime-assets.test.js && node remote-notices.test.js && node update-service.test.js",
     "pack": "electron-builder --dir",
+    "preportable": "npm test",
     "portable": "electron-builder --win portable"
   },
   "build": {
@@ -31,6 +32,7 @@
       "runtime-assets-manifest.json",
       "update-service.js",
       "remote-notices.js",
+      "startup-checks.js",
       "renderer/**/*",
       "!renderer/.hallmark/**/*"
     ],

@@ -17,11 +17,27 @@ function versionParts(value) {
   return match ? match.slice(1).map(Number) : [0, 0, 0];
 }
 
+function parseVersion(value) {
+  const match = String(value || '').trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/i);
+  return match ? { numbers: match.slice(1, 4).map(Number), pre: match[4] ? match[4].split('.') : null } : null;
+}
+
 function isNewerVersion(candidate, current) {
-  const left = versionParts(candidate);
-  const right = versionParts(current);
+  const a = parseVersion(candidate); const b = parseVersion(current);
+  if (!a || !b) return false;
+  const left = a.numbers; const right = b.numbers;
   for (let index = 0; index < 3; index += 1) {
     if (left[index] !== right[index]) return left[index] > right[index];
+  }
+  if (!a.pre || !b.pre) return !a.pre && Boolean(b.pre);
+  for (let index = 0; index < Math.max(a.pre.length, b.pre.length); index += 1) {
+    if (a.pre[index] === undefined) return false;
+    if (b.pre[index] === undefined) return true;
+    if (a.pre[index] === b.pre[index]) continue;
+    const an = /^\d+$/.test(a.pre[index]); const bn = /^\d+$/.test(b.pre[index]);
+    if (an && bn) return Number(a.pre[index]) > Number(b.pre[index]);
+    if (an !== bn) return !an;
+    return a.pre[index] > b.pre[index];
   }
   return false;
 }
@@ -140,7 +156,8 @@ class UpdateService {
         'User-Agent': `lifeafter-graphics-launcher/${this.currentVersion}`,
         'X-GitHub-Api-Version': '2022-11-28'
       },
-      redirect: 'follow'
+      redirect: 'follow',
+      signal: AbortSignal.timeout(10000)
     });
     if (!response.ok) {
       throw new Error(`GitHub 请求失败：HTTP ${response.status}`);
@@ -169,12 +186,15 @@ class UpdateService {
       error: ''
     });
     try {
-      const release = await this.request(
-        `https://api.github.com/repos/${this.repo}/releases/latest`
-      );
+      const preview = Boolean(parseVersion(this.currentVersion)?.pre);
+      const response = await this.request(`https://api.github.com/repos/${this.repo}/releases${preview ? '?per_page=100' : '/latest'}`);
+      const release = preview ? (Array.isArray(response) ? response : [])
+        .filter(item => !item.draft && parseVersion(item.tag_name) && selectPortableAsset(item))
+        .reduce((best, item) => !best || isNewerVersion(item.tag_name, best.tag_name) ? item : best, null) : response;
+      if (!release) throw new Error('GitHub Release 未提供有效版本。');
       const latestVersion = String(release.tag_name || release.name || '').replace(/^v/i, '');
       const releaseUrl = String(release.html_url || '');
-      if (!latestVersion) throw new Error('GitHub Release 未提供有效版本号。');
+      if (!parseVersion(latestVersion)) throw new Error('GitHub Release 未提供有效版本号。');
       if (!isNewerVersion(latestVersion, this.currentVersion) && !(allowSameVersion && latestVersion === this.currentVersion)) {
         return {
           ok: true,

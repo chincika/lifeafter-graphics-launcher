@@ -178,6 +178,7 @@ select,input[type="number"] { height:34px; padding:0 var(--space-lg) 0 var(--spa
 .activity-bar strong { font-size:12px; font-weight:400; }
 .activity-bar button { min-height:32px; flex:none; margin:0; color:var(--color-link); }
 .modal-backdrop { z-index:calc(var(--z-modal) + 4); inset:0; padding:var(--space-lg); }
+#noticeModal { z-index:calc(var(--z-modal) + 5); }
 .modal { padding:var(--space-lg); max-height:calc(100dvh - 48px); overflow:auto; }
 .modal h3 { font-size:20px; }
 .modal-actions .button { min-height:36px; white-space:normal; }

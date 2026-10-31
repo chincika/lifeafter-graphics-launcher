@@ -17,6 +17,8 @@ class RemoteNotices {
       this.state = saved;
     } catch {}
     this.lastCheck = -Infinity; this.inFlight = null; this.etag = '';
+    // Presentation is per process; acknowledgement remains persistent for consent.
+    this.presented = new Set();
   }
   verify(envelope) {
     if (!envelope || typeof envelope.payload !== 'string' || typeof envelope.signature !== 'string') throw Error('公告格式无效');
@@ -44,9 +46,9 @@ class RemoteNotices {
     fs.writeFileSync(`${this.file}.tmp`, JSON.stringify(this.state));
     fs.renameSync(`${this.file}.tmp`, this.file);
   }
-  async check() {
+  async check({ force = false } = {}) {
     if (this.inFlight) return this.inFlight;
-    if (this.now() - this.lastCheck < NOTICE_CHECK_INTERVAL_MS) return;
+    if (!force && this.now() - this.lastCheck < NOTICE_CHECK_INTERVAL_MS) return;
     this.lastCheck = this.now();
     this.inFlight = (async () => {
       try {
@@ -90,6 +92,12 @@ class RemoteNotices {
       (policy.minimumVersion === this.version && build < policy.minimumBuild) ? policy : null;
   }
   pending() { return this.messages().filter(item => this.state.acknowledged[`${item.id}:${item.version}`]?.digest !== item.digest); }
+  unpresented() { return this.messages().filter(item => !this.presented.has(`${item.id}:${item.version}:${item.digest}`)); }
+  markPresented(id, version, digest) {
+    if (!this.messages().some(item => item.id === id && item.version === version && item.digest === digest)) return false;
+    this.presented.add(`${id}:${version}:${digest}`);
+    return true;
+  }
   acknowledge(id, version, digest, agreed) {
     const item = this.messages().find(item => item.id === id && item.version === version && item.digest === digest);
     if (!item || (item.type === 'disclaimer' && agreed !== true)) throw Error('请阅读并同意当前免责声明');

@@ -37,7 +37,7 @@ GitHub 地址：https://github.com/chincika/lifeafter-graphics-launcher
 - 日志和工具数据写入游戏配置目录下的 `launcher_data`，避免污染 exe 所在目录。
 - 运行数据仅保存在本机，并为后续局域网副屏监控预留了独立实例数据接口。
 - 启动记录、局域网设置与已授权设备只保存在当前 Windows 用户的应用数据目录中，不会写入或打包进便携版 EXE。
-- 默认每次启动从 GitHub Release 检查更新，也可调整为每天、每周或每月；下载文件必须通过 SHA-256 校验后才会自动替换。
+- 每次启动都检查 GitHub 更新和签名公告；有效公告每次启动均会弹出。运行期间还可选择每天、每周或每月检查更新；下载文件必须通过 SHA-256 校验后才会自动替换。
 - 兼容 2026-07 游戏更新后的新增配置项：`dpi_resize_policy`、`player_super_low`。
 
 ## 使用方式

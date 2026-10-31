@@ -146,9 +146,12 @@ const installations = {
 };
 
 let consentAccepted = true;
+let smokeNotices = [];
+const presentedNotices = new Set();
 ipcMain.handle('launcher:fps-consent-status', async () => ({ ok: true, data: { accepted: consentAccepted } }));
 ipcMain.handle('launcher:fps-consent-accept', async () => { consentAccepted = true; return { ok: true }; });
-ipcMain.handle('launcher:get-notices', async () => ({ ok: true, messages: [] }));
+ipcMain.handle('launcher:get-notices', async (_event, history) => ({ ok: true, messages: smokeNotices.filter(item => history || !presentedNotices.has(item.id)) }));
+ipcMain.on('launcher:notice-presented', (_event, item) => presentedNotices.add(item.id));
 ipcMain.handle('launcher:ack-notice', async () => ({ ok: true }));
 ipcMain.handle('launcher:init', async () => ({
   ok: true,
@@ -668,8 +671,32 @@ app.whenReady().then(async () => {
   await new Promise(resolve => setTimeout(resolve, 100));
   if (!consentAccepted) throw Error('Consent acceptance not persisted');
 
+  // A push must display immediately even while another modal is open and the
+  // test window is hidden; dismissing one notice must not hide the next one.
+  smokeNotices = [
+    { id: 'smoke-one', version: '1', digest: 'a', type: 'notice', title: '启动公告一', body: '第一条' },
+    { id: 'smoke-two', version: '1', digest: 'b', type: 'notice', title: '启动公告二', body: '第二条' }
+  ];
+  await win.webContents.executeJavaScript("document.querySelector('#fpsConsentModal').hidden = false");
+  win.webContents.send('launcher:notices-updated');
+  await new Promise(resolve => setTimeout(resolve, 250));
+  const noticeVisual = await win.webContents.executeJavaScript(`(() => ({
+    visible: !document.querySelector('#noticeModal').hidden,
+    title: document.querySelector('#noticeTitle').textContent,
+    aboveConsent: Number.parseInt(getComputedStyle(document.querySelector('#noticeModal')).zIndex) > Number.parseInt(getComputedStyle(document.querySelector('#fpsConsentModal')).zIndex)
+  }))()`);
+  if (!noticeVisual.visible || noticeVisual.title !== '启动公告一' || !noticeVisual.aboveConsent) throw Error(`Notice popup mismatch: ${JSON.stringify(noticeVisual)}`);
+  await win.webContents.executeJavaScript("document.querySelector('#noticeLater').click()");
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const secondTitle = await win.webContents.executeJavaScript("document.querySelector('#noticeTitle').textContent");
+  if (secondTitle !== '启动公告二') throw Error('Dismissing the first notice suppressed the next one');
+  await win.webContents.executeJavaScript("document.querySelector('#noticeConfirm').click(); document.querySelector('#fpsConsentModal').hidden = true");
+  await new Promise(resolve => setTimeout(resolve, 100));
+  if (presentedNotices.size !== 2) throw Error('Presented notices were not recorded');
+
   process.stdout.write(`${JSON.stringify({
     consentVisual,
+    noticeVisual,
     performance,
     schedulingVisual,
     systemManagedVisual,

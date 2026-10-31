@@ -19,6 +19,10 @@ assert.deepEqual(versionParts('v2.3.1-beta.2'), [2, 3, 1]);
 assert.equal(isNewerVersion('v2.3.0', '2.2.9'), true);
 assert.equal(isNewerVersion('2.2.0', 'v2.2.0'), false);
 assert.equal(isNewerVersion('2.1.9', '2.2.0'), false);
+assert.equal(isNewerVersion('2.7.1-beta.2', '2.7.1-beta.1'), true);
+assert.equal(isNewerVersion('2.7.1', '2.7.1-beta'), true);
+assert.equal(isNewerVersion('2.7.1-beta', '2.7.1'), false);
+assert.equal(isNewerVersion('launcher-notices', '2.7.1-beta'), false);
 assert.equal(shouldCheckForUpdates('startup', Date.now()), true);
 assert.equal(shouldCheckForUpdates('daily', Date.now() - 23 * 60 * 60 * 1000), false);
 assert.equal(shouldCheckForUpdates('monthly', Date.now() - 31 * 24 * 60 * 60 * 1000), true);
@@ -74,6 +78,22 @@ assert.equal(
     assert.equal(checked.ok, true);
     assert.equal(checked.updateAvailable, true);
     assert.equal(checked.expectedDigest, digest.toUpperCase());
+
+    const betaAsset = version => ({ name: `LifeAfter-Graphics-Launcher-${version}.exe`, browser_download_url: 'https://example.invalid/beta.exe', digest: `sha256:${digest}` });
+    const betaService = new UpdateService({ currentVersion: '2.7.1-beta', repo: 'example/example', dataDir: tempRoot,
+      fetchImpl: async url => {
+        assert.match(String(url), /releases\?per_page=100/);
+        return new Response(JSON.stringify([
+          { tag_name: 'launcher-notices', prerelease: true, assets: [] },
+          { tag_name: 'v2.7.2-beta', draft: true, assets: [betaAsset('2.7.2-beta')] },
+          { tag_name: 'v2.7.1-beta.2', prerelease: true, assets: [betaAsset('2.7.1-beta.2')] },
+          { tag_name: 'v2.7.0', assets: [betaAsset('2.7.0')] }
+        ]));
+      } });
+    const betaChecked = await betaService.check();
+    assert.equal(betaChecked.ok, true);
+    assert.equal(betaChecked.release.tag_name, 'v2.7.1-beta.2');
+    assert.equal(betaChecked.updateAvailable, true);
 
     let downloadRequests = 0;
     const service = new UpdateService({

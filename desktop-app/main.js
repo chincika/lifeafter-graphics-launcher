@@ -26,13 +26,33 @@ const { MonitorService } = require('./monitor-service');
 const { ProcessSchedulingService } = require('./process-scheduling');
 const { SettingsStore } = require('./settings-store');
 const { RemoteNotices, NOTICE_CHECK_INTERVAL_MS } = require('./remote-notices');
+const { startRequiredChecks } = require('./startup-checks');
 let remoteNotices = null;
-const SECURITY_BUILD = 3;
+const SECURITY_BUILD = 4;
+let startupNoticeCheck = null;
+let securityNoticePresented = false;
 function requiredSecurityUpdate() { return remoteNotices?.requiredUpdate(SECURITY_BUILD); }
-async function checkSecurityPolicy() {
-  await remoteNotices.check();
-  if (requiredSecurityUpdate()) await checkForUpdates({ mandatory: true });
+function notifyActiveNotices() {
+  if (!remoteNotices?.unpresented().length && !(requiredSecurityUpdate() && !securityNoticePresented)) return;
+  const win = createWindow();
+  if (win.webContents.isLoading()) {
+    win.webContents.once('did-finish-load', () => {
+      if (!win.isDestroyed()) win.webContents.send('launcher:notices-updated');
+    });
+  } else win.webContents.send('launcher:notices-updated');
+}
+async function refreshNotices({ force = false } = {}) {
+  await remoteNotices.check({ force });
+  notifyActiveNotices();
   broadcastUpdateState();
+}
+async function checkSecurityPolicy() {
+  await refreshNotices({ force: true });
+  if (requiredSecurityUpdate()) {
+    // A manual or periodic check may have started before this policy arrived.
+    if (updateCheckInFlight) await updateCheckInFlight;
+    if (!updateInstallationScheduled) await checkForUpdates({ mandatory: true });
+  }
 }
 const NOTICE_PUBLIC_KEY = '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEABxX0AGMCaJ/04WAA5l5m+yRYkf6fbfWLbGWrJb+sY2U=\n-----END PUBLIC KEY-----\n';
 const { ensureRuntimeAssets } = require('./runtime-assets');
@@ -54,6 +74,7 @@ let lanServer = null;
 let updateService = null;
 let updateCheckInFlight = null;
 let pendingUpdate = null;
+let updateInstallationScheduled = false;
 let mainWindow = null;
 let uiTheme = 'light';
 const windowThemeColors = {
@@ -229,14 +250,7 @@ function broadcastUpdateState() {
 
 function installPendingUpdate() {
   if (!pendingUpdate || isRuntimeSmoke) return { ok: false, deferred: true };
-  if (monitorService?.getSnapshot().instances.length) {
-    updateService.updateState({
-      phase: 'ready',
-      progress: 100,
-      message: `v${pendingUpdate.latestVersion} 已下载，将在游戏退出后自动更新`
-    });
-    return { ok: true, deferred: true };
-  }
+  if (updateInstallationScheduled) return { ok: true, scheduled: true };
   const scheduled = schedulePortableReplacement({
     downloadedPath: pendingUpdate.downloadedPath,
     expectedDigest: pendingUpdate.expectedDigest,
@@ -257,6 +271,7 @@ function installPendingUpdate() {
     progress: 100,
     message: `正在安装 v${pendingUpdate.latestVersion}，启动器即将重启…`
   });
+  updateInstallationScheduled = true;
   pendingUpdate = null;
   setTimeout(() => {
     quitApplication().catch(() => {
@@ -268,15 +283,22 @@ function installPendingUpdate() {
 }
 
 async function checkForUpdates({ manual = false, mandatory = false } = {}) {
+  if (updateInstallationScheduled) return { ok: true, scheduled: true, data: publicUpdateState() };
   if (updateCheckInFlight) return updateCheckInFlight;
   updateCheckInFlight = (async () => {
-    const checked = await updateService.check({ allowSameVersion: mandatory && Boolean(requiredSecurityUpdate()) });
+    let checked = await updateService.check({ allowSameVersion: mandatory && Boolean(requiredSecurityUpdate()) });
+    if (startupNoticeCheck) await startupNoticeCheck;
     const required = requiredSecurityUpdate();
+    // The signed policy can arrive after the parallel ordinary release request.
+    if (required && checked.ok && !checked.updateAvailable &&
+        String(checked.release?.tag_name || '').replace(/^v/i, '') === app.getVersion()) {
+      checked = await updateService.check({ allowSameVersion: true });
+    }
     if (required && checked.ok && (!checked.updateAvailable || require('./update-service').isNewerVersion(required.minimumVersion, String(checked.release.tag_name).replace(/^v/i, '')))) {
       updateService.updateState({ phase: 'error', message: '必须安装安全更新；发行文件尚不可用，请稍后重试', error: '' });
       return { ok: false, error: '安全更新尚不可用', data: publicUpdateState() };
     }
-    settingsStore.update({ lastUpdateCheckAt: Date.now() });
+    if (checked.ok) settingsStore.update({ lastUpdateCheckAt: Date.now() });
     broadcastUpdateState();
     if (!checked.ok || !checked.updateAvailable) {
       return { ...checked, data: publicUpdateState() };
@@ -905,12 +927,17 @@ ipcMain.handle('launcher:restore-fps', async () => {
   if (result.ok) saveFpsPreference(120);
   return result;
 });
-ipcMain.handle('launcher:get-notices', (_event, history) => ({
+ipcMain.handle('launcher:get-notices', (_event, history, requireConsent) => ({
   ok: true, messages: [
-    ...(requiredSecurityUpdate() ? [{ id: '__security_update', version: String(requiredSecurityUpdate().minimumBuild), digest: 'security-policy', type: 'notice', title: '必须安装安全更新', body: '此安全更新不受普通更新检查频率影响。更新完成前不能新增或切换帧率解锁；仍可恢复官方帧率。点击“我知道了”重试下载。游戏运行时会等待退出后安装。' }] : []),
-    ...(remoteNotices ? (history ? remoteNotices.messages() : remoteNotices.pending()) : [])
+    ...(!requireConsent && requiredSecurityUpdate() && (history || !securityNoticePresented) ? [{ id: '__security_update', version: String(requiredSecurityUpdate().minimumBuild), digest: 'security-policy', type: 'notice', title: '必须安装安全更新', body: '启动器将自动下载并安装安全更新。更新完成前不能新增或切换帧率解锁；仍可恢复官方帧率。' }] : []),
+    ...(remoteNotices ? (history ? remoteNotices.messages() : requireConsent ? remoteNotices.pending() : remoteNotices.unpresented()) : [])
   ]
 }));
+ipcMain.on('launcher:notice-presented', (event, payload) => {
+  if (event.sender !== mainWindow?.webContents || !payload) return;
+  if (payload.id === '__security_update' && requiredSecurityUpdate()) securityNoticePresented = true;
+  else remoteNotices?.markPresented(payload.id, payload.version, payload.digest);
+});
 ipcMain.handle('launcher:ack-notice', async (_event, payload) => {
   if (payload.id === '__security_update') { await checkForUpdates({ mandatory: true }); return { ok: true }; }
   try { remoteNotices.acknowledge(payload.id, payload.version, payload.digest, payload.agreed); return { ok: true }; }
@@ -1083,10 +1110,6 @@ app.whenReady().then(async () => {
   gameInstallationsStore = new GameInstallationsStore(installationsPath());
   settingsStore = new SettingsStore(settingsPath());
   remoteNotices = new RemoteNotices({ dataDir: app.getPath('userData'), publicKey: NOTICE_PUBLIC_KEY, currentVersion: app.getVersion(), fetchImpl: (...args) => net.fetch(...args) });
-  if (!isRuntimeSmoke) {
-    setTimeout(() => checkSecurityPolicy().catch(() => {}), 2000).unref();
-    setInterval(() => checkSecurityPolicy().catch(() => {}), NOTICE_CHECK_INTERVAL_MS).unref();
-  }
   cleanupUpdateCache(app.getPath('userData'), app.getVersion());
   updateService = new UpdateService({
     currentVersion: app.getVersion(),
@@ -1121,7 +1144,6 @@ app.whenReady().then(async () => {
     broadcast('launcher:instances-updated', decorated);
     lanServer.pushSnapshot(decorated);
     updateTrayMenu();
-    if (pendingUpdate && !snapshot.instances.length) installPendingUpdate();
     processSchedulingService.handleSnapshot(snapshot).then(changed => {
       if (!changed) return;
       const updated = processSchedulingService.decorateSnapshot(
@@ -1145,16 +1167,16 @@ app.whenReady().then(async () => {
   }
 
   if (!process.argv.includes('--background') || isRuntimeSmoke) createWindow();
-  const updateSettings = settingsStore.get();
-  if (
-    !isRuntimeSmoke &&
-    app.isPackaged &&
-    shouldCheckForUpdates(
-      updateSettings.updateFrequency,
-      updateSettings.lastUpdateCheckAt
-    )
-  ) {
-    setTimeout(() => checkForUpdates({ manual: false }), 1500);
+  if (!isRuntimeSmoke) {
+    startRequiredChecks({
+      showCached: notifyActiveNotices,
+      checkNotices: refreshNotices,
+      checkUpdates: noticeCheck => { startupNoticeCheck = noticeCheck; return checkForUpdates({ manual: false }); },
+      pollPolicy: checkSecurityPolicy,
+      getSettings: () => settingsStore.get(),
+      shouldCheck: shouldCheckForUpdates,
+      intervalMs: NOTICE_CHECK_INTERVAL_MS
+    });
   }
   if (isRuntimeSmoke) {
     setTimeout(() => {

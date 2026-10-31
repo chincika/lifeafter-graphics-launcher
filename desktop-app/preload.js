@@ -25,7 +25,8 @@ contextBridge.exposeInMainWorld('launcher', {
   restoreNativeFps: () => ipcRenderer.invoke('launcher:restore-native-fps'),
   openNativeFpsBackups: () => ipcRenderer.invoke('launcher:open-native-fps-backups'),
   getFpsConsent: () => ipcRenderer.invoke('launcher:fps-consent-status'),
-  getNotices: (history = false) => ipcRenderer.invoke('launcher:get-notices', history),
+  getNotices: (history = false, requireConsent = false) => ipcRenderer.invoke('launcher:get-notices', history, requireConsent),
+  noticePresented: (item) => ipcRenderer.send('launcher:notice-presented', item),
   acknowledgeNotice: (payload) => ipcRenderer.invoke('launcher:ack-notice', payload),
   acceptFpsConsent: (version) => ipcRenderer.invoke('launcher:fps-consent-accept', version),
   saveFpsTarget: (target) => ipcRenderer.invoke('launcher:save-fps-target', target),
@@ -66,5 +67,10 @@ contextBridge.exposeInMainWorld('launcher', {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('launcher:update-state', listener);
     return () => ipcRenderer.removeListener('launcher:update-state', listener);
+  },
+  onNoticesUpdated: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('launcher:notices-updated', listener);
+    return () => ipcRenderer.removeListener('launcher:notices-updated', listener);
   }
 });

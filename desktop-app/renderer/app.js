@@ -1523,8 +1523,9 @@ async function cleanFpsTransactionBackups(button) {
 }
 
 let noticeShowing = false;
+let noticeRefreshRequested = false;
 document.addEventListener('keydown', event => {
-  const modal = [$('#fpsConsentModal'), $('#noticeModal')].find(element => !element.hidden);
+  const modal = [$('#noticeModal'), $('#fpsConsentModal')].find(element => !element.hidden);
   if (!modal) return;
   if (event.key === 'Escape') {
     event.preventDefault(); modal.querySelector(modal.id === 'fpsConsentModal' ? '#fpsConsentDecline' : '#noticeLater').click();
@@ -1536,17 +1537,14 @@ document.addEventListener('keydown', event => {
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   }
 });
-const deferredNotices = new Set();
 async function presentNotices(history = false, requireConsent = false) {
-  if (noticeShowing) return false;
-  if (!history && (document.hidden || !document.hasFocus() || busy || !$('#confirmModal').hidden || !$('#fpsConsentModal').hidden)) return false;
+  if (noticeShowing) { if (!history && !requireConsent) noticeRefreshRequested = true; return false; }
   noticeShowing = true;
   try {
-    const response = await window.launcher.getNotices(history);
+    const response = await window.launcher.getNotices(history, requireConsent);
     if (!response.ok) return false;
     if (history && !response.messages.length) { setActivity('暂无有效公告', '已过期公告不会展示'); return true; }
     for (const item of response.messages) {
-      if (!history && !requireConsent && deferredNotices.has(`${item.id}:${item.version}`)) continue;
       if (requireConsent && item.type !== 'disclaimer') continue;
       const accepted = await new Promise(resolve => {
         const modal = $('#noticeModal'); const check = $('#noticeCheck'); const confirm = $('#noticeConfirm');
@@ -1554,6 +1552,7 @@ async function presentNotices(history = false, requireConsent = false) {
         $('#noticeTitle').textContent = item.title; $('#noticeBody').textContent = item.body;
         $('#noticeAgreement').hidden = !consent; check.checked = false; confirm.disabled = consent;
         confirm.textContent = consent ? '同意并继续' : '我知道了'; modal.hidden = false;
+        window.launcher.noticePresented(item);
         (consent ? check : confirm).focus();
         const finish = result => { modal.hidden = true; check.onchange = confirm.onclick = $('#noticeLater').onclick = null; previous?.focus(); resolve(result); };
         check.onchange = () => { confirm.disabled = consent && !check.checked; };
@@ -1566,14 +1565,18 @@ async function presentNotices(history = false, requireConsent = false) {
           } catch (error) { setActivity('公告确认失败', error.message, 'error'); confirm.disabled = false; }
         };
       });
-      if (!accepted) { deferredNotices.add(`${item.id}:${item.version}`); return false; }
+      if (!accepted && requireConsent) return false;
     }
     return true;
-  } finally { noticeShowing = false; }
+  } finally {
+    noticeShowing = false;
+    if (noticeRefreshRequested) { noticeRefreshRequested = false; queueMicrotask(() => presentNotices().catch(() => {})); }
+  }
 }
 $('#noticeHistory').addEventListener('click', () => presentNotices(true));
 window.addEventListener('focus', () => presentNotices().catch(() => {}));
-setInterval(() => presentNotices().catch(() => {}), 30000);
+const unsubscribeNotices = window.launcher.onNoticesUpdated(() => presentNotices().catch(() => {}));
+queueMicrotask(() => presentNotices().catch(() => {}));
 
 let fpsConsentRequest = null;
 async function ensureFpsConsent() {
@@ -1921,6 +1924,7 @@ window.addEventListener('beforeunload', () => {
   unsubscribeInstances?.();
   unsubscribeBackground?.();
   unsubscribeUpdate?.();
+  unsubscribeNotices?.();
 });
 
 initialize();

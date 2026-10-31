@@ -612,12 +612,12 @@
                 <div class="update-progress"><i id="updateProgress"></i></div>
               </div>
               <label class="update-frequency">
-                <small>检查频率</small>
+                <small>启动时必查，运行中检查频率</small>
                 <select id="updateFrequency">
-                  <option value="startup">每次启动</option>
-                  <option value="daily">每天一次</option>
-                  <option value="weekly">每周一次</option>
-                  <option value="monthly">每月一次</option>
+                  <option value="startup">仅启动时</option>
+                  <option value="daily">启动时及每天</option>
+                  <option value="weekly">启动时及每周</option>
+                  <option value="monthly">启动时及每月</option>
                 </select>
               </label>
               <button class="button secondary standard-button" id="checkForUpdates"><svg aria-hidden="true"><use href="#i-refresh"/></svg>立即检查</button>
