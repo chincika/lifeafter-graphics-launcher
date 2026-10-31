@@ -393,7 +393,7 @@ function renderUpdateState(state) {
   const busyPhases = new Set(['checking', 'downloading', 'installing']);
   const button = $('#checkForUpdates');
   const frequency = $('#updateFrequency');
-  const currentVersion = state.currentVersion || '2.7.0';
+  const currentVersion = state.currentVersion || '2.7.1-beta';
   $('#aboutVersion').textContent = `v${currentVersion}`;
   $('#sidebarVersion').textContent = `v${currentVersion}`;
   $('#updateStatus').textContent = state.message || '尚未检查更新';
@@ -1378,9 +1378,11 @@ async function loadFpsStatus(silent = false) {
 
 function syncNativeFpsActionAvailability() {
   const state = nativeFpsStatus?.state;
-  const stopped = nativeFpsStatus && !nativeFpsStatus.gameRunning;
-  $('#applyNativeFps').disabled = busy || nativeFpsStatusLoading || !stopped || !['official', 'prototype'].includes(state);
-  $('#restoreNativeFps').disabled = busy || nativeFpsStatusLoading || !stopped || !['native', 'prototype', 'partial'].includes(state);
+  const stopped = nativeFpsStatus && !nativeFpsStatus.gameRunning && !nativeFpsStatus.updatePending;
+  $('#applyNativeFps').disabled = busy || nativeFpsStatusLoading || !stopped ||
+    !['official', 'prototype'].includes(state) || nativeFpsStatus?.applyAvailable === false;
+  $('#restoreNativeFps').disabled = busy || nativeFpsStatusLoading || !stopped ||
+    !['native', 'prototype', 'partial'].includes(state) || nativeFpsStatus?.restoreAvailable === false;
   $('#refreshNativeFps').disabled = busy || nativeFpsStatusLoading;
 }
 
@@ -1398,10 +1400,11 @@ function renderNativeFpsStatus(status) {
     $('#nativeFpsBackupPath').textContent = '备份保存在游戏目录的“帧率解锁备份”文件夹。';
   } else {
     const state = nativeFpsStatus.state;
-    const labels = { official: '可启用', prototype: '可升级实验版', native: '四档已启用', partial: '需要恢复' };
-    badge.querySelector('b').textContent = nativeFpsStatus.gameRunning ? '游戏运行中' : (labels[state] || '状态未知');
-    if (state === 'partial' || nativeFpsStatus.gameRunning) badge.classList.add('warning');
-    panel.querySelector('strong').textContent = labels[state] || '状态未知';
+    const labels = { official: '可启用', prototype: '检测到实验版', native: '四档已启用', partial: '需要恢复', legacy: '请先恢复接管模式' };
+    badge.querySelector('b').textContent = nativeFpsStatus.gameRunning ? '游戏运行中'
+      : nativeFpsStatus.updatePending ? '更新待处理' : (labels[state] || '状态未知');
+    if (state === 'partial' || state === 'legacy' || nativeFpsStatus.gameRunning || nativeFpsStatus.updatePending) badge.classList.add('warning');
+    panel.querySelector('strong').textContent = nativeFpsStatus.updatePending ? '请先处理游戏更新' : (labels[state] || '状态未知');
     panel.querySelector('p').textContent = nativeFpsStatus.gameRunning
       ? '请先退出游戏和官方启动器，再安装或恢复。' : nativeFpsStatus.message;
     $('#nativeFpsBackupPath').textContent = nativeFpsStatus.backupDirectory || '游戏目录内的“帧率解锁备份”文件夹';
@@ -1438,7 +1441,7 @@ async function applyNativeFps(button, restoring = false) {
   if (!restoring && !(await presentNotices(false, true))) return;
   if (restoring && !(await confirmDialog('恢复官方帧率', '将先在游戏目录内备份当前包体，再恢复官方帧率；已选的新增档位会切回 120 帧。', '备份并恢复'))) return;
   setBusy(true, button);
-  setActivity(restoring ? '正在备份并恢复官方帧率…' : '正在备份并启用游戏内四档…', '正在校验游戏文件，请保持启动器开启');
+  setActivity(restoring ? '正在备份并恢复官方帧率…' : '正在检测并适配游戏内四档…', '正在校验游戏文件并备份，请保持启动器开启');
   try {
     const result = restoring ? await window.launcher.restoreNativeFps() : await window.launcher.applyNativeFps();
     result.ok ? setActivity(restoring ? '官方帧率已恢复' : '游戏内四档已启用', result.data.message)

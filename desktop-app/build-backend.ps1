@@ -61,8 +61,10 @@ $output = Join-Path $PSScriptRoot 'backend\LifeAfterBackend.exe'
     "/resource:$(Join-Path $root 'native-fps-integration\patches\panel.v04.bin'),panel.v04.bin" `
     "/resource:$(Join-Path $root 'native-fps-integration\patches\manager.original.bin'),manager.original.bin" `
     "/resource:$(Join-Path $root 'native-fps-integration\patches\manager.v04.bin'),manager.v04.bin" `
+    "/resource:$(Join-Path $root 'native-fps-integration\adaptive-contract.json'),adaptive-contract.json" `
     (Join-Path $root 'LifeAfterPresetLauncher.cs') `
-    (Join-Path $root 'native-fps-integration\NativeFpsTool.cs')
+    (Join-Path $root 'native-fps-integration\NativeFpsTool.cs') `
+    (Join-Path $root 'native-fps-integration\NativeFpsAdaptive.cs')
 if ($LASTEXITCODE -ne 0) {
     throw "Backend compilation failed with exit code $LASTEXITCODE"
 }

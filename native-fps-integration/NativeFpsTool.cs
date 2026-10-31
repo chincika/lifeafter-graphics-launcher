@@ -27,7 +27,7 @@ internal sealed class NativeFpsConfigEdit
     internal string Backup;
 }
 
-internal sealed class NativeFpsTool
+internal sealed partial class NativeFpsTool
 {
     private const string Py3Hash="61D356DF5F7725D064AAD9029DF3A41B2CB9F654D22B1B641D1A944205A83EAB";
     private const string LcHash="C1145C125862D29A7023962AE61D3981DCEA7E2A6BD2915EEDB6A6ED71853B72";
@@ -146,12 +146,27 @@ internal sealed class NativeFpsTool
         return allOld?"official":allNew?"native":allPrototype?"prototype":"partial";
     }
     private Dictionary<string,object> Result(string root,string state,string message,string backup)
-    { return new Dictionary<string,object> {{"ok",true},{"version","0.4.0"},{"root",root},{"state",state},
-        {"message",message},{"gameRunning",IsGameRunning()},{"backupDirectory",BackupDirectory(root)},{"backup",backup}}; }
+    {
+        bool pending=AdaptiveHasNewerPart(root);
+        return new Dictionary<string,object> {{"ok",true},{"version","0.4.0"},{"root",root},{"state",state},
+            {"message",message+(pending?" 检测到比当前包体更新的未完成更新文件，请先核实并退出更新器。":"")},
+            {"gameRunning",IsGameRunning()},{"updatePending",pending},{"backupDirectory",BackupDirectory(root)},{"backup",backup}};
+    }
     internal Dictionary<string,object> Status(string input)
     {
         string root=Resolve(input); FileStream[] f=Open(root,false);
-        try {string state=Inspect(f); return Result(root,state,state=="official"?"当前为原始包体。":state=="native"?"游戏内四档已安装。":state=="prototype"?"已安装 240 帧实验版，可直接升级。":"检测到部分修改，可使用恢复功能。",null);}
+        try
+        {
+            try {string state=Inspect(f); if(state=="prototype" || state=="partial") return Result(root,state,state=="prototype"?"已安装 240 帧实验版，可直接升级。":"检测到部分修改，可使用恢复功能。",null);}
+            catch(InvalidDataException) { }
+        }
+        finally {Close(f);}
+        return AdaptiveStatus(root);
+    }
+    private bool FixedCompatible(string root)
+    {
+        FileStream[] f=Open(root,false);
+        try { try { string state=Inspect(f); return state=="prototype" || state=="partial"; } catch(InvalidDataException) {return false;} }
         finally {Close(f);}
     }
     private static void Backup(FileStream f,string path,string expected)
@@ -179,9 +194,9 @@ internal sealed class NativeFpsTool
             string root=Resolve(input);
             using(FileStream f=new FileStream(Path.Combine(root,"Documents",FileNames[1]),FileMode.Open,FileAccess.Read,FileShare.ReadWrite))
             {
-                if(f.Length!=Lengths[1]) return false;
-                return slots.Any(s=>{string h=Hash(ReadAt(f,s.Offset,s.Length));return h==s.NewHash || h==s.PrototypeHash;});
+                if(f.Length==Lengths[1] && slots.Any(s=>{string h=Hash(ReadAt(f,s.Offset,s.Length));return h==s.NewHash || h==s.PrototypeHash;})) return true;
             }
+            return AdaptiveHasNativeSlots(root);
         }
         catch(FileNotFoundException) {return false;}
         catch(DirectoryNotFoundException) {return false;}
@@ -200,6 +215,7 @@ internal sealed class NativeFpsTool
     {
         if(!agreed) throw new InvalidOperationException("请先阅读并勾选实验版风险说明。");
         string root=Resolve(input); EnsureStopped();
+        if(!FixedCompatible(root)) return AdaptiveApply(root);
         using(Mutex mutex=new Mutex(false,"Local\\Native240OptionV03-"+Hash(Encoding.UTF8.GetBytes(root.ToUpperInvariant())).Substring(0,20)))
         {
             if(!mutex.WaitOne(0)) throw new IOException("另一个工具正在操作此包体。");
@@ -224,7 +240,7 @@ internal sealed class NativeFpsTool
                     string journalPath=Path.Combine(dir,"journal.json");
                     Dictionary<string,object> journal=new Dictionary<string,object>{{"version","0.4.0"},{"root",root},{"state","prepared"},
                         {"before",beforeHashes},{"after",target},{"createdUtc",DateTime.UtcNow.ToString("O")}};
-                    SaveJournal(journalPath,journal); EnsureStopped();
+                    SaveJournal(journalPath,journal); EnsureStopped(); AdaptiveCheckNoNewerPart(root);
                     try
                     {
                         foreach(NativeFpsSlot s in slots) WriteAt(f[s.Archive],s.Offset,s.New);
@@ -249,6 +265,34 @@ internal sealed class NativeFpsTool
             finally {mutex.ReleaseMutex();}
         }
     }
+    private static int ParseNativeQuality(byte[] before,out string text,out int bom,out int start,out int end)
+    {
+        bom=before.Length>=3 && before[0]==239 && before[1]==187 && before[2]==191?3:0;
+        text=new UTF8Encoding(false,true).GetString(before,bom,before.Length-bom);
+        Dictionary<string,object> data=Json.Deserialize<Dictionary<string,object>>(text); object frame;
+        if(data==null || !data.TryGetValue("frame",out frame) || !(frame is int) || (int)frame<0 || (int)frame>10)
+            throw new InvalidDataException("无法确认保存的帧率索引，未修改游戏文件。");
+        int depth=0,matches=0; start=-1; end=-1;
+        for(int n=0;n<text.Length;n++)
+        {
+            char c=text[n]; if(c=='{' || c=='[') depth++; else if(c=='}' || c==']') depth--;
+            else if(c=='"')
+            {
+                int begin=n++;bool escaped=false;
+                for(;n<text.Length;n++) {if(escaped){escaped=false;continue;} if(text[n]=='\\'){escaped=true;continue;} if(text[n]=='"')break;}
+                if(n>=text.Length) throw new InvalidDataException("qualityconfig 字符串异常。");
+                if(depth==1 && Json.Deserialize<string>(text.Substring(begin,n-begin+1))=="frame")
+                {
+                    int k=n+1;while(k<text.Length && Char.IsWhiteSpace(text[k]))k++;
+                    if(k<text.Length && text[k]==':') {k++;while(k<text.Length && Char.IsWhiteSpace(text[k]))k++;start=k;
+                        while(k<text.Length && !Char.IsWhiteSpace(text[k]) && text[k]!=',' && text[k]!='}')k++;end=k;matches++;}
+                }
+            }
+        }
+        if(matches!=1 || text.Substring(start,end-start)!=((int)frame).ToString())
+            throw new InvalidDataException("无法唯一定位保存的帧率配置，未修改游戏文件。");
+        return (int)frame;
+    }
     private NativeFpsConfigEdit PrepareConfig(string root,string directory)
     {
         string path=Path.Combine(root,"Documents","configs","qualityconfig");
@@ -257,28 +301,9 @@ internal sealed class NativeFpsTool
         try
         {
             if(f.Length>8*1024*1024) throw new InvalidDataException("qualityconfig 尺寸异常。");
-            byte[] before=ReadAt(f,0,(int)f.Length); int bom=before.Length>=3 && before[0]==239 && before[1]==187 && before[2]==191?3:0;
-            string text=new UTF8Encoding(false,true).GetString(before,bom,before.Length-bom);
-            Dictionary<string,object> data=Json.Deserialize<Dictionary<string,object>>(text); object frame;
-            if(!data.TryGetValue("frame",out frame) || !(frame is int) || (int)frame<7 || (int)frame>10) {f.Dispose();return null;}
-            int depth=0,start=-1,end=-1,matches=0;
-            for(int n=0;n<text.Length;n++)
-            {
-                char c=text[n]; if(c=='{' || c=='[') depth++; else if(c=='}' || c==']') depth--;
-                else if(c=='"')
-                {
-                    int begin=n++;bool escaped=false;
-                    for(;n<text.Length;n++) {if(escaped){escaped=false;continue;} if(text[n]=='\\'){escaped=true;continue;} if(text[n]=='"')break;}
-                    if(n>=text.Length) throw new InvalidDataException("qualityconfig 字符串异常。");
-                    if(depth==1 && Json.Deserialize<string>(text.Substring(begin,n-begin+1))=="frame")
-                    {
-                        int k=n+1;while(k<text.Length && Char.IsWhiteSpace(text[k]))k++;
-                        if(k<text.Length && text[k]==':') {k++;while(k<text.Length && Char.IsWhiteSpace(text[k]))k++;start=k;
-                            while(k<text.Length && !Char.IsWhiteSpace(text[k]) && text[k]!=',' && text[k]!='}')k++;end=k;matches++;}
-                    }
-                }
-            }
-            if(matches!=1 || text.Substring(start,end-start)!=((int)frame).ToString()) throw new InvalidDataException("无法唯一定位新增帧率配置，未执行恢复。");
+            byte[] before=ReadAt(f,0,(int)f.Length); string text; int bom,start,end;
+            int frame=ParseNativeQuality(before,out text,out bom,out start,out end);
+            if(frame<7) {f.Dispose();return null;}
             byte[] encoded=new UTF8Encoding(false).GetBytes(text.Substring(0,start)+"4"+text.Substring(end)),after=new byte[bom+encoded.Length];
             if(bom!=0)Buffer.BlockCopy(before,0,after,0,bom);Buffer.BlockCopy(encoded,0,after,bom,encoded.Length);
             Directory.CreateDirectory(directory);string backup=Path.Combine(directory,"qualityconfig-"+Guid.NewGuid().ToString("N")+".before-restore");
@@ -291,6 +316,7 @@ internal sealed class NativeFpsTool
     internal Dictionary<string,object> Restore(string input)
     {
         string root=Resolve(input);EnsureStopped();
+        if(!FixedCompatible(root)) return AdaptiveRestore(root);
         using(Mutex mutex=new Mutex(false,"Local\\Native240OptionV03-"+Hash(Encoding.UTF8.GetBytes(root.ToUpperInvariant())).Substring(0,20)))
         {
             if(!mutex.WaitOne(0))throw new IOException("另一个工具正在操作此包体。");
@@ -313,7 +339,7 @@ internal sealed class NativeFpsTool
                     NativeFpsConfigEdit config=PrepareConfig(root,dir);
                     try
                     {
-                        EnsureStopped();foreach(NativeFpsSlot s in slots)WriteAt(f[s.Archive],s.Offset,s.Old);
+                        EnsureStopped();AdaptiveCheckNoNewerPart(root);foreach(NativeFpsSlot s in slots)WriteAt(f[s.Archive],s.Offset,s.Old);
                         foreach(FileStream stream in f)stream.Flush(true);
                         if(Inspect(f)!="official" || !Same(Enumerable.Range(0,2).Select(i=>ArchiveHash(f[i],i,0)).ToArray(),Expected))
                             throw new IOException("恢复后整包校验失败。");

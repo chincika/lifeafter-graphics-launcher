@@ -1,3 +1,5 @@
+param([string]$OutputPath)
+
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -35,7 +37,11 @@ $lz4Names = @(
 
 $outputName = [Text.Encoding]::UTF8.GetString(
     [Convert]::FromBase64String('5piO5pel5LmL5ZCO55S76LSo5ZCv5Yqo5ZmoLmV4ZQ=='))
-$output = Join-Path $root $outputName
+$output = if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+    Join-Path $root $outputName
+} else {
+    [IO.Path]::GetFullPath($OutputPath)
+}
 Push-Location $root
 try {
     $arguments = @(
@@ -44,7 +50,7 @@ try {
         '/platform:anycpu',
         '/optimize+',
         '/codepage:65001',
-        "/out:$outputName",
+        "/out:$output",
         '/win32icon:assets\app.ico',
         '/resource:assets\cover.png,cover.png',
         "/reference:$lz4Directory\K4os.Compression.LZ4.dll",
@@ -72,8 +78,10 @@ try {
         if (-not (Test-Path -LiteralPath $path)) { throw "Missing native FPS resource: $path" }
         $arguments += "/resource:$path,$name"
     }
+    $arguments += '/resource:native-fps-integration\adaptive-contract.json,adaptive-contract.json'
     $arguments += 'LifeAfterPresetLauncher.cs'
     $arguments += 'native-fps-integration\NativeFpsTool.cs'
+    $arguments += 'native-fps-integration\NativeFpsAdaptive.cs'
 
     & $csc @arguments
     if ($LASTEXITCODE -ne 0) {

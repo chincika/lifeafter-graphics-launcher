@@ -39,7 +39,7 @@ assert native('status')['state']=='official'
 # restoration after the default backup location moves into the game folder.
 run('--fps-apply',180)
 assert json.loads(run('--fps-status'))['state']=='conditional-180'
-assert '未知记录' in native('apply',ok=False)
+assert '来源未知' in native('apply',ok=False)
 new_cache=(root/'帧率解锁备份'/'auto-fps-profiles').resolve()
 old_cache=Path(TEST_ENV['LIFEAFTER_LEGACY_FPS_PROFILE_ROOT']).resolve()
 assert FIXTURE in new_cache.parents and FIXTURE in old_cache.parents
@@ -51,7 +51,8 @@ run('--fps-restore')
 assert native('status')['state']=='official'
 installed=native('apply');assert installed['state']=='native'
 backup=Path(installed['backup']);assert root.resolve() in backup.resolve().parents
-for name,digest in zip(names,stock):assert sha(backup/(name+'.before'))==digest
+assert sha(backup/(names[1]+'.before'))==stock[1]
+assert sha(docs/names[0])==stock[0]  # The data-table archive is read-only.
 native_hashes=[sha(docs/n) for n in names]
 for index in (7,8,9,10):
  config.write_text('{"frame":'+str(index)+',"other":{"setting":7},"unchanged":42}',encoding='utf8')
@@ -64,7 +65,7 @@ assert legacy_status['state']=='native-mode-active' and not legacy_status['writa
 assert '接管模式的备份清理暂不可用' in run('--fps-clean-backups',ok=False)
 config.write_text('{"frame":10,"other":{"frame":7},"unchanged":42}',encoding='utf8')
 restored=native('restore');assert restored['state']=='official' and json.loads(config.read_text(encoding='utf8'))=={'frame':4,'other':{'frame':7},'unchanged':42}
-for name,digest in zip(names,native_hashes):assert sha(Path(restored['backup'])/(name+'.before-restore'))==digest
+assert sha(Path(restored['backup'])/(names[1]+'.before'))==native_hashes[1]
 assert [sha(docs/n) for n in names]==stock
 for index in (7,8,9,10):
  config.write_text('{"frame":'+str(index)+',"other":{"frame":7}}',encoding='utf8')
@@ -78,13 +79,16 @@ proto=[sha(docs/n) for n in names];assert native('status')['state']=='prototype'
 up=native('apply');assert up['state']=='native' and json.loads(config.read_text(encoding='utf8'))['frame']==7
 assert sha(Path(up['backup'])/(names[1]+'.before'))==proto[1]
 assert sha(Path(up['backup'])/(names[1]+'.original'))==stock[1]
-assert [sha(docs/n) for n in names]==native_hashes
-# Unknown bytes outside the reviewed slots block both apply and restore.
+assert sha(docs/names[0])==native_hashes[0]
+assert native('status')['state']=='native'
+# Unrelated data changes do not invalidate the separately verified frame table
+# and reviewed modules. The adaptive operation must leave these bytes intact.
 with (docs/names[0]).open('r+b') as f:f.seek(100);v=f.read(1);f.seek(100);f.write(bytes([v[0]^1]))
-assert '不匹配' in native('apply',ok=False) and '不匹配' in native('restore',ok=False)
+assert native('apply')['state']=='native'
+assert native('status')['state']=='native'
 with (docs/names[0]).open('r+b') as f:f.seek(100);f.write(v)
 assert native('status')['state']=='native'
-print(json.dumps({'status':'passed','fixture':str(FIXTURE),'oldProfileMigration':True,'stockInstall':True,'backupInGameDirectory':True,'allFourPreservedBy120Preset':True,'lowerPresetWorks':True,'legacyConflictBlocked':True,'restoreIndices7To10':True,'v03UpgradePreserves240':True,'unknownArchiveRejected':True},ensure_ascii=False))
+print(json.dumps({'status':'passed','fixture':str(FIXTURE),'oldProfileMigration':True,'stockInstall':True,'backupInGameDirectory':True,'allFourPreservedBy120Preset':True,'lowerPresetWorks':True,'legacyConflictBlocked':True,'restoreIndices7To10':True,'v03UpgradePreserves240':True,'unrelatedUpdateAllowed':True},ensure_ascii=False))
 # Delete only this test's resolved, purpose-built fixture, never game files.
 assert FIXTURE.parent==WORK and FIXTURE.name.startswith('native-') and FIXTURE.is_dir()
 shutil.rmtree(FIXTURE)

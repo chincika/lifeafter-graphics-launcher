@@ -74,7 +74,7 @@
       </nav>
       <div class="sidebar-foot">
         <button class="icon-button" id="aboutButton" aria-label="关于"><svg aria-hidden="true"><use href="#i-info"/></svg></button>
-        <span id="sidebarVersion">v2.7.0</span>
+        <span id="sidebarVersion">v2.7.1-beta</span>
       </div>
     </aside>
 
@@ -322,24 +322,24 @@
             <section class="glass-card panel fps-route-card native-fps-guide">
               <div class="fps-route-head"><div><h2>使用方式</h2></div><span class="native-fps-pill">游戏内切换</span></div>
               <div class="native-fps-steps">
-                <div><i>1</i><span><b>退出游戏并启用</b><small>启动器会先在游戏目录中备份包体。</small></span></div>
+                <div><i>1</i><span><b>更新完成后退出游戏和更新器</b><small>点击启用或重新适配，启动器会先备份当前包体。</small></span></div>
                 <div><i>2</i><span><b>进入显示设置</b><small>在帧数设置中选择所需档位；使用 120 帧预设启动时会保留高帧选择。</small></span></div>
                 <div><i>3</i><span><b>按需恢复</b><small>原有 120 帧及其他官方档位仍可使用。</small></span></div>
               </div>
-              <div class="fps-route-note"><svg aria-hidden="true"><use href="#i-info"/></svg><span>帧率数字为目标上限，实际帧数取决于设备和游戏场景。敬请期待后续“真”帧率解锁自动适配游戏版本更新。</span></div>
+              <div class="fps-route-note"><svg aria-hidden="true"><use href="#i-info"/></svg><span>更新后可重新适配已审查的帧率模块；模块来源或内容无法确认时会停止写入。实际帧数取决于设备和游戏场景。</span></div>
             </section>
           </div>
           <aside class="glass-card panel fps-package-card native-fps-package">
             <div class="fps-section-head"><div><h2>状态与恢复</h2></div><button class="fps-refresh" id="refreshNativeFps" aria-label="刷新游戏内帧率状态"><svg aria-hidden="true"><use href="#i-refresh"/></svg></button></div>
             <div class="fps-package-state" id="nativeFpsState"><span><svg aria-hidden="true"><use href="#i-shield"/></svg></span><div><strong>正在识别包体</strong><p>验证游戏版本和文件完整性</p></div></div>
             <div class="fps-details native-fps-details">
-              <div><span>支持版本</span><b>已验证的发烧平台包体</b></div>
+              <div><span>自动适配</span><b>已审查的帧率模块</b></div>
               <div><span>原有档位</span><b class="ok">保留</b></div>
               <div><span>备份位置</span><b>游戏目录内</b></div>
-              <div><span>写入保护</span><b class="ok">整包校验</b></div>
+              <div><span>写入保护</span><b class="ok">备份及校验</b></div>
             </div>
             <div class="fps-actions">
-              <button class="button primary accent-button" id="applyNativeFps" disabled>启用游戏内四档</button>
+              <button class="button primary accent-button" id="applyNativeFps" disabled>启用 / 重新适配</button>
               <button class="button secondary standard-button" id="restoreNativeFps" disabled>恢复官方帧率</button>
               <button class="button ghost quiet-button" id="openNativeFpsBackups"><svg aria-hidden="true"><use href="#i-folder"/></svg>打开游戏目录内的备份</button>
             </div>
@@ -634,7 +634,7 @@
               <p>所有配置与实例数据都只在本机处理。局域网副屏仅提供经过设备配对的只读状态。</p>
               <div class="about-line"><span>界面引擎</span><b>Electron · Fluent UI</b></div>
               <div class="about-line"><span>本地后台</span><b>C# · .NET Framework</b></div>
-              <div class="about-line"><span>版本</span><b id="aboutVersion">v2.7.0 “真”帧率解锁</b></div>
+              <div class="about-line"><span>版本</span><b id="aboutVersion">v2.7.1 beta 自动适配测试版</b></div>
             </div>
             <section class="support-card">
               <div class="support-head">

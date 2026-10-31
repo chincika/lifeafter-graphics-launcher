@@ -2097,8 +2097,8 @@ internal static class LifeAfterPresetLauncher
             // new stock auto-profile or let either mode overwrite the other.
             if (new NativeFpsTool().HasNativeSlots(gameRoot))
                 return "{\"ok\":true,\"compatible\":false,\"writable\":false,\"state\":\"native-mode-active\"," +
-                    "\"stateLabel\":\"游戏内档位已启用\",\"gameRunning\":" + (IsFpsGameRunning() ? "true" : "false") +
-                    ",\"error\":\"请先在帧率解锁主界面恢复官方帧率，再使用接管模式。\",\"packagePath\":\"" + JsonEscape(packagePath) + "\"}";
+                    "\"stateLabel\":\"游戏内档位或设置面板需检查\",\"gameRunning\":" + (IsFpsGameRunning() ? "true" : "false") +
+                    ",\"error\":\"检测到游戏内帧率档位或未知设置面板，请先在主界面检查并恢复，再使用接管模式。\",\"packagePath\":\"" + JsonEscape(packagePath) + "\"}";
 
             FpsNxpkRecord record;
             byte[] originalPatch;
@@ -2291,7 +2291,7 @@ internal static class LifeAfterPresetLauncher
     {
         if (!HasFpsConsent()) throw new InvalidOperationException("请先阅读并同意帧率解锁免责声明；恢复官方帧率不受限制。");
         if (!String.IsNullOrWhiteSpace(gameRoot) && new NativeFpsTool().HasNativeSlots(gameRoot))
-            throw new InvalidOperationException("已安装游戏内帧率档位，请先在主界面恢复官方帧率，再使用接管模式。");
+            throw new InvalidOperationException("检测到游戏内帧率档位或未知设置面板，请先在主界面检查并恢复，再使用接管模式。");
         if (target != 180 && target != 240 && target != 300)
             throw new InvalidOperationException("仅支持 180、240、300 FPS。");
         EnsureFpsGameStopped();
@@ -2372,7 +2372,7 @@ internal static class LifeAfterPresetLauncher
     private static string RestoreFpsUnlock()
     {
         if (!String.IsNullOrWhiteSpace(gameRoot) && new NativeFpsTool().HasNativeSlots(gameRoot))
-            throw new InvalidOperationException("检测到游戏内帧率档位，请在主界面使用恢复官方帧率。");
+            throw new InvalidOperationException("检测到游戏内帧率档位或未知设置面板，请先在主界面检查恢复状态。");
         EnsureFpsGameStopped();
         string packagePath = FpsPackagePath();
         if (!IsValidGameRoot(gameRoot) || !File.Exists(packagePath))
@@ -2836,7 +2836,7 @@ internal static class LifeAfterPresetLauncher
         return result;
     }
 
-    private static byte[] FpsDecodeLz4Exact(byte[] compressed, int originalSize)
+    internal static byte[] FpsDecodeLz4Exact(byte[] compressed, int originalSize)
     {
         byte[] raw = new byte[originalSize];
         int decoded = LZ4Codec.Decode(
@@ -2846,7 +2846,7 @@ internal static class LifeAfterPresetLauncher
         return raw;
     }
 
-    private static byte[] FpsCompressLz4Fixed(byte[] raw, int slotSize)
+    internal static byte[] FpsCompressLz4Fixed(byte[] raw, int slotSize)
     {
         byte[] buffer = new byte[LZ4Codec.MaximumOutputSize(raw.Length)];
         int size = LZ4Codec.Encode(
@@ -3461,7 +3461,7 @@ internal static class LifeAfterPresetLauncher
         if (!IsValidGameRoot(gameRoot))
             throw new InvalidOperationException("请先选择有效的游戏目录。");
         if (new NativeFpsTool().HasNativeSlots(gameRoot))
-            throw new InvalidOperationException("游戏内档位已启用，接管模式的备份清理暂不可用。");
+            throw new InvalidOperationException("游戏内档位或设置面板未确认，接管模式的备份清理暂不可用。");
 
         string packagePath = FpsPackagePath();
         if (!File.Exists(packagePath))
@@ -3695,7 +3695,7 @@ internal static class LifeAfterPresetLauncher
             (data[offset + 3] << 24));
     }
 
-    private static byte[] FpsDecryptAesEcb(byte[] encrypted)
+    internal static byte[] FpsDecryptAesEcb(byte[] encrypted)
     {
         if (encrypted.Length % 16 != 0)
             throw new InvalidDataException("NXPK AES 数据未按 16 字节对齐。");

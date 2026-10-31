@@ -557,14 +557,23 @@ app.whenReady().then(async () => {
     await applyNativeFps(document.querySelector('#applyNativeFps'));
     const afterApply = { state: nativeFpsStatus.state, restoreDisabled: document.querySelector('#restoreNativeFps').disabled, activity: document.querySelector('#activityMessage').textContent };
     const enabled = afterApply.state === 'native' && !afterApply.restoreDisabled;
+    const installedStatus = nativeFpsStatus;
+    renderNativeFpsStatus({ ...installedStatus, restoreAvailable: false });
+    const blockedWithoutRecovery = document.querySelector('#restoreNativeFps').disabled;
+    renderNativeFpsStatus({ ...installedStatus, state: 'prototype', applyAvailable: false, restoreAvailable: true });
+    const prototypeRequiresRestore = document.querySelector('#applyNativeFps').disabled && !document.querySelector('#restoreNativeFps').disabled;
+    renderNativeFpsStatus({ ...installedStatus, state: 'official', updatePending: true });
+    const pendingUpdateBlocksWrite = document.querySelector('#applyNativeFps').disabled &&
+      document.querySelector('#nativeFpsState strong').textContent === '请先处理游戏更新';
+    renderNativeFpsStatus(installedStatus);
     const restored = applyNativeFps(document.querySelector('#restoreNativeFps'), true);
     await new Promise(resolve => setTimeout(resolve, 20));
     document.querySelector('#confirmModal [data-result="confirm"]').click();
     await restored;
     document.hasFocus = oldHasFocus;
-    return { enabled, afterApply, finalState: nativeFpsStatus.state, applyEnabled: !document.querySelector('#applyNativeFps').disabled };
+    return { enabled, blockedWithoutRecovery, prototypeRequiresRestore, pendingUpdateBlocksWrite, afterApply, finalState: nativeFpsStatus.state, applyEnabled: !document.querySelector('#applyNativeFps').disabled };
   })()`);
-  if (!nativeFlow.enabled || nativeFlow.finalState !== 'official' || !nativeFlow.applyEnabled) {
+  if (!nativeFlow.enabled || !nativeFlow.blockedWithoutRecovery || !nativeFlow.prototypeRequiresRestore || !nativeFlow.pendingUpdateBlocksWrite || nativeFlow.finalState !== 'official' || !nativeFlow.applyEnabled) {
     throw new Error(`Native FPS enable/restore UI mismatch: ${JSON.stringify(nativeFlow)}`);
   }
 
