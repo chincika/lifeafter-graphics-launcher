@@ -16,7 +16,11 @@ internal sealed partial class NativeFpsTool
         {"D7A7C7A4DB42C83483C1D5B5D191C5D0D2F21C68E9A1EA7A7FB13175E7BFCCD5", "0512E447D80DEF34A1F5EF5BF92D8F52087989ED3B12BDFA4A64DCBF396D79EB"},
         {"77517C61E84E111642A3DB0B49DDD804B886F65E40F77A9DEC28250A8076DCFB", "F3518D8E068F6754A634D795A27FAFBA9BC0D9DC700D7A1B7DB1E005E524C243"},
         {"6A39CF2B3BA2AF42A9A6F65F7273AE3C1D2E08477B3B3342A263C7D88D997C65", "AC3B9B6991B9794A5258B10237FD41CDF865678015EACABCE5A4D27985C2D805"},
-        {"FF8DBF3EF199293EEA064E7B573142E95D73B461963CB4E1407F14FD1F270F3A", "2DA2233EC6C1EEC86E1619628207BEC0894DB5894A3BEC35CFCFDE138D4CFCE7"}
+        {"FF8DBF3EF199293EEA064E7B573142E95D73B461963CB4E1407F14FD1F270F3A", "2DA2233EC6C1EEC86E1619628207BEC0894DB5894A3BEC35CFCFDE138D4CFCE7"},
+        // Locally observed Fever 2026-11-06 modules, reviewed as a distinct
+        // profile; complete-module hashes prevent silently trusting unknown builds.
+        {"FE68137E5BF730724F4CB8D52AB084C9ED692C43D6B381F893EFDE9EAF7A4945", "C189BE2D161A6FBB5ECC6D67FCCD7036D02F4C5FFF24509C7BE5E078CAA881CD"},
+        {"9B2E042D3918EA575CB611EC57FD20D3137FA58F47DB9D04D3C092AC2B9E4632", "6E30FA5AF3437262A462AC1CE8CFAD19E0D026720F1D82C61F6691C186CF5BE1"}
     };
 
     private sealed class AdaptiveRecord
@@ -158,7 +162,7 @@ internal sealed partial class NativeFpsTool
         if (matches == 0) throw new InvalidDataException("未找到已审查的帧率表，无法确认游戏实际加载路径。");
     }
 
-    private static List<AdaptiveTemplate> AdaptiveTemplates(string module)
+    private static List<AdaptiveTemplate> AdaptiveTemplates(string module, int profile)
     {
         object document = Json.DeserializeObject(Encoding.UTF8.GetString(Resource("adaptive-contract.json")));
         Dictionary<string, object> root = (Dictionary<string, object>)document;
@@ -167,9 +171,17 @@ internal sealed partial class NativeFpsTool
         Dictionary<string, object> modules = (Dictionary<string, object>)root["modules"];
         object[] values = (object[])modules[module];
         List<AdaptiveTemplate> result = new List<AdaptiveTemplate>();
+        int overrides = 0;
         foreach (object value in values)
         {
             Dictionary<string, object> item = (Dictionary<string, object>)value;
+            if (profile == 2 && module == "manager" && (string)item["name"] == "SettingManager.adjust_fps_and_apply_frame_prediction")
+            {
+                item = (Dictionary<string, object>)root["prediction20261106"];
+                if ((string)item["name"] != "SettingManager.adjust_fps_and_apply_frame_prediction")
+                    throw new InvalidDataException("新版帧预测契约异常。");
+                overrides++;
+            }
             AdaptiveTemplate template = new AdaptiveTemplate {
                 Name = (string)item["name"], Original = Convert.FromBase64String((string)item["original"]),
                 Patched = Convert.FromBase64String((string)item["patched"]),
@@ -183,7 +195,7 @@ internal sealed partial class NativeFpsTool
                 throw new InvalidDataException("适配契约记录异常：" + template.Name);
             result.Add(template);
         }
-        if (result.Count != (module == "manager" ? 6 : 3)) throw new InvalidDataException("适配契约不完整。");
+        if (result.Count != (module == "manager" ? 6 : 3) || (profile == 2 && module == "manager" && overrides != 1)) throw new InvalidDataException("适配契约不完整。");
         return result;
     }
 
@@ -195,14 +207,14 @@ internal sealed partial class NativeFpsTool
         return true;
     }
 
-    private static byte[] AdaptiveEditModule(string module, byte[] raw, bool alreadyPatched)
+    private static byte[] AdaptiveEditModule(string module, byte[] raw, bool alreadyPatched, int profile)
     {
         string expectedName = module == "manager" ? "SettingManager" : "ui.PanelSetting";
         int nameSize = checked((int)AdaptiveUInt(raw, 0));
         if (nameSize <= 0 || nameSize > 256 || 4 + nameSize > raw.Length ||
             Encoding.UTF8.GetString(raw, 4, nameSize) != expectedName)
             throw new InvalidDataException("模块名称不匹配：" + module);
-        List<AdaptiveTemplate> templates = AdaptiveTemplates(module);
+        List<AdaptiveTemplate> templates = AdaptiveTemplates(module, profile);
         int[] counts = new int[templates.Count];
         byte[] result = (byte[])raw.Clone();
         int pos = 4 + nameSize;
@@ -251,12 +263,12 @@ internal sealed partial class NativeFpsTool
             if (m.Raw != null)
             {
                 string rawHash = Hash(m.Raw);
-                for (int profile = 0; profile < 2; profile++)
+                for (int profile = 0; profile < AdaptiveRawHashes.GetLength(0) / 2; profile++)
                     for (int state = 0; state < 2; state++)
                         if (rawHash == AdaptiveRawHashes[profile * 2 + i, state]) {m.Profile = profile; m.State = state;}
                 if (m.State >= 0)
                 {
-                    m.PatchedRaw = AdaptiveEditModule(m.Name, m.Raw, m.State == 1);
+                    m.PatchedRaw = AdaptiveEditModule(m.Name, m.Raw, m.State == 1, m.Profile);
                     if (Hash(m.PatchedRaw) != AdaptiveRawHashes[m.Profile * 2 + i, 1])
                         throw new InvalidDataException("生成结果与已审查语义不一致。");
                 }
@@ -348,10 +360,10 @@ internal sealed partial class NativeFpsTool
             if (original[i].Length != current[i].Record.Length || Hash(original[i]) != (string)hashes[i]) return null;
             byte[] raw = LifeAfterPresetLauncher.FpsDecodeLz4Exact(original[i], current[i].Record.RawLength);
             int found = -1;
-            for (int p = 0; p < 2; p++) if (Hash(raw) == AdaptiveRawHashes[p * 2 + i, 0]) found = p;
+            for (int p = 0; p < AdaptiveRawHashes.GetLength(0) / 2; p++) if (Hash(raw) == AdaptiveRawHashes[p * 2 + i, 0]) found = p;
             if (found < 0 || (profile >= 0 && profile != found)) return null;
             profile = found;
-            byte[] patched = AdaptiveEditModule(current[i].Name, raw, false);
+            byte[] patched = AdaptiveEditModule(current[i].Name, raw, false, profile);
             if (Hash(patched) != AdaptiveRawHashes[profile * 2 + i, 1]) return null;
             if (state != "prepared" && (current[i].State < 0 || current[i].State > 1 || current[i].Profile != profile)) return null;
         }

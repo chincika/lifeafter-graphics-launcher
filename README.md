@@ -12,7 +12,7 @@ GitHub 地址：https://github.com/chincika/lifeafter-graphics-launcher
 ## 免责声明
 - 帧率解锁功能自7.28日2.3.0版本更新推出以来，作者一直用主力账号测试使用，截至2.6.0版本更新，尚未收到来自官方的警告或其他处罚，但仍需指出修改帧率属于对游戏包体的修改，作者不承担因此造成的任何后果，如果担心被处罚，请勿使用。
 ## 主要功能
-- “真”帧率解锁启用后，可直接在游戏内画质设置中选择 180、240、300 或 360 FPS，原有官方档位仍可使用。2.7.1 beta 的自动适配测试版可按当前包体位置为已审查的老 PC 与发烧平台模块重新生成补丁；模块内容自身变化或来源不明时会停止写入。详见[自动适配说明](native-fps-integration/AUTO-ADAPTATION.zh-CN.md)。
+- “真”帧率解锁启用后，可直接在游戏内画质设置中选择 180、240、300 或 360 FPS，原有官方档位仍可使用。2.8.0 beta 的自动适配测试版可按当前包体位置为已审查的老 PC 与发烧平台模块重新生成补丁，包含本机 11 月 6 日发烧版样本；未收录的模块仍会停止写入。详见[自动适配说明](native-fps-integration/AUTO-ADAPTATION.zh-CN.md)。
 - 旧版 120 帧接管模式保留在“工具 → 开发者选项”，具有独立的、受包体结构和安全校验限制的适配流程；切换到游戏内四档前需要先恢复接管模式。
 - 全新的 Windows 11 Fluent 风格界面，支持 Mica/毛玻璃质感与现代化交互。
 - 自动扫描固定磁盘中的 `LifeAfter` 与 `mrzh` 游戏目录，也支持手动添加任意位置的安装目录。
@@ -71,7 +71,7 @@ npm install
 npm run portable
 ```
 
-默认便携版输出到 `desktop-app/release/LifeAfter-Graphics-Launcher-2.7.1-beta.exe`。
+默认便携版输出到 `desktop-app/release/LifeAfter-Graphics-Launcher-2.8.0-beta.exe`。
 
 ## 编译经典版
 
@@ -83,9 +83,9 @@ npm run portable
 
 ## 版本
 
-当前版本为 v2.7.1 beta 自动适配测试版，真实游戏更新后的实机验证仍待完成。
+当前版本为 v2.8.0 beta 自动适配测试版；11 月 6 日版本的真实游戏内帧率验证仍待完成。
 
-- 现代便携版：v2.7.1-beta
+- 现代便携版：v2.8.0-beta
 - 经典单文件版：v1.9.1
 
 完整更新内容见 [CHANGELOG.md](CHANGELOG.md)。

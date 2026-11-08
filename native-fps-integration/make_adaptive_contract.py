@@ -44,6 +44,16 @@ def functions(path):
 
 def main():
     output = {'version': 1, 'modules': {}}
+    path = HERE / 'adaptive-contract.json'
+    # Keep the separately reviewed 1106 function when regenerating the
+    # original profile; the two game versions have different prediction code.
+    if path.exists():
+        existing = json.loads(path.read_text(encoding='utf-8'))
+        if 'prediction20261106' in existing:
+            extra = existing['prediction20261106']
+            if extra.get('name') != 'SettingManager.adjust_fps_and_apply_frame_prediction':
+                raise ValueError('invalid reviewed 20261106 prediction contract')
+            output['prediction20261106'] = extra
     for module, names in TARGETS.items():
         original = functions(HERE / 'generated' / (module + '.original.raw'))
         patched = functions(HERE / 'generated' / (module + '.v04.raw'))
@@ -62,7 +72,6 @@ def main():
                 'edited': before != after,
             })
         output['modules'][module] = entries
-    path = HERE / 'adaptive-contract.json'
     path.write_text(json.dumps(output, ensure_ascii=False, separators=(',', ':')) + '\n', encoding='utf-8')
     print('Wrote', path)
 

@@ -393,7 +393,7 @@ function renderUpdateState(state) {
   const busyPhases = new Set(['checking', 'downloading', 'installing']);
   const button = $('#checkForUpdates');
   const frequency = $('#updateFrequency');
-  const currentVersion = state.currentVersion || '2.7.1-beta';
+  const currentVersion = state.currentVersion || '2.8.0-beta';
   $('#aboutVersion').textContent = `v${currentVersion}`;
   $('#sidebarVersion').textContent = `v${currentVersion}`;
   $('#updateStatus').textContent = state.message || '尚未检查更新';
@@ -455,7 +455,7 @@ async function checkForUpdatesNow() {
     } else if (!result.updateAvailable) {
       setActivity('当前已是最新版本', result.data?.message || '');
     } else if (result.deferred) {
-      setActivity('新版本已下载', '游戏退出后将自动替换并重启启动器。');
+      setActivity('新版本已下载', '更新已准备，等待安装条件满足。');
     } else {
       setActivity('发现新版本', result.data?.message || '正在准备更新');
     }
