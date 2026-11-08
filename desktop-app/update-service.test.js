@@ -81,6 +81,21 @@ assert.equal(
     assert.equal(checked.updateAvailable, true);
     assert.equal(checked.expectedDigest, digest.toUpperCase());
 
+    const oldStableService = new UpdateService({ currentVersion: '2.7.0', repo: 'example/example', dataDir: tempRoot,
+      fetchImpl: async url => {
+        assert.match(String(url), /releases\/latest$/);
+        return new Response(JSON.stringify({ tag_name: 'v2.8.0', assets: [{
+          name: 'LifeAfter-Graphics-Launcher-2.8.0.exe',
+          browser_download_url: 'https://example.invalid/2.8.0.exe',
+          digest: `sha256:${digest}`
+        }] }));
+      } });
+    const oldStableChecked = await oldStableService.check();
+    assert.equal(oldStableChecked.ok, true);
+    assert.equal(oldStableChecked.updateAvailable, true);
+    assert.equal(oldStableChecked.release.tag_name, 'v2.8.0');
+    assert.equal(oldStableChecked.expectedDigest, digest.toUpperCase());
+
     const betaAsset = version => ({ name: `LifeAfter-Graphics-Launcher-${version}.exe`, browser_download_url: 'https://example.invalid/beta.exe', digest: `sha256:${digest}` });
     const betaService = new UpdateService({ currentVersion: '2.7.1-beta', repo: 'example/example', dataDir: tempRoot,
       fetchImpl: async url => {
