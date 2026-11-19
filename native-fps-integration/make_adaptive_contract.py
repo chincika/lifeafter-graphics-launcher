@@ -49,11 +49,14 @@ def main():
     # original profile; the two game versions have different prediction code.
     if path.exists():
         existing = json.loads(path.read_text(encoding='utf-8'))
-        if 'prediction20261106' in existing:
-            extra = existing['prediction20261106']
-            if extra.get('name') != 'SettingManager.adjust_fps_and_apply_frame_prediction':
-                raise ValueError('invalid reviewed 20261106 prediction contract')
-            output['prediction20261106'] = extra
+        for key, name in (
+                ('prediction20261106', 'SettingManager.adjust_fps_and_apply_frame_prediction'),
+                ('startup20261119', 'SettingManager.init_preset_render_qualities')):
+            if key in existing:
+                extra = existing[key]
+                if extra.get('name') != name:
+                    raise ValueError('invalid reviewed contract: ' + key)
+                output[key] = extra
     for module, names in TARGETS.items():
         original = functions(HERE / 'generated' / (module + '.original.raw'))
         patched = functions(HERE / 'generated' / (module + '.v04.raw'))

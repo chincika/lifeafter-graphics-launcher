@@ -444,7 +444,12 @@ internal static class LifeAfterPresetLauncher
                 if (args[i].Equals("--launch", StringComparison.OrdinalIgnoreCase)) launch = true;
                 if (args[i].Equals("--performance", StringComparison.OrdinalIgnoreCase)) performanceMode = true;
             }
-            Console.WriteLine(ApplyPreset(args[1], launch, performanceMode));
+            try { Console.WriteLine(ApplyPreset(args[1], launch, performanceMode)); }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.GetType().Name + "：" + ex.Message);
+                Environment.ExitCode = 1;
+            }
             return;
         }
 
@@ -509,7 +514,8 @@ internal static class LifeAfterPresetLauncher
 
         if (args.Length >= 1 && (args[0].Equals("--native-fps-status", StringComparison.OrdinalIgnoreCase) ||
             args[0].Equals("--native-fps-apply", StringComparison.OrdinalIgnoreCase) ||
-            args[0].Equals("--native-fps-restore", StringComparison.OrdinalIgnoreCase)))
+            args[0].Equals("--native-fps-restore", StringComparison.OrdinalIgnoreCase) ||
+            args[0].Equals("--native-fps-repair-startup", StringComparison.OrdinalIgnoreCase)))
         {
             try
             {
@@ -523,6 +529,7 @@ internal static class LifeAfterPresetLauncher
                     result = tool.Apply(root, true);
                 }
                 else if (args[0].Equals("--native-fps-restore", StringComparison.OrdinalIgnoreCase)) result = tool.Restore(root);
+                else if (args[0].Equals("--native-fps-repair-startup", StringComparison.OrdinalIgnoreCase)) result = tool.RepairStartupConfig(root);
                 else result = tool.Status(root);
                 Console.WriteLine(NativeFpsTool.Json.Serialize(result));
             }
@@ -883,14 +890,37 @@ internal static class LifeAfterPresetLauncher
         // subsequent launcher start with a 120-FPS graphics preset. Explicit
         // 25/60 presets still select their requested native frame rate.
         string retainedNativeFrame = null;
-        if (preset.EndsWith(" 120", StringComparison.OrdinalIgnoreCase))
+        bool is120 = preset.EndsWith(" 120", StringComparison.OrdinalIgnoreCase);
+        string currentFrame = ReadJsonNumber(File.ReadAllText(qualityConfigPath, Encoding.UTF8), "frame");
+        bool extraFrame = currentFrame == "7" || currentFrame == "8" || currentFrame == "9" || currentFrame == "10";
+        if (launch || (is120 && extraFrame))
         {
-            string currentFrame = ReadJsonNumber(File.ReadAllText(qualityConfigPath, Encoding.UTF8), "frame");
-            if (currentFrame == "7" || currentFrame == "8" || currentFrame == "9" || currentFrame == "10")
+            NativeFpsTool nativeTool = new NativeFpsTool();
+            Dictionary<string, object> nativeStatus = null;
+            try { nativeStatus = nativeTool.Status(gameRoot); }
+            catch (InvalidDataException)
             {
-                Dictionary<string, object> nativeStatus = new NativeFpsTool().Status(gameRoot);
+                if (is120 && extraFrame)
+                {
+                    // A game update may have replaced the patch while leaving
+                    // its extra frame index saved. Repair only after the stock
+                    // lookup and table pass the dedicated recovery checks.
+                    nativeTool.RepairStartupConfig(gameRoot);
+                    nativeStatus = new Dictionary<string, object> {{"state", "startup-repaired"}};
+                }
+            }
+            catch (IOException)
+            {
+                if (is120 && extraFrame) throw;
+                // A missing or unreadable optional FPS package should not
+                // prevent an otherwise valid stock preset from launching.
+            }
+            if (nativeStatus != null)
+            {
                 string nativeState = Convert.ToString(nativeStatus["state"], CultureInfo.InvariantCulture);
-                if (nativeState == "native" || (nativeState == "prototype" && currentFrame == "7"))
+                if (nativeState == "partial")
+                    throw new InvalidDataException("检测到帧率包体操作未完成，请先使用同版本备份恢复后再启动游戏。");
+                if (is120 && extraFrame && (nativeState == "native" || (nativeState == "prototype" && currentFrame == "7")))
                 {
                     retainedNativeFrame = currentFrame;
                     data = new PresetData(data.Pc, SetRawNumber(data.Quality, "frame", Int32.Parse(currentFrame, CultureInfo.InvariantCulture)));

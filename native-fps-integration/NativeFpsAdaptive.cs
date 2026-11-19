@@ -20,7 +20,11 @@ internal sealed partial class NativeFpsTool
         // Locally observed Fever 2026-11-06 modules, reviewed as a distinct
         // profile; complete-module hashes prevent silently trusting unknown builds.
         {"FE68137E5BF730724F4CB8D52AB084C9ED692C43D6B381F893EFDE9EAF7A4945", "C189BE2D161A6FBB5ECC6D67FCCD7036D02F4C5FFF24509C7BE5E078CAA881CD"},
-        {"9B2E042D3918EA575CB611EC57FD20D3137FA58F47DB9D04D3C092AC2B9E4632", "6E30FA5AF3437262A462AC1CE8CFAD19E0D026720F1D82C61F6691C186CF5BE1"}
+        {"9B2E042D3918EA575CB611EC57FD20D3137FA58F47DB9D04D3C092AC2B9E4632", "6E30FA5AF3437262A462AC1CE8CFAD19E0D026720F1D82C61F6691C186CF5BE1"},
+        // Locally observed Fever 2026-11-19 modules; full hashes remain an
+        // intentional gate until official update provenance can be verified.
+        {"2A660AD3FB4447A49A40FB9E49DB484B00E81FBAFEC9B6F0F3BE11CF211D5087", "4A3A206EFD4633C1D6BE4C3FB34C2740C957A5729CEEF78B6B8ED09411115A60"},
+        {"F5198B37701CBA1064F73D9117CCC5D53A7A9AE1C65989A7845A5884C8BBF11B", "EB58B5F285F429E95FD8389E1A5A6B0830853D0E16C552E51B5E6E704CA45BD5"}
     };
 
     private sealed class AdaptiveRecord
@@ -124,12 +128,12 @@ internal sealed partial class NativeFpsTool
         return result;
     }
 
-    private static AdaptiveFiles AdaptiveOpen(string root, bool write)
+    private static AdaptiveFiles AdaptiveOpen(string root, bool write, bool exclusiveRead = false)
     {
         AdaptiveFiles files = new AdaptiveFiles();
         try
         {
-            FileShare share = write ? FileShare.None : FileShare.ReadWrite;
+            FileShare share = write || exclusiveRead ? FileShare.None : FileShare.ReadWrite;
             string docs = Path.Combine(root, "Documents");
             files.Lc = new FileStream(Path.Combine(docs, FileNames[1]), FileMode.Open,
                 write ? FileAccess.ReadWrite : FileAccess.Read, share);
@@ -175,11 +179,18 @@ internal sealed partial class NativeFpsTool
         foreach (object value in values)
         {
             Dictionary<string, object> item = (Dictionary<string, object>)value;
-            if (profile == 2 && module == "manager" && (string)item["name"] == "SettingManager.adjust_fps_and_apply_frame_prediction")
+            if ((profile == 2 || profile == 3) && module == "manager" && (string)item["name"] == "SettingManager.adjust_fps_and_apply_frame_prediction")
             {
                 item = (Dictionary<string, object>)root["prediction20261106"];
                 if ((string)item["name"] != "SettingManager.adjust_fps_and_apply_frame_prediction")
                     throw new InvalidDataException("新版帧预测契约异常。");
+                overrides++;
+            }
+            else if (profile == 3 && module == "manager" && (string)item["name"] == "SettingManager.init_preset_render_qualities")
+            {
+                item = (Dictionary<string, object>)root["startup20261119"];
+                if ((string)item["name"] != "SettingManager.init_preset_render_qualities")
+                    throw new InvalidDataException("新版初始化契约异常。");
                 overrides++;
             }
             AdaptiveTemplate template = new AdaptiveTemplate {
@@ -195,7 +206,8 @@ internal sealed partial class NativeFpsTool
                 throw new InvalidDataException("适配契约记录异常：" + template.Name);
             result.Add(template);
         }
-        if (result.Count != (module == "manager" ? 6 : 3) || (profile == 2 && module == "manager" && overrides != 1)) throw new InvalidDataException("适配契约不完整。");
+        int expectedOverrides = module == "manager" ? (profile == 3 ? 2 : profile == 2 ? 1 : 0) : 0;
+        if (result.Count != (module == "manager" ? 6 : 3) || overrides != expectedOverrides) throw new InvalidDataException("适配契约不完整。");
         return result;
     }
 
@@ -205,6 +217,27 @@ internal sealed partial class NativeFpsTool
         for (int i = 0; i < size; i++)
             if ((i < line || i >= line + 4) && raw[start + i] != reference[i]) return false;
         return true;
+    }
+
+    // A stock lookup plus the reviewed stock table is sufficient to repair
+    // the saved selection, but never sufficient to authorize package writes.
+    private static bool AdaptiveHasOriginalFrameLookup(AdaptiveModule manager)
+    {
+        if (manager.Raw == null) return false;
+        byte[] raw = manager.Raw;
+        int nameSize = checked((int)AdaptiveUInt(raw, 0));
+        if (nameSize <= 0 || nameSize > 256 || 4 + nameSize > raw.Length ||
+            Encoding.UTF8.GetString(raw, 4, nameSize) != "SettingManager") return false;
+        AdaptiveTemplate target = AdaptiveTemplates("manager", 0).Single(x => x.Name == "SettingManager.get_default_frame");
+        int pos = 4 + nameSize, matches = 0;
+        while (pos < raw.Length)
+        {
+            int size = checked((int)AdaptiveUInt(raw, pos)), start = checked(pos + 4);
+            if (size <= 0 || start > raw.Length - size) throw new InvalidDataException("模块函数记录边界异常。");
+            if (AdaptiveFunctionMatches(raw, start, size, target.Original, target.OriginalLine)) matches++;
+            pos = checked(start + size);
+        }
+        return pos == raw.Length && matches == 1;
     }
 
     private static byte[] AdaptiveEditModule(string module, byte[] raw, bool alreadyPatched, int profile)
@@ -536,6 +569,66 @@ internal sealed partial class NativeFpsTool
     {
         if (new DriveInfo(Path.GetPathRoot(directory)).AvailableFreeSpace < bytes + 64L * 1024 * 1024)
             throw new IOException("游戏目录所在磁盘空间不足，无法创建同版本完整备份。");
+    }
+
+    // Recover only the outdated saved selection. No archive is modified and
+    // an unknown module is still rejected by the normal adaptation path.
+    internal Dictionary<string, object> RepairStartupConfig(string input)
+    {
+        string root = Resolve(input);
+        EnsureStopped();
+        using (Mutex mutex = new Mutex(false, "Local\\Native240OptionV03-" + Hash(Encoding.UTF8.GetBytes(root.ToUpperInvariant())).Substring(0, 20)))
+        {
+            if (!mutex.WaitOne(0)) throw new IOException("另一个工具正在操作此包体。");
+            try
+            {
+                using (AdaptiveFiles files = AdaptiveOpen(root, false, true))
+                {
+                    AdaptiveEnsureUpdateFinished(root, files);
+                    AdaptiveVerifyTable(files);
+                    AdaptiveModule[] modules = AdaptiveModules(files.Lc);
+                    if (modules.Any(x => x.State > 0))
+                        throw new InvalidDataException("检测到已安装或不完整的帧率补丁，请先使用对应恢复功能。");
+                    AdaptiveRecovery recovery = AdaptiveFindRecovery(root, files.Lc, modules);
+                    if (recovery != null && recovery.State == "prepared")
+                        throw new InvalidDataException("检测到上次包体操作中断，请先恢复对应事务备份。");
+                    if (!AdaptiveHasOriginalFrameLookup(modules[0]))
+                        throw new InvalidDataException("无法确认原始帧率读取逻辑，未修改画质配置。");
+                    string dir = Path.Combine(BackupDirectory(root), DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-startup-repair-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+                    NativeFpsConfigEdit config = PrepareConfig(root, dir);
+                    if (config == null) return Result(root, "startup-ok", "画质配置没有遗留新增帧率档位，无需修复。", null);
+                    try
+                    {
+                        Dictionary<string, object> journal = new Dictionary<string, object> {
+                            {"schema", "native-startup-repair-v1"}, {"root", root}, {"state", "prepared"},
+                            {"configBackup", config.Backup}, {"beforeSha256", Hash(config.Before)},
+                            {"afterSha256", Hash(config.After)}, {"createdUtc", DateTime.UtcNow.ToString("O")}
+                        };
+                        string journalPath = Path.Combine(dir, "startup-repair-journal.json");
+                        SaveJournal(journalPath, journal);
+                        AdaptiveEnsureUpdateFinished(root, files);
+                        try
+                        {
+                            WriteAt(config.Stream, 0, config.After); config.Stream.SetLength(config.After.Length); config.Stream.Flush(true);
+                            if (Hash(ReadAt(config.Stream, 0, config.After.Length)) != Hash(config.After))
+                                throw new IOException("画质配置写入校验失败。");
+                            journal["state"] = "repaired"; SaveJournal(journalPath, journal);
+                            return Result(root, "startup-repaired", "已备份画质配置并将失效的新增帧率档位恢复为官方 120 帧。", dir);
+                        }
+                        catch
+                        {
+                            WriteAt(config.Stream, 0, config.Before); config.Stream.SetLength(config.Before.Length); config.Stream.Flush(true);
+                            if (Hash(ReadAt(config.Stream, 0, config.Before.Length)) != Hash(config.Before))
+                                throw new IOException("画质配置回滚校验失败，请使用备份：" + config.Backup);
+                            journal["state"] = "rolled-back"; SaveJournal(journalPath, journal);
+                            throw;
+                        }
+                    }
+                    finally { config.Stream.Dispose(); }
+                }
+            }
+            finally { mutex.ReleaseMutex(); }
+        }
     }
 
     private Dictionary<string, object> AdaptiveApply(string root)

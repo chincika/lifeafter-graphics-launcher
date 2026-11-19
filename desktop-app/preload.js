@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('launcher', {
   getNativeFpsStatus: () => ipcRenderer.invoke('launcher:get-native-fps-status'),
   applyNativeFps: () => ipcRenderer.invoke('launcher:apply-native-fps'),
   restoreNativeFps: () => ipcRenderer.invoke('launcher:restore-native-fps'),
+  repairNativeFpsStartup: () => ipcRenderer.invoke('launcher:repair-native-fps-startup'),
   openNativeFpsBackups: () => ipcRenderer.invoke('launcher:open-native-fps-backups'),
   getFpsConsent: () => ipcRenderer.invoke('launcher:fps-consent-status'),
   getNotices: (history = false, requireConsent = false) => ipcRenderer.invoke('launcher:get-notices', history, requireConsent),

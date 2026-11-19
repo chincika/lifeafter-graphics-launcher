@@ -1,6 +1,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain } = require('electron');
+if (process.env.LAUNCHER_SMOKE_USER_DATA) {
+  app.setPath('userData', path.resolve(process.env.LAUNCHER_SMOKE_USER_DATA));
+}
 
 const output = path.resolve(
   process.env.LAUNCHER_UI_SCREENSHOT || path.join(__dirname, 'ui-smoke-fps.png')
@@ -245,6 +248,11 @@ ipcMain.handle('launcher:apply-native-fps', async () => {
 ipcMain.handle('launcher:restore-native-fps', async () => {
   nativeStatus.state = 'official'; nativeStatus.message = '官方帧率已恢复';
   return { ok: true, data: { ...nativeStatus } };
+});
+let nativeRepairCalls = 0;
+ipcMain.handle('launcher:repair-native-fps-startup', async () => {
+  nativeRepairCalls += 1;
+  return { ok: true, data: { message: '已备份并恢复启动画质。' } };
 });
 ipcMain.handle('launcher:open-native-fps-backups', async () => ({ ok: true }));
 ipcMain.handle('launcher:save-fps-target', async () => ({ ok: true }));
@@ -575,6 +583,15 @@ app.whenReady().then(async () => {
   })()`);
   if (!nativeFlow.enabled || !nativeFlow.blockedWithoutRecovery || !nativeFlow.prototypeRequiresRestore || !nativeFlow.pendingUpdateBlocksWrite || nativeFlow.finalState !== 'official' || !nativeFlow.applyEnabled) {
     throw new Error(`Native FPS enable/restore UI mismatch: ${JSON.stringify(nativeFlow)}`);
+  }
+  const recoveryFlow = await win.webContents.executeJavaScript(`(async () => {
+    renderNativeFpsStatus({ ok: false, error: '待审查的新版模块' });
+    const availableWhenUnknown = !document.querySelector('#repairNativeFpsStartup').disabled;
+    await repairNativeFpsStartup(document.querySelector('#repairNativeFpsStartup'));
+    return { availableWhenUnknown, activity: document.querySelector('#activityMessage').textContent };
+  })()`);
+  if (!recoveryFlow.availableWhenUnknown || nativeRepairCalls !== 1 || !recoveryFlow.activity.includes('启动画质检查完成')) {
+    throw new Error(`Native FPS startup recovery UI mismatch: ${JSON.stringify(recoveryFlow)}`);
   }
 
   const developerFlow = await win.webContents.executeJavaScript(`(() => {

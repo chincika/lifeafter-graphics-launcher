@@ -1383,6 +1383,8 @@ function syncNativeFpsActionAvailability() {
     !['official', 'prototype'].includes(state) || nativeFpsStatus?.applyAvailable === false;
   $('#restoreNativeFps').disabled = busy || nativeFpsStatusLoading || !stopped ||
     !['native', 'prototype', 'partial'].includes(state) || nativeFpsStatus?.restoreAvailable === false;
+  $('#repairNativeFpsStartup').disabled = busy || nativeFpsStatusLoading ||
+    nativeFpsStatus?.gameRunning === true || nativeFpsStatus?.updatePending === true;
   $('#refreshNativeFps').disabled = busy || nativeFpsStatusLoading;
 }
 
@@ -1451,6 +1453,20 @@ async function applyNativeFps(button, restoring = false) {
   } catch (error) {
     setActivity('帧率操作失败', error?.message || String(error), 'error');
     await loadNativeFpsStatus(true);
+  } finally { setBusy(false, button); }
+}
+
+async function repairNativeFpsStartup(button) {
+  if (busy) return;
+  setBusy(true, button);
+  setActivity('正在检查更新后的帧率配置…', '如需修复，会先备份画质配置');
+  try {
+    const result = await window.launcher.repairNativeFpsStartup();
+    result.ok ? setActivity('启动画质检查完成', result.data.message)
+      : setActivity('无法自动修复启动画质', result.error, 'error');
+    await loadNativeFpsStatus(true);
+  } catch (error) {
+    setActivity('无法自动修复启动画质', error?.message || String(error), 'error');
   } finally { setBusy(false, button); }
 }
 
@@ -1877,6 +1893,7 @@ $('#openLegacyFps').addEventListener('click', () => switchView('legacyFps'));
 $('#refreshNativeFps').addEventListener('click', () => loadNativeFpsStatus(false));
 $('#applyNativeFps').addEventListener('click', event => applyNativeFps(event.currentTarget));
 $('#restoreNativeFps').addEventListener('click', event => applyNativeFps(event.currentTarget, true));
+$('#repairNativeFpsStartup').addEventListener('click', event => repairNativeFpsStartup(event.currentTarget));
 $('#openNativeFpsBackups').addEventListener('click', async () => {
   const result = await window.launcher.openNativeFpsBackups();
   result.ok ? setActivity('已打开游戏目录内的帧率备份') : setActivity('无法打开帧率备份', result.error, 'error');

@@ -903,6 +903,7 @@ ipcMain.handle('launcher:apply-native-fps', async () => {
   return nativeFpsOperation('apply');
 });
 ipcMain.handle('launcher:restore-native-fps', () => nativeFpsOperation('restore'));
+ipcMain.handle('launcher:repair-native-fps-startup', () => nativeFpsOperation('repair-startup'));
 ipcMain.handle('launcher:fps-consent-status', async () => {
   const result = await runBackend(['--fps-consent-status'], 10000);
   if (!result.ok) return result;
