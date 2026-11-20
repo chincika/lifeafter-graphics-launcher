@@ -43,23 +43,10 @@ GitHub 地址：https://github.com/chincika/lifeafter-graphics-launcher
 
 ## 使用方式
 
-推荐直接运行现代便携版：
+下载并运行[最新正式版](https://github.com/chincika/lifeafter-graphics-launcher/releases/latest)的现代便携版，或直接运行仓库根目录中的同一版本：
 
 ```powershell
-明日之后画质启动器-现代版.exe
-```
-
-仓库同时保留经典单文件版（现已停止更新维护，可用性未知）：
-
-```powershell
-明日之后画质启动器.exe
-```
-
-命令行切换预设：
-
-```powershell
-明日之后画质启动器.exe --apply "2K 120"
-明日之后画质启动器.exe --apply "540p 25" --launch
+.\明日之后画质启动器-现代版.exe
 ```
 
 ## 编译现代版
@@ -74,19 +61,9 @@ npm run portable
 
 默认便携版输出到 `desktop-app/release/LifeAfter-Graphics-Launcher-2.8.1.exe`。
 
-## 编译经典版
-
-使用系统自带的 .NET Framework C# 编译器：
-
-```powershell
-.\build-classic.ps1
-```
-
 ## 版本
 
 当前版本为 v2.8.1；已支持11 月 19 日版本的真实游戏内高帧选项与帧数。
 
 - 现代便携版：v2.8.1
-- 经典单文件版（已停止更新）：v1.9.1
-
 完整更新内容见 [CHANGELOG.md](CHANGELOG.md)。

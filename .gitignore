@@ -17,3 +17,6 @@ wm-optimizer-v2.3.1-analysis.zip
 **/notices-private*.pem
 release-operations/private/
 release-operations/generated/
+
+# Discontinued classic launcher: existing local copies must not be republished
+/明日之后画质启动器.exe
